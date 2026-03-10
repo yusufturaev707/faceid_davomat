@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
 import bcrypt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from sqlalchemy.orm import Session
@@ -9,7 +9,12 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.db.session import get_db
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.API_V1_PREFIX}/auth/login")
+oauth2_scheme = OAuth2PasswordBearer(
+    tokenUrl=f"{settings.API_V1_PREFIX}/auth/login",
+    auto_error=False,
+)
+
+API_KEY_HEADER = "X-API-Key"
 
 
 def hash_password(password: str) -> str:
@@ -44,10 +49,7 @@ def verify_jwt_token(token: str) -> dict:
         )
 
 
-def get_current_user(
-    token: str = Depends(oauth2_scheme),
-    db: Session = Depends(get_db),
-):
+def _get_user_from_jwt(token: str, db: Session):
     """JWT tokendan foydalanuvchini aniqlash."""
     from app.models.user import User
 
@@ -72,6 +74,43 @@ def get_current_user(
             detail="Foydalanuvchi topilmadi",
         )
     return user
+
+
+def _get_user_from_api_key(raw_key: str, db: Session):
+    """API Key orqali foydalanuvchini aniqlash."""
+    from app.crud.api_key import get_api_key_by_raw, update_last_used
+
+    api_key = get_api_key_by_raw(db, raw_key)
+    if api_key is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="API kalit yaroqsiz yoki bekor qilingan",
+        )
+
+    user = api_key.user
+    update_last_used(db, api_key)
+    return user
+
+
+def get_current_user(
+    request: Request,
+    token: str | None = Depends(oauth2_scheme),
+    db: Session = Depends(get_db),
+):
+    """JWT yoki API Key orqali foydalanuvchini aniqlash."""
+    # 1. API Key tekshirish
+    api_key = request.headers.get(API_KEY_HEADER)
+    if api_key:
+        return _get_user_from_api_key(api_key, db)
+
+    # 2. JWT tekshirish
+    if token:
+        return _get_user_from_jwt(token, db)
+
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Autentifikatsiya talab qilinadi",
+    )
 
 
 def get_current_active_user(current_user=Depends(get_current_user)):

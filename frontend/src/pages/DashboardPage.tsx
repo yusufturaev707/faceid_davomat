@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { DailyChartItem, DashboardStats } from "../interfaces";
 import { getFaceStatsApi, getStatsApi } from "../api";
+import PageLoader from "../components/PageLoader";
 import StatsCard from "../components/StatsCard";
 
 export default function DashboardPage() {
@@ -14,13 +15,7 @@ export default function DashboardPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="w-10 h-10 spinner" />
-      </div>
-    );
-  }
+  if (loading) return <PageLoader />;
 
   return (
     <div>

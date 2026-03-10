@@ -8,12 +8,14 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.security import require_admin
+from app.crud.api_key import create_api_key, get_all_api_keys, revoke_api_key
 from app.crud.user import create_user, get_all_users, get_user_by_username
 from app.crud.verification_log import get_dashboard_stats, get_log_by_id, get_logs_paginated
 from app.crud.verify_faces import get_face_dashboard_stats, get_face_log_by_id, get_face_logs_paginated
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.admin import DashboardStats, FaceLogResponse, PaginatedFaceLogs, PaginatedLogs, VerificationLogResponse
+from app.schemas.api_key import ApiKeyCreateRequest, ApiKeyCreateResponse, ApiKeyResponse
 from app.schemas.auth import CreateUserRequest, UserResponse
 
 router = APIRouter()
@@ -182,3 +184,53 @@ def get_face_stats(
 ) -> DashboardStats:
     """Yuz solishtirish uchun dashboard statistikasi (faqat admin)."""
     return get_face_dashboard_stats(db)
+
+
+# === API Key boshqarish ===
+
+
+@router.post(
+    "/api-keys",
+    response_model=ApiKeyCreateResponse,
+    status_code=201,
+    summary="Yangi API kalit yaratish",
+)
+def create_new_api_key(
+    data: ApiKeyCreateRequest,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+) -> ApiKeyCreateResponse:
+    """Yangi API kalit yaratish. raw_key faqat bir marta ko'rsatiladi!"""
+    api_key, raw_key = create_api_key(db, user_id=admin.id, name=data.name)
+    return ApiKeyCreateResponse(
+        id=api_key.id,
+        name=api_key.name,
+        prefix=api_key.prefix,
+        raw_key=raw_key,
+        created_at=api_key.created_at,
+    )
+
+
+@router.get("/api-keys", response_model=list[ApiKeyResponse], summary="API kalitlar ro'yxati")
+def list_api_keys(
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+) -> list[ApiKeyResponse]:
+    """Barcha API kalitlarni ko'rish (faqat admin)."""
+    return get_all_api_keys(db)
+
+
+@router.delete("/api-keys/{key_id}", summary="API kalitni bekor qilish")
+def delete_api_key(
+    key_id: int,
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+):
+    """API kalitni bekor qilish (o'chirilmaydi, is_active=false bo'ladi)."""
+    api_key = revoke_api_key(db, key_id)
+    if not api_key:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="API kalit topilmadi",
+        )
+    return {"detail": "API kalit bekor qilindi"}

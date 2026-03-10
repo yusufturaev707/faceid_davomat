@@ -20,3 +20,4 @@ class User(Base):
 
     verification_logs: Mapped[list["VerificationLog"]] = relationship(back_populates="user")  # noqa: F821
     refresh_tokens: Mapped[list["RefreshToken"]] = relationship(back_populates="user")  # noqa: F821
+    api_keys: Mapped[list["ApiKey"]] = relationship(back_populates="user")  # noqa: F821

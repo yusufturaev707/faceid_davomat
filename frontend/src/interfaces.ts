@@ -34,7 +34,6 @@ export interface LoginRequest {
 
 export interface TokenPairResponse {
   access_token: string;
-  refresh_token: string;
   token_type: string;
   user?: UserResponse;
 }
@@ -167,4 +166,27 @@ export interface PaginatedFaceLogs {
   page: number;
   per_page: number;
   pages: number;
+}
+
+// === API Key ===
+export interface ApiKeyCreateRequest {
+  name: string;
+}
+
+export interface ApiKeyCreateResponse {
+  id: number;
+  name: string;
+  prefix: string;
+  raw_key: string;
+  created_at: string;
+}
+
+export interface ApiKeyResponse {
+  id: number;
+  user_id: number;
+  name: string;
+  prefix: string;
+  is_active: boolean;
+  last_used_at: string | null;
+  created_at: string;
 }

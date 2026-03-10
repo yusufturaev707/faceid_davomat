@@ -14,7 +14,7 @@ export default function Sidebar() {
   const navigate = useNavigate();
 
   return (
-    <aside className="w-[272px] bg-surface dark:bg-slate-800 border-r border-gray-200 dark:border-slate-700 flex flex-col min-h-screen">
+    <aside className="w-[272px] bg-surface dark:bg-slate-800 border-r border-gray-200 dark:border-slate-700 flex flex-col h-screen sticky top-0">
       {/* Logo */}
       <div className="px-6 py-6">
         <div className="flex items-center gap-3">
@@ -31,7 +31,7 @@ export default function Sidebar() {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 px-4 space-y-1.5">
+      <nav className="flex-1 px-4 space-y-1.5 overflow-y-auto">
         <p className="label-text px-4 mb-2">Asosiy</p>
 
         <NavLink to="/verify" className={navLinkClass}>
@@ -73,6 +73,13 @@ export default function Sidebar() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
               Solishtirish loglari
+            </NavLink>
+
+            <NavLink to="/api-keys" className={navLinkClass}>
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+              </svg>
+              API kalitlar
             </NavLink>
           </>
         )}

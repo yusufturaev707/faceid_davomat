@@ -8,6 +8,7 @@ import LogDetailPage from "./pages/LogDetailPage";
 import LogsPage from "./pages/LogsPage";
 import FaceLogsPage from "./pages/FaceLogsPage";
 import FaceLogDetailPage from "./pages/FaceLogDetailPage";
+import ApiKeysPage from "./pages/ApiKeysPage";
 import NotFoundPage from "./pages/NotFoundPage";
 import VerifyPage from "./pages/VerifyPage";
 import SettingsPage from "./pages/SettingsPage";
@@ -29,6 +30,7 @@ export default function App() {
             <Route path="/logs/:id" element={<LogDetailPage />} />
             <Route path="/face-logs" element={<FaceLogsPage />} />
             <Route path="/face-logs/:id" element={<FaceLogDetailPage />} />
+            <Route path="/api-keys" element={<ApiKeysPage />} />
           </Route>
         </Route>
       </Route>

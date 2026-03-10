@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import type { FaceLogResponse } from "../interfaces";
 import { getFaceLogByIdApi } from "../api";
 import AuthImage from "../components/AuthImage";
+import PageLoader from "../components/PageLoader";
 
 export default function FaceLogDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -27,7 +28,7 @@ export default function FaceLogDetailPage() {
 
   const formatDate = (ts: string) => new Date(ts).toLocaleString("uz-UZ", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" });
 
-  if (loading) return <div className="flex items-center justify-center h-64"><div className="w-10 h-10 spinner" /></div>;
+  if (loading) return <PageLoader />;
 
   if (error || !log) {
     return (

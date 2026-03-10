@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { PaginatedFaceLogs } from "../interfaces";
 import { getFaceLogsApi } from "../api";
+import PageLoader from "../components/PageLoader";
 import Pagination from "../components/Pagination";
 import AuthImage from "../components/AuthImage";
 
@@ -55,7 +56,7 @@ export default function FaceLogsPage() {
       {/* Table */}
       <div className="glass-card overflow-hidden">
         {loading ? (
-          <div className="flex items-center justify-center h-32"><div className="w-8 h-8 spinner" /></div>
+          <PageLoader />
         ) : !data || data.items.length === 0 ? (
           <div className="text-center py-16 text-gray-400 dark:text-slate-500">Ma'lumot topilmadi</div>
         ) : (

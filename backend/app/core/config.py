@@ -44,6 +44,9 @@ class Settings(BaseSettings):
     REDIS_URL: str
     TASK_RESULT_TTL: int
 
+    # Cookie
+    COOKIE_SECURE: bool = True
+
     # CORS
     CORS_ORIGINS: list[str]
 

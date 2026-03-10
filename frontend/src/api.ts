@@ -1,5 +1,8 @@
 import axios from "axios";
 import type {
+  ApiKeyCreateRequest,
+  ApiKeyCreateResponse,
+  ApiKeyResponse,
   CreateUserRequest,
   DashboardStats,
   FaceLogResponse,
@@ -15,18 +18,14 @@ import type {
   UserResponse,
   VerificationLogResponse,
 } from "./interfaces";
-import {
-  getAccessToken,
-  getRefreshToken,
-  setAccessToken,
-  setRefreshToken,
-} from "./tokenStore";
+import { getAccessToken, setAccessToken } from "./tokenStore";
 
 const API_BASE = "/api/v1";
 
 const apiClient = axios.create({
   baseURL: API_BASE,
   headers: { "Content-Type": "application/json" },
+  withCredentials: true, // Cookie yuborish uchun
 });
 
 // Request interceptor: JWT Bearer token qo'shish
@@ -42,14 +41,11 @@ apiClient.interceptors.request.use((config) => {
 let refreshPromise: Promise<TokenPairResponse> | null = null;
 
 async function doRefresh(): Promise<TokenPairResponse> {
-  const refreshToken = getRefreshToken();
-  if (!refreshToken) {
-    return Promise.reject(new Error("No refresh token"));
-  }
-  // Raw axios ishlatamiz (interceptordan o'tmaydi)
+  // Cookie avtomatik yuboriladi (withCredentials: true)
   const res = await axios.post<TokenPairResponse>(
     `${API_BASE}/auth/refresh`,
-    { refresh_token: refreshToken },
+    {},
+    { withCredentials: true },
   );
   return res.data;
 }
@@ -76,14 +72,11 @@ apiClient.interceptors.response.use(
         const tokens = await refreshPromise;
 
         setAccessToken(tokens.access_token);
-        setRefreshToken(tokens.refresh_token);
         originalRequest.headers.Authorization = `Bearer ${tokens.access_token}`;
         return apiClient(originalRequest);
       } catch {
-        // Refresh muvaffaqiyatsiz — tokenlarni tozalash
+        // Refresh muvaffaqiyatsiz — tokenni tozalash
         setAccessToken(null);
-        setRefreshToken(null);
-        // React Router orqali redirect (window.location emas)
       } finally {
         refreshPromise = null;
       }
@@ -103,15 +96,14 @@ export async function loginApi(data: LoginRequest): Promise<TokenPairResponse> {
   return res.data;
 }
 
-export async function refreshApi(refreshToken: string): Promise<TokenPairResponse> {
-  const res = await axios.post<TokenPairResponse>(`${API_BASE}/auth/refresh`, {
-    refresh_token: refreshToken,
-  });
+export async function refreshApi(): Promise<TokenPairResponse> {
+  // Cookie avtomatik yuboriladi
+  const res = await apiClient.post<TokenPairResponse>("/auth/refresh", {});
   return res.data;
 }
 
-export async function logoutApi(refreshToken: string): Promise<void> {
-  await apiClient.post("/auth/logout", { refresh_token: refreshToken });
+export async function logoutApi(): Promise<void> {
+  await apiClient.post("/auth/logout", {});
 }
 
 export async function getMeApi(): Promise<UserResponse> {
@@ -193,6 +185,21 @@ export async function getFaceLogByIdApi(logId: number): Promise<FaceLogResponse>
 export async function getFaceStatsApi(): Promise<DashboardStats> {
   const res = await apiClient.get<DashboardStats>("/admin/face-stats");
   return res.data;
+}
+
+// === Admin API Keys ===
+export async function getApiKeysApi(): Promise<ApiKeyResponse[]> {
+  const res = await apiClient.get<ApiKeyResponse[]>("/admin/api-keys");
+  return res.data;
+}
+
+export async function createApiKeyApi(data: ApiKeyCreateRequest): Promise<ApiKeyCreateResponse> {
+  const res = await apiClient.post<ApiKeyCreateResponse>("/admin/api-keys", data);
+  return res.data;
+}
+
+export async function revokeApiKeyApi(keyId: number): Promise<void> {
+  await apiClient.delete(`/admin/api-keys/${keyId}`);
 }
 
 /** Authenticated rasm URL olish (blob URL qaytaradi) */

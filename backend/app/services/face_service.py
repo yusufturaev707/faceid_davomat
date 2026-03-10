@@ -29,6 +29,8 @@ _face_app_ready = threading.Event()
 def init_face_app() -> None:
     """Tizim ishga tushganda modelni yuklash (lifespan da background threadda chaqiriladi)."""
     global _face_app
+    if _face_app is not None:
+        return
     print("InsightFace model yuklanmoqda...")
     _face_app = FaceAnalysis(
         name="buffalo_l",
