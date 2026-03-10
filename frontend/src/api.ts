@@ -2,11 +2,16 @@ import axios from "axios";
 import type {
   CreateUserRequest,
   DashboardStats,
+  FaceLogResponse,
   LoginRequest,
+  PaginatedFaceLogs,
   PaginatedLogs,
   PhotoVerifyRequest,
-  PhotoVerifyResponse,
+  TaskStatusResponse,
+  TaskSubmitResponse,
   TokenPairResponse,
+  TwoFaceTaskStatusResponse,
+  TwoFaceVerifyRequest,
   UserResponse,
   VerificationLogResponse,
 } from "./interfaces";
@@ -89,7 +94,12 @@ apiClient.interceptors.response.use(
 
 // === Auth API ===
 export async function loginApi(data: LoginRequest): Promise<TokenPairResponse> {
-  const res = await apiClient.post<TokenPairResponse>("/auth/login", data);
+  const formData = new URLSearchParams();
+  formData.append("username", data.username);
+  formData.append("password", data.password);
+  const res = await apiClient.post<TokenPairResponse>("/auth/login", formData, {
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+  });
   return res.data;
 }
 
@@ -110,8 +120,24 @@ export async function getMeApi(): Promise<UserResponse> {
 }
 
 // === Photo API ===
-export async function verifyPhoto(data: PhotoVerifyRequest): Promise<PhotoVerifyResponse> {
-  const res = await apiClient.post<PhotoVerifyResponse>("/photo/verify-photo", data);
+export async function submitVerifyPhoto(data: PhotoVerifyRequest): Promise<TaskSubmitResponse> {
+  const res = await apiClient.post<TaskSubmitResponse>("/photo/verify-photo", data);
+  return res.data;
+}
+
+export async function getTaskStatus(taskId: string): Promise<TaskStatusResponse> {
+  const res = await apiClient.get<TaskStatusResponse>(`/photo/verify-photo/status/${taskId}`);
+  return res.data;
+}
+
+// === Two Face API ===
+export async function submitVerifyTwoFace(data: TwoFaceVerifyRequest): Promise<TaskSubmitResponse> {
+  const res = await apiClient.post<TaskSubmitResponse>("/photo/verify-two-face", data);
+  return res.data;
+}
+
+export async function getTwoFaceTaskStatus(taskId: string): Promise<TwoFaceTaskStatusResponse> {
+  const res = await apiClient.get<TwoFaceTaskStatusResponse>(`/photo/verify-two-face/status/${taskId}`);
   return res.data;
 }
 
@@ -145,6 +171,34 @@ export async function getUsersApi(): Promise<UserResponse[]> {
 export async function createUserApi(data: CreateUserRequest): Promise<UserResponse> {
   const res = await apiClient.post<UserResponse>("/admin/users", data);
   return res.data;
+}
+
+// === Admin Face Logs API ===
+export async function getFaceLogsApi(params: {
+  page?: number;
+  per_page?: number;
+  user_id?: number;
+  date_from?: string;
+  date_to?: string;
+}): Promise<PaginatedFaceLogs> {
+  const res = await apiClient.get<PaginatedFaceLogs>("/admin/face-logs", { params });
+  return res.data;
+}
+
+export async function getFaceLogByIdApi(logId: number): Promise<FaceLogResponse> {
+  const res = await apiClient.get<FaceLogResponse>(`/admin/face-logs/${logId}`);
+  return res.data;
+}
+
+export async function getFaceStatsApi(): Promise<DashboardStats> {
+  const res = await apiClient.get<DashboardStats>("/admin/face-stats");
+  return res.data;
+}
+
+/** Authenticated rasm URL olish (blob URL qaytaradi) */
+export async function getAuthImageUrl(url: string): Promise<string> {
+  const res = await apiClient.get(url, { responseType: "blob" });
+  return URL.createObjectURL(res.data);
 }
 
 /** Faylni base64 ga aylantirish */

@@ -37,3 +37,36 @@ class DashboardStats(BaseModel):
     success_rate: float
     unique_users: int
     daily_chart: list[DailyChartItem]
+
+
+# === Yuz solishtirish loglari ===
+
+class FaceLogResponse(BaseModel):
+    id: int
+    user_id: int
+    username: str
+    timestamp: str
+    ps_img: str | None = None
+    lv_img: str | None = None
+    ps_file_size: int
+    lv_file_size: int
+    ps_width: int
+    ps_height: int
+    lv_width: int
+    lv_height: int
+    ps_detection: bool
+    lv_detection: bool
+    detection: bool
+    response_time: float
+    score: float
+    thresh_score: float
+    verified: bool
+    error_message: str | None = None
+
+
+class PaginatedFaceLogs(BaseModel):
+    items: list[FaceLogResponse]
+    total: int
+    page: int
+    per_page: int
+    pages: int

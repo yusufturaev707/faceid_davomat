@@ -1,4 +1,3 @@
-import threading
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -16,11 +15,6 @@ async def lifespan(app: FastAPI):
     with engine.connect() as conn:
         conn.execute(text("SELECT 1"))
     print("DB ulanishi muvaffaqiyatli!")
-
-    # InsightFace modelini background threadda yuklash — server darhol tayyor
-    from app.services.face_service import init_face_app
-    thread = threading.Thread(target=init_face_app, daemon=True)
-    thread.start()
 
     yield
 

@@ -96,3 +96,75 @@ export interface CreateUserRequest {
 export interface ErrorResponse {
   detail: string;
 }
+
+export interface TaskSubmitResponse {
+  task_id: string;
+}
+
+export interface TaskStatusResponse {
+  task_id: string;
+  status: "PENDING" | "STARTED" | "SUCCESS" | "FAILURE";
+  result?: PhotoVerifyResponse;
+  error?: string;
+}
+
+// === Ikki yuzni solishtirish ===
+export interface TwoFaceVerifyRequest {
+  ps_img: string;
+  lv_img: string;
+}
+
+export interface TwoFaceVerifyResponse {
+  score: number;
+  thresh_score: number;
+  verified: boolean;
+  message: string;
+  ps_detection: boolean;
+  lv_detection: boolean;
+  ps_file_size: number;
+  lv_file_size: number;
+  ps_width: number;
+  ps_height: number;
+  lv_width: number;
+  lv_height: number;
+  error_messages: string[];
+}
+
+export interface TwoFaceTaskStatusResponse {
+  task_id: string;
+  status: "PENDING" | "STARTED" | "SUCCESS" | "FAILURE";
+  result?: TwoFaceVerifyResponse;
+  error?: string;
+}
+
+// === Admin: Yuz solishtirish loglari ===
+export interface FaceLogResponse {
+  id: number;
+  user_id: number;
+  username: string;
+  timestamp: string;
+  ps_img: string | null;
+  lv_img: string | null;
+  ps_file_size: number;
+  lv_file_size: number;
+  ps_width: number;
+  ps_height: number;
+  lv_width: number;
+  lv_height: number;
+  ps_detection: boolean;
+  lv_detection: boolean;
+  detection: boolean;
+  response_time: number;
+  score: number;
+  thresh_score: number;
+  verified: boolean;
+  error_message: string | null;
+}
+
+export interface PaginatedFaceLogs {
+  items: FaceLogResponse[];
+  total: number;
+  page: number;
+  per_page: number;
+  pages: number;
+}

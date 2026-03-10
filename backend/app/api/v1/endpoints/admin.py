@@ -10,9 +10,10 @@ from app.core.config import settings
 from app.core.security import require_admin
 from app.crud.user import create_user, get_all_users, get_user_by_username
 from app.crud.verification_log import get_dashboard_stats, get_log_by_id, get_logs_paginated
+from app.crud.verify_faces import get_face_dashboard_stats, get_face_log_by_id, get_face_logs_paginated
 from app.db.session import get_db
 from app.models.user import User
-from app.schemas.admin import DashboardStats, PaginatedLogs, VerificationLogResponse
+from app.schemas.admin import DashboardStats, FaceLogResponse, PaginatedFaceLogs, PaginatedLogs, VerificationLogResponse
 from app.schemas.auth import CreateUserRequest, UserResponse
 
 router = APIRouter()
@@ -69,7 +70,7 @@ def get_log_image(
         raise HTTPException(status_code=404, detail="Rasm topilmadi")
     filename = log["image_path"]
     suffix = "_thumb" if thumb else ""
-    file_path = os.path.join(settings.UPLOADS_DIR, f"{filename}{suffix}.webp")
+    file_path = os.path.join(settings.UPLOADS_PHOTO_DIR, f"{filename}{suffix}.webp")
     if not os.path.isfile(file_path):
         raise HTTPException(status_code=404, detail="Rasm fayli topilmadi")
     return FileResponse(file_path, media_type="image/webp")
@@ -107,3 +108,77 @@ def create_new_user(
             detail="Bu username allaqachon band",
         )
     return create_user(db, data)
+
+
+# === Yuz solishtirish loglari ===
+
+
+@router.get("/face-logs", response_model=PaginatedFaceLogs, summary="Yuz solishtirish loglari")
+def get_face_logs(
+    page: int = Query(1, ge=1),
+    per_page: int = Query(20, ge=1, le=100),
+    user_id: int | None = Query(None),
+    date_from: datetime | None = Query(None),
+    date_to: datetime | None = Query(None),
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+) -> PaginatedFaceLogs:
+    """Yuz solishtirish loglarini sahifalab ko'rish (faqat admin)."""
+    items, total = get_face_logs_paginated(db, page, per_page, user_id, date_from, date_to)
+    pages = math.ceil(total / per_page) if total > 0 else 1
+    return PaginatedFaceLogs(
+        items=items,
+        total=total,
+        page=page,
+        per_page=per_page,
+        pages=pages,
+    )
+
+
+@router.get("/face-logs/{log_id}", response_model=FaceLogResponse, summary="Bitta yuz solishtirish logi")
+def get_single_face_log(
+    log_id: int,
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+) -> FaceLogResponse:
+    """Bitta yuz solishtirish logini ko'rish (faqat admin)."""
+    log = get_face_log_by_id(db, log_id)
+    if not log:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Log topilmadi",
+        )
+    return log
+
+
+@router.get("/face-logs/{log_id}/image/{img_type}", summary="Yuz solishtirish rasmi")
+def get_face_log_image(
+    log_id: int,
+    img_type: str,
+    thumb: bool = Query(False),
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+):
+    """Yuz solishtirish logidagi rasmni olish. img_type: ps yoki lv."""
+    if img_type not in ("ps", "lv"):
+        raise HTTPException(status_code=400, detail="img_type 'ps' yoki 'lv' bo'lishi kerak")
+    log = get_face_log_by_id(db, log_id)
+    if not log:
+        raise HTTPException(status_code=404, detail="Log topilmadi")
+    filename = log.get("ps_img") if img_type == "ps" else log.get("lv_img")
+    if not filename:
+        raise HTTPException(status_code=404, detail="Rasm topilmadi")
+    suffix = "_thumb" if thumb else ""
+    file_path = os.path.join(settings.UPLOADS_FACE_DIR, f"{filename}{suffix}.webp")
+    if not os.path.isfile(file_path):
+        raise HTTPException(status_code=404, detail="Rasm fayli topilmadi")
+    return FileResponse(file_path, media_type="image/webp")
+
+
+@router.get("/face-stats", response_model=DashboardStats, summary="Yuz solishtirish statistikasi")
+def get_face_stats(
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+) -> DashboardStats:
+    """Yuz solishtirish uchun dashboard statistikasi (faqat admin)."""
+    return get_face_dashboard_stats(db)

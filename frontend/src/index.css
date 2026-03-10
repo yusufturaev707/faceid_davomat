@@ -1,3 +1,129 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  /* === BLUE THEME === */
+  :root,
+  [data-theme="blue"] {
+    --color-primary-50: 239 246 255;
+    --color-primary-100: 219 234 254;
+    --color-primary-200: 191 219 254;
+    --color-primary-300: 147 197 253;
+    --color-primary-400: 96 165 250;
+    --color-primary-500: 59 130 246;
+    --color-primary-600: 37 99 235;
+    --color-primary-700: 29 78 216;
+    --color-primary-800: 30 64 175;
+    --color-primary-900: 30 58 138;
+    --color-surface: 255 255 255;
+    --color-surface-secondary: 249 250 251;
+    --color-bg: 248 250 252;
+    --color-text: 15 23 42;
+    --color-text-secondary: 100 116 139;
+    --color-border: 226 232 240;
+  }
+
+  /* === EMERALD THEME === */
+  [data-theme="emerald"] {
+    --color-primary-50: 236 253 245;
+    --color-primary-100: 209 250 229;
+    --color-primary-200: 167 243 208;
+    --color-primary-300: 110 231 183;
+    --color-primary-400: 52 211 153;
+    --color-primary-500: 16 185 129;
+    --color-primary-600: 5 150 105;
+    --color-primary-700: 4 120 87;
+    --color-primary-800: 6 95 70;
+    --color-primary-900: 6 78 59;
+  }
+
+  /* === VIOLET THEME === */
+  [data-theme="violet"] {
+    --color-primary-50: 245 243 255;
+    --color-primary-100: 237 233 254;
+    --color-primary-200: 221 214 254;
+    --color-primary-300: 196 181 253;
+    --color-primary-400: 167 139 250;
+    --color-primary-500: 139 92 246;
+    --color-primary-600: 124 58 237;
+    --color-primary-700: 109 40 217;
+    --color-primary-800: 91 33 182;
+    --color-primary-900: 76 29 149;
+  }
+
+  /* === DARK MODE === */
+  .dark {
+    --color-surface: 30 41 59;
+    --color-surface-secondary: 15 23 42;
+    --color-bg: 15 23 42;
+    --color-text: 241 245 249;
+    --color-text-secondary: 148 163 184;
+    --color-border: 51 65 85;
+  }
+
+  body {
+    background-color: rgb(var(--color-bg));
+    color: rgb(var(--color-text));
+    transition: background-color 0.3s ease, color 0.3s ease;
+  }
+}
+
+@layer components {
+  .glass-card {
+    @apply bg-surface border border-gray-200 dark:border-slate-700 rounded-2xl shadow-card;
+    transition: box-shadow 0.2s ease, border-color 0.2s ease;
+  }
+
+  .glass-card:hover {
+    @apply shadow-card-hover;
+  }
+
+  .btn-primary {
+    @apply bg-primary-600 text-white px-5 py-2.5 rounded-xl font-medium
+           hover:bg-primary-700 active:bg-primary-800
+           disabled:opacity-50 disabled:cursor-not-allowed
+           transition-all duration-200 ease-out;
+  }
+
+  .btn-secondary {
+    @apply bg-surface text-gray-700 dark:text-slate-300 px-5 py-2.5 rounded-xl font-medium
+           border border-gray-200 dark:border-slate-600
+           hover:bg-gray-50 dark:hover:bg-slate-700
+           transition-all duration-200 ease-out;
+  }
+
+  .input-field {
+    @apply w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-slate-600
+           bg-surface dark:bg-slate-800 text-gray-900 dark:text-slate-100
+           placeholder-gray-400 dark:placeholder-slate-500
+           focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500
+           outline-none transition-all duration-200;
+  }
+
+  .badge-success {
+    @apply inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold
+           bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400;
+  }
+
+  .badge-error {
+    @apply inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold
+           bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-400;
+  }
+
+  .section-title {
+    @apply text-2xl font-bold text-gray-900 dark:text-white;
+  }
+
+  .section-subtitle {
+    @apply text-sm text-gray-500 dark:text-slate-400 mt-1;
+  }
+
+  .label-text {
+    @apply text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-slate-400;
+  }
+
+  .spinner {
+    @apply animate-spin rounded-full border-4 border-primary-200 border-t-primary-600;
+  }
+}

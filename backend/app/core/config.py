@@ -3,34 +3,49 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     # Ilova nomi
-    APP_NAME: str = "FaceID Verification API"
-    API_V1_PREFIX: str = "/api/v1"
+    APP_NAME: str
+    API_V1_PREFIX: str
 
     # JWT sozlamalari
-    SECRET_KEY: str = "change-me-in-production-use-openssl-rand-hex-32"
-    ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    SECRET_KEY: str
+    ALGORITHM: str
+    ACCESS_TOKEN_EXPIRE_MINUTES: int
 
     # Refresh token
-    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+    REFRESH_TOKEN_EXPIRE_DAYS: int
 
     # Database
-    DATABASE_URL: str = "postgresql://postgres:4144@localhost:5432/faceid_db"
+    DATABASE_URL: str
 
     # Rasm tekshiruv parametrlari
-    MAX_BASE64_SIZE: int = 10 * 1024 * 1024  # 10 MB
-    REQUIRED_WIDTH: int = 354
-    REQUIRED_HEIGHT: int = 472
-    MIN_PALITRA_VALUE: int = 50
-    AGE_TOLERANCE: int = 5  # ± yillar
+    MAX_BASE64_SIZE: int
+    MIN_WIDTH: int
+    MAX_WIDTH: int
+    MIN_HEIGHT: int
+    MAX_HEIGHT: int
+    MIN_PALITRA_VALUE: int
+    AGE_TOLERANCE: int
+    SIMILARITY_THRESHOLD: float
+    BG_COLOR_THRESHOLD: int
 
     # Rasm saqlash
-    UPLOADS_DIR: str = "uploads/verifications"
-    THUMBNAIL_SIZE: int = 150  # thumbnail kengligi px
-    WEBP_QUALITY: int = 80  # WebP sifati (0-100)
+    UPLOADS_PHOTO_DIR: str
+    UPLOADS_FACE_DIR: str
+    THUMBNAIL_SIZE: int
+    WEBP_QUALITY: int
+
+    # ML Inference
+    MAX_CONCURRENT_INFERENCE: int
+    INFERENCE_TIMEOUT_SECONDS: float
+    FACE_DET_SIZE: int = 320
+    FACE_DET_THRESH: float = 0.3
+
+    # Celery / Redis
+    REDIS_URL: str
+    TASK_RESULT_TTL: int
 
     # CORS
-    CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:3000"]
+    CORS_ORIGINS: list[str]
 
     class Config:
         env_file = ".env"

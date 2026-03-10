@@ -24,25 +24,25 @@ export default function Pagination({ page, pages, onPageChange }: PaginationProp
   };
 
   return (
-    <div className="flex items-center justify-center gap-1 mt-4">
+    <div className="flex items-center justify-center gap-1.5 mt-6">
       <button
         onClick={() => onPageChange(page - 1)}
         disabled={page <= 1}
-        className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 disabled:opacity-40 hover:bg-gray-50 transition"
+        className="px-3.5 py-2 text-sm rounded-xl border border-gray-200 dark:border-slate-600 text-gray-600 dark:text-slate-400 disabled:opacity-30 hover:bg-gray-50 dark:hover:bg-slate-700 transition"
       >
         Oldingi
       </button>
       {getPageNumbers().map((num, i) =>
         num === "..." ? (
-          <span key={`dots-${i}`} className="px-2 text-gray-400">...</span>
+          <span key={`dots-${i}`} className="px-2 text-gray-400 dark:text-slate-500">...</span>
         ) : (
           <button
             key={num}
             onClick={() => onPageChange(num)}
-            className={`px-3 py-1.5 text-sm rounded-lg border transition ${
+            className={`w-10 h-10 text-sm rounded-xl border transition-all duration-200 ${
               num === page
-                ? "bg-blue-600 text-white border-blue-600"
-                : "border-gray-300 hover:bg-gray-50"
+                ? "bg-primary-600 text-white border-primary-600 shadow-md shadow-primary-600/25"
+                : "border-gray-200 dark:border-slate-600 text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-700"
             }`}
           >
             {num}
@@ -52,7 +52,7 @@ export default function Pagination({ page, pages, onPageChange }: PaginationProp
       <button
         onClick={() => onPageChange(page + 1)}
         disabled={page >= pages}
-        className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 disabled:opacity-40 hover:bg-gray-50 transition"
+        className="px-3.5 py-2 text-sm rounded-xl border border-gray-200 dark:border-slate-600 text-gray-600 dark:text-slate-400 disabled:opacity-30 hover:bg-gray-50 dark:hover:bg-slate-700 transition"
       >
         Keyingi
       </button>

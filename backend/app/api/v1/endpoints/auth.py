@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
 from app.core.security import (
@@ -6,7 +7,6 @@ from app.core.security import (
     get_current_active_user,
     verify_password,
 )
-from app.models.user import User
 from app.crud.refresh_token import (
     create_refresh_token,
     get_valid_refresh_token,
@@ -15,8 +15,8 @@ from app.crud.refresh_token import (
 )
 from app.crud.user import get_user_by_username
 from app.db.session import get_db
+from app.models.user import User
 from app.schemas.auth import (
-    LoginRequest,
     RefreshRequest,
     TokenPairResponse,
     UserResponse,
@@ -26,14 +26,20 @@ router = APIRouter()
 
 
 @router.post("/login", response_model=TokenPairResponse, summary="Tizimga kirish")
-def login(request: LoginRequest, db: Session = Depends(get_db)) -> TokenPairResponse:
-    """Username va parol bilan tizimga kirish. Access + Refresh token qaytaradi."""
-    user = get_user_by_username(db, request.username)
-    if not user or not verify_password(request.password, user.hashed_password):
+def login(
+    form_data: OAuth2PasswordRequestForm = Depends(),  # LoginRequest o'rniga
+    db: Session = Depends(get_db),
+) -> TokenPairResponse:
+    # Endi 'request.username' o'rniga 'form_data.username'
+    user = get_user_by_username(db, form_data.username)
+
+    # Qolgan mantiq o'zgarishsiz qoladi...
+    if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Login yoki parol noto'g'ri",
         )
+
     if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -51,7 +57,9 @@ def login(request: LoginRequest, db: Session = Depends(get_db)) -> TokenPairResp
 
 
 @router.post("/refresh", response_model=TokenPairResponse, summary="Tokenni yangilash")
-def refresh(request: RefreshRequest, db: Session = Depends(get_db)) -> TokenPairResponse:
+def refresh(
+    request: RefreshRequest, db: Session = Depends(get_db)
+) -> TokenPairResponse:
     """Refresh token orqali yangi access + refresh token olish (token rotation)."""
     token_record = get_valid_refresh_token(db, request.refresh_token)
     if not token_record:
