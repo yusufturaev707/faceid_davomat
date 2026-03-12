@@ -1,5 +1,5 @@
-import urllib.request
 import json
+import urllib.request
 
 data = json.dumps({"username": "admin", "password": "admin123"}).encode()
 req = urllib.request.Request(

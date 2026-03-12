@@ -9,6 +9,7 @@ import LogsPage from "./pages/LogsPage";
 import FaceLogsPage from "./pages/FaceLogsPage";
 import FaceLogDetailPage from "./pages/FaceLogDetailPage";
 import ApiKeysPage from "./pages/ApiKeysPage";
+import EmbeddingPage from "./pages/EmbeddingPage";
 import NotFoundPage from "./pages/NotFoundPage";
 import VerifyPage from "./pages/VerifyPage";
 import SettingsPage from "./pages/SettingsPage";
@@ -23,6 +24,7 @@ export default function App() {
           <Route path="/" element={<Navigate to="/verify" replace />} />
           <Route path="/verify" element={<VerifyPage />} />
           <Route path="/verify-two-face" element={<VerifyTwoFacePage />} />
+          <Route path="/embedding" element={<EmbeddingPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route element={<AdminRoute />}>
             <Route path="/dashboard" element={<DashboardPage />} />

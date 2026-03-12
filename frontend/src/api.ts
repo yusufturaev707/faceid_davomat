@@ -5,6 +5,8 @@ import type {
   ApiKeyResponse,
   CreateUserRequest,
   DashboardStats,
+  EmbeddingRequest,
+  EmbeddingResponse,
   FaceLogResponse,
   LoginRequest,
   PaginatedFaceLogs,
@@ -130,6 +132,12 @@ export async function submitVerifyTwoFace(data: TwoFaceVerifyRequest): Promise<T
 
 export async function getTwoFaceTaskStatus(taskId: string): Promise<TwoFaceTaskStatusResponse> {
   const res = await apiClient.get<TwoFaceTaskStatusResponse>(`/photo/verify-two-face/status/${taskId}`);
+  return res.data;
+}
+
+// === Embedding API ===
+export async function extractEmbeddingApi(data: EmbeddingRequest): Promise<EmbeddingResponse> {
+  const res = await apiClient.post<EmbeddingResponse>("/embedding/extract", data);
   return res.data;
 }
 

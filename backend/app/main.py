@@ -1,3 +1,4 @@
+import threading
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -7,6 +8,7 @@ from sqlalchemy import text
 from app.api.v1.router import api_router
 from app.core.config import settings
 from app.db.session import engine
+from app.services.face_service import init_face_app
 
 
 @asynccontextmanager
@@ -15,6 +17,9 @@ async def lifespan(app: FastAPI):
     with engine.connect() as conn:
         conn.execute(text("SELECT 1"))
     print("DB ulanishi muvaffaqiyatli!")
+
+    # InsightFace modelni background threadda yuklash
+    threading.Thread(target=init_face_app, daemon=True).start()
 
     yield
 

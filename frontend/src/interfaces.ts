@@ -168,6 +168,21 @@ export interface PaginatedFaceLogs {
   pages: number;
 }
 
+// === Embedding ===
+export interface EmbeddingRequest {
+  img_b64: string;
+}
+
+export interface EmbeddingResponse {
+  detection: boolean;
+  embedding: number[];
+  embedding_size: number;
+  file_size_byte: number;
+  image_width: number;
+  image_height: number;
+  error_messages: string[];
+}
+
 // === API Key ===
 export interface ApiKeyCreateRequest {
   name: string;

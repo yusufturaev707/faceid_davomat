@@ -13,6 +13,7 @@ from PIL import Image
 
 from app.core.config import settings
 from app.schemas.photo import (
+    EmbeddingResponse,
     ImageSize,
     PalitraRGB,
     PhotoVerifyResponse,
@@ -242,6 +243,40 @@ def compare_two_faces(
     return response, ps_img_bgr, lv_img_bgr
 
 
+def extract_embedding(img_b64: str) -> EmbeddingResponse:
+    """Rasmdagi yuzni aniqlash va embedding vektorini qaytarish."""
+    # 1. Base64 dekodlash
+    img_bgr, file_size = decode_base64_image(img_b64)
+
+    # 2. O'lchamlarni olish
+    h, w = img_bgr.shape[:2]
+
+    # 3. Yuzni aniqlash
+    faces = detect_faces(img_bgr)
+    detection = len(faces) > 0
+
+    errors: list[str] = []
+    embedding: list[float] = []
+    embedding_size = 0
+
+    if not detection:
+        errors.append("Rasmda yuz aniqlanmadi")
+    else:
+        face = faces[0]
+        embedding = face.embedding.tolist()
+        embedding_size = len(embedding)
+
+    return EmbeddingResponse(
+        detection=detection,
+        embedding=embedding,
+        embedding_size=embedding_size,
+        file_size_byte=file_size,
+        image_width=w,
+        image_height=h,
+        error_messages=errors,
+    )
+
+
 def verify_photo(img_b64: str, age: int) -> tuple[PhotoVerifyResponse, np.ndarray]:
     """Rasmni to'liq tekshirish — asosiy biznes logikasi.
     Returns: (natija, img_bgr) — natija va original rasm massivi
@@ -275,7 +310,10 @@ def verify_photo(img_b64: str, age: int) -> tuple[PhotoVerifyResponse, np.ndarra
         errors.append(
             f"Yosh mos kelmadi: kiritilgan {age}, aniqlangan ~{detected_age} (±{settings.AGE_TOLERANCE})"
         )
-    if not (settings.MIN_WIDTH <= w <= settings.MAX_WIDTH and settings.MIN_HEIGHT <= h <= settings.MAX_HEIGHT):
+    if not (
+        settings.MIN_WIDTH <= w <= settings.MAX_WIDTH
+        and settings.MIN_HEIGHT <= h <= settings.MAX_HEIGHT
+    ):
         errors.append(
             f"O'lcham noto'g'ri: {w}x{h}, talab: {settings.MIN_WIDTH}-{settings.MAX_WIDTH} x {settings.MIN_HEIGHT}-{settings.MAX_HEIGHT}"
         )
