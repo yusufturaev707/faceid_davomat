@@ -1,9 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
 from app.celery_app import celery_app
-from app.core.security import get_current_active_user
-from app.db.session import get_db
+from app.dependencies import get_current_active_user, get_db
 from app.models.user import User
 from app.schemas.photo import (
     PhotoVerifyRequest,

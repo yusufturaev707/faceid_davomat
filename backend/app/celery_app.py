@@ -1,7 +1,7 @@
 from celery import Celery
 from celery.signals import worker_init, worker_process_init
 
-from app.core.config import settings
+from app.config import settings
 
 celery_app = Celery(
     "faceid",

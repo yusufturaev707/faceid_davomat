@@ -11,7 +11,7 @@ from fastapi import HTTPException, status
 from insightface.app import FaceAnalysis
 from PIL import Image
 
-from app.core.config import settings
+from app.config import settings
 from app.schemas.photo import (
     EmbeddingResponse,
     ImageSize,

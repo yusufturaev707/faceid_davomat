@@ -2,7 +2,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 
 from app.celery_app import celery_app
-from app.core.config import settings
+from app.config import settings
 from app.db.session import SessionLocal
 from app.models.verification_log import VerificationLog
 from app.models.verify_faces import VerifyFaces

@@ -3,10 +3,10 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
-from app.core.config import settings
+from app.config import settings
 from app.db.base import Base
 # Barcha modellarni import qilish (Alembic autogenerate uchun)
-from app.models import User, VerificationLog, RefreshToken, VerifyFaces  # noqa: F401
+from app.models import User, VerificationLog, RefreshToken, VerifyFaces, ApiKey  # noqa: F401
 
 config = context.config
 

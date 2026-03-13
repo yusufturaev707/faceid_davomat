@@ -6,17 +6,21 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
 from app.api.v1.router import api_router
-from app.core.config import settings
+from app.config import settings
+from app.core.exceptions import register_exception_handlers
+from app.core.logging import logger, setup_logging
 from app.db.session import engine
 from app.services.face_service import init_face_app
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    setup_logging()
+
     # Startup: DB ulanishini tekshirish
     with engine.connect() as conn:
         conn.execute(text("SELECT 1"))
-    print("DB ulanishi muvaffaqiyatli!")
+    logger.info("DB ulanishi muvaffaqiyatli!")
 
     # InsightFace modelni background threadda yuklash
     threading.Thread(target=init_face_app, daemon=True).start()
@@ -27,9 +31,12 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title=settings.APP_NAME,
     version="1.0.0",
-    description="InsightFace yordamida yuz aniqlash va rasm tekshiruv API",
+    description="Yuz aniqlash va rasm tekshiruv API",
     lifespan=lifespan,
 )
+
+# Exception handlers
+register_exception_handlers(app)
 
 # CORS middleware
 app.add_middleware(

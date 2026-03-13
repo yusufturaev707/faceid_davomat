@@ -6,13 +6,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
-from app.core.config import settings
-from app.core.security import require_admin
+from app.config import settings
 from app.crud.api_key import create_api_key, get_all_api_keys, revoke_api_key
 from app.crud.user import create_user, get_all_users, get_user_by_username
 from app.crud.verification_log import get_dashboard_stats, get_log_by_id, get_logs_paginated
 from app.crud.verify_faces import get_face_dashboard_stats, get_face_log_by_id, get_face_logs_paginated
-from app.db.session import get_db
+from app.dependencies import get_db, require_admin
 from app.models.user import User
 from app.schemas.admin import DashboardStats, FaceLogResponse, PaginatedFaceLogs, PaginatedLogs, VerificationLogResponse
 from app.schemas.api_key import ApiKeyCreateRequest, ApiKeyCreateResponse, ApiKeyResponse

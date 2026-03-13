@@ -1,5 +1,6 @@
-backend/uploads/verifications/
-backend/alembic/version/
+backend/uploads/
+node_modules/
+frontend/dist/
 
 
 # Byte-compiled / optimized / DLL files

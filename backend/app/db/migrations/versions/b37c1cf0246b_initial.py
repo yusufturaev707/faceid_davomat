@@ -1,7 +1,7 @@
 """initial
 
 Revision ID: b37c1cf0246b
-Revises: 
+Revises:
 Create Date: 2026-03-04 06:25:03.937696
 """
 from typing import Sequence, Union

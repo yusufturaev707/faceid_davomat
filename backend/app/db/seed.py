@@ -1,6 +1,7 @@
 """Admin foydalanuvchi yaratish uchun seed script.
 Ishlatish: cd backend && python -m app.db.seed
 """
+
 from sqlalchemy import select
 
 from app.core.security import hash_password
@@ -21,7 +22,7 @@ def seed_admin():
 
         admin = User(
             username="admin",
-            hashed_password=hash_password("admin123"),
+            hashed_password=hash_password("123"),
             full_name="Administrator",
             role="admin",
             is_active=True,

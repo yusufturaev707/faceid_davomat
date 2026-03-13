@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
-from app.core.config import settings
+from app.config import settings
 from app.models.refresh_token import RefreshToken
 
 
