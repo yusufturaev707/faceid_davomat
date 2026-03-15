@@ -4,6 +4,7 @@ import type { FaceLogResponse } from "../interfaces";
 import { getFaceLogByIdApi } from "../api";
 import AuthImage from "../components/AuthImage";
 import PageLoader from "../components/PageLoader";
+import { extractErrorMessage } from "../utils/errorMessage";
 
 export default function FaceLogDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -16,7 +17,7 @@ export default function FaceLogDetailPage() {
     setLoading(true);
     getFaceLogByIdApi(Number(id))
       .then(setLog)
-      .catch(() => setError("Log topilmadi"))
+      .catch((err) => setError(extractErrorMessage(err)))
       .finally(() => setLoading(false));
   }, [id]);
 

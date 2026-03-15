@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { PhotoVerifyResponse } from "../interfaces";
 import { fileToBase64, getTaskStatus, submitVerifyPhoto } from "../api";
+import { extractErrorMessage } from "../utils/errorMessage";
 
 const POLL_INTERVAL_MS = 1500;
 const POLL_MAX_ATTEMPTS = 40;
@@ -29,12 +30,12 @@ export default function VerifyPage() {
     pollAttemptsRef.current = 0;
     pollIntervalRef.current = setInterval(async () => {
       pollAttemptsRef.current += 1;
-      if (pollAttemptsRef.current > POLL_MAX_ATTEMPTS) { stopPolling(); setLoading(false); setError("Server javob bermadi"); return; }
+      if (pollAttemptsRef.current > POLL_MAX_ATTEMPTS) { stopPolling(); setLoading(false); setError("So'rov vaqti tugadi. Server javob bermadi. Keyinroq urinib ko'ring"); return; }
       try {
         const s = await getTaskStatus(taskId);
         if (s.status === "SUCCESS" && s.result) { stopPolling(); setResult(s.result); setLoading(false); }
-        else if (s.status === "FAILURE") { stopPolling(); setLoading(false); setError(s.error || "Xato"); }
-      } catch { stopPolling(); setLoading(false); setError("Tarmoq xatosi"); }
+        else if (s.status === "FAILURE") { stopPolling(); setLoading(false); setError(s.error || "Tekshirish muvaffaqiyatsiz yakunlandi"); }
+      } catch (err) { stopPolling(); setLoading(false); setError(extractErrorMessage(err)); }
     }, POLL_INTERVAL_MS);
   };
 
@@ -57,10 +58,7 @@ export default function VerifyPage() {
       startPolling(task_id);
     } catch (err: unknown) {
       setLoading(false);
-      if (err && typeof err === "object" && "response" in err) {
-        const axiosErr = err as { response?: { data?: { detail?: string } } };
-        setError(axiosErr.response?.data?.detail || "Server xatosi");
-      } else { setError("Tarmoq xatosi"); }
+      setError(extractErrorMessage(err));
     }
   };
 

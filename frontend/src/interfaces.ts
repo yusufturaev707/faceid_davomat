@@ -283,3 +283,149 @@ export interface TestSessionUpdateRequest {
   count_sm_per_day?: number;
   is_active?: boolean;
 }
+
+// === Lookup tables (CRUD) ===
+
+export interface LookupTestCreate {
+  name: string;
+  key: number;
+  is_active?: boolean;
+}
+export interface LookupTestUpdate {
+  name?: string;
+  key?: number;
+  is_active?: boolean;
+}
+export interface LookupTestResponse {
+  id: number;
+  name: string;
+  key: number;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface LookupSmenaCreate {
+  name: string;
+  number: number;
+  is_active?: boolean;
+}
+export interface LookupSmenaUpdate {
+  name?: string;
+  number?: number;
+  is_active?: boolean;
+}
+export interface LookupSmenaResponse {
+  id: number;
+  name: string;
+  number: number;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface LookupSessionStateCreate {
+  name: string;
+  key: number;
+  is_active?: boolean;
+}
+export interface LookupSessionStateUpdate {
+  name?: string;
+  key?: number;
+  is_active?: boolean;
+}
+export interface LookupSessionStateResponse {
+  id: number;
+  name: string;
+  key: number;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface LookupRegionCreate {
+  name: string;
+  number: number;
+  is_active?: boolean;
+}
+export interface LookupRegionUpdate {
+  name?: string;
+  number?: number;
+  is_active?: boolean;
+}
+export interface LookupRegionResponse {
+  id: number;
+  name: string;
+  number: number;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface LookupZoneCreate {
+  region_id: number;
+  name: string;
+  number: number;
+  is_active?: boolean;
+}
+export interface LookupZoneUpdate {
+  region_id?: number;
+  name?: string;
+  number?: number;
+  is_active?: boolean;
+}
+export interface LookupZoneResponse {
+  id: number;
+  region_id: number;
+  name: string;
+  number: number;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface LookupRoleCreate {
+  name: string;
+  key: number;
+  is_active?: boolean;
+}
+export interface LookupRoleUpdate {
+  name?: string;
+  key?: number;
+  is_active?: boolean;
+}
+export interface LookupRoleResponse {
+  id: number;
+  name: string;
+  key: number;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface LookupReasonCreate {
+  name: string;
+  key: number;
+  is_active?: boolean;
+}
+export interface LookupReasonUpdate {
+  name?: string;
+  key?: number;
+  is_active?: boolean;
+}
+export interface LookupReasonResponse {
+  id: number;
+  name: string;
+  key: number;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface LookupBlacklistCreate {
+  imei?: string | null;
+  description?: string | null;
+}
+export interface LookupBlacklistUpdate {
+  imei?: string | null;
+  description?: string | null;
+}
+export interface LookupBlacklistResponse {
+  id: number;
+  imei: string | null;
+  description: string | null;
+  created_at: string;
+}

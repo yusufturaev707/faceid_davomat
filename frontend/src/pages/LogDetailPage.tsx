@@ -4,6 +4,7 @@ import type { VerificationLogResponse } from "../interfaces";
 import { getLogByIdApi } from "../api";
 import AuthImage from "../components/AuthImage";
 import PageLoader from "../components/PageLoader";
+import { extractErrorMessage } from "../utils/errorMessage";
 
 export default function LogDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -16,7 +17,7 @@ export default function LogDetailPage() {
     setLoading(true);
     getLogByIdApi(Number(id))
       .then(setLog)
-      .catch(() => setError("Log topilmadi"))
+      .catch((err) => setError(extractErrorMessage(err)))
       .finally(() => setLoading(false));
   }, [id]);
 

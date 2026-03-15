@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 import type { EmbeddingResponse } from "../interfaces";
 import { extractEmbeddingApi, fileToBase64 } from "../api";
+import { extractErrorMessage } from "../utils/errorMessage";
 
 type InputMode = "file" | "base64";
 
@@ -70,8 +71,7 @@ export default function EmbeddingPage() {
       const res = await extractEmbeddingApi({ img_b64: b64 });
       setResult(res);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Xatolik yuz berdi";
-      setError(msg);
+      setError(extractErrorMessage(err));
     } finally {
       setLoading(false);
     }

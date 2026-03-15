@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { ApiKeyCreateResponse, ApiKeyResponse } from "../interfaces";
 import { createApiKeyApi, getApiKeysApi, revokeApiKeyApi } from "../api";
 import PageLoader from "../components/PageLoader";
+import { extractErrorMessage } from "../utils/errorMessage";
 
 export default function ApiKeysPage() {
   const [keys, setKeys] = useState<ApiKeyResponse[]>([]);
@@ -10,11 +11,14 @@ export default function ApiKeysPage() {
   const [creating, setCreating] = useState(false);
   const [newKey, setNewKey] = useState<ApiKeyCreateResponse | null>(null);
   const [copied, setCopied] = useState(false);
+  const [error, setError] = useState("");
 
   const fetchKeys = useCallback(async () => {
     try {
       const data = await getApiKeysApi();
       setKeys(data);
+    } catch (err) {
+      setError(extractErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -27,19 +31,26 @@ export default function ApiKeysPage() {
   const handleCreate = async () => {
     if (!name.trim()) return;
     setCreating(true);
+    setError("");
     try {
       const created = await createApiKeyApi({ name: name.trim() });
       setNewKey(created);
       setName("");
       fetchKeys();
+    } catch (err) {
+      setError(extractErrorMessage(err));
     } finally {
       setCreating(false);
     }
   };
 
   const handleRevoke = async (keyId: number) => {
-    await revokeApiKeyApi(keyId);
-    fetchKeys();
+    try {
+      await revokeApiKeyApi(keyId);
+      fetchKeys();
+    } catch (err) {
+      setError(extractErrorMessage(err));
+    }
   };
 
   const handleCopy = async (text: string) => {
@@ -56,6 +67,14 @@ export default function ApiKeysPage() {
           Tashqi tizimlar uchun API kalitlarni boshqarish
         </p>
       </div>
+
+      {error && (
+        <div className="flex items-center gap-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 px-4 py-3 rounded-xl text-sm">
+          <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+          {error}
+          <button onClick={() => setError("")} className="ml-auto underline text-xs">Yopish</button>
+        </div>
+      )}
 
       {/* Yangi kalit yaratish */}
       <div className="glass-card p-6">

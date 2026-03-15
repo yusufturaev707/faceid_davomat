@@ -5,6 +5,7 @@ import { getFaceLogsApi } from "../api";
 import PageLoader from "../components/PageLoader";
 import Pagination from "../components/Pagination";
 import AuthImage from "../components/AuthImage";
+import { extractErrorMessage } from "../utils/errorMessage";
 
 export default function FaceLogsPage() {
   const navigate = useNavigate();
@@ -13,6 +14,7 @@ export default function FaceLogsPage() {
   const [loading, setLoading] = useState(true);
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [error, setError] = useState("");
 
   const fetchLogs = useCallback(async () => {
     setLoading(true);
@@ -22,6 +24,8 @@ export default function FaceLogsPage() {
       if (dateTo) params.date_to = dateTo;
       const result = await getFaceLogsApi(params);
       setData(result);
+    } catch (err) {
+      setError(extractErrorMessage(err));
     } finally { setLoading(false); }
   }, [page, dateFrom, dateTo]);
 
@@ -35,6 +39,14 @@ export default function FaceLogsPage() {
         <h2 className="section-title">Yuz Solishtirish Loglari</h2>
         <p className="section-subtitle">Barcha yuz solishtirish natijalari</p>
       </div>
+
+      {error && (
+        <div className="mb-4 flex items-center gap-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 px-4 py-3 rounded-xl text-sm">
+          <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+          {error}
+          <button onClick={() => setError("")} className="ml-auto underline text-xs">Yopish</button>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="glass-card p-5 mb-5 flex flex-wrap gap-4 items-end">

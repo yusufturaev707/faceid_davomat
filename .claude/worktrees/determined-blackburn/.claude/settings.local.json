@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -E '\\\\.\\(tsx|ts|jsx|js\\)$')",
+      "Read(//d/Fastapi/verify_photo/backend/**)",
+      "Bash(alembic revision:*)",
+      "Bash(alembic upgrade:*)",
+      "Bash(npx tsc:*)",
+      "Read(//d/Fastapi/verify_photo//**)",
+      "Bash(cmd.exe /c \"cd D:\\\\Fastapi\\\\verify_photo\\\\frontend && npx tsc --noEmit\")",
+      "Bash(npx --prefix D:/Fastapi/verify_photo/frontend tsc --project D:/Fastapi/verify_photo/frontend/tsconfig.json --noEmit)"
+    ]
+  }
+}

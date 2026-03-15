@@ -7,6 +7,7 @@ from datetime import date
 from typing import Any
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models.session_state import SessionState
@@ -14,6 +15,7 @@ from app.models.smena import Smena
 from app.models.test import Test
 from app.models.test_session import TestSession
 from app.models.test_session_smena import TestSessionSmena
+from app.crud.lookup import DuplicateError, _check_unique_before_write, _parse_integrity_error
 
 
 # --- SessionState ---
@@ -128,7 +130,11 @@ def create_test_session(
             )
             db.add(smena)
 
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as e:
+        db.rollback()
+        raise DuplicateError(_parse_integrity_error(e)) from e
     db.refresh(session)
     return session
 
@@ -139,10 +145,16 @@ def update_test_session(
     session = db.get(TestSession, session_id)
     if not session:
         return None
+    # Pre-check unique fields BEFORE update → prevents sequence gap
+    _check_unique_before_write(db, TestSession, data, exclude_id=session_id)
     for key, value in data.items():
         if value is not None:
             setattr(session, key, value)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as e:
+        db.rollback()
+        raise DuplicateError(_parse_integrity_error(e)) from e
     db.refresh(session)
     return session
 
@@ -178,7 +190,11 @@ def add_smena_to_session(
         day=day,
     )
     db.add(smena)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as e:
+        db.rollback()
+        raise DuplicateError(_parse_integrity_error(e)) from e
     db.refresh(smena)
     return smena
 

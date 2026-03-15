@@ -14,6 +14,7 @@ import {
 } from "../api";
 import PageLoader from "../components/PageLoader";
 import Pagination from "../components/Pagination";
+import { extractErrorMessage } from "../utils/errorMessage";
 
 export default function TestSessionsPage() {
   const [data, setData] = useState<TestSessionListResponse | null>(null);
@@ -62,8 +63,8 @@ export default function TestSessionsPage() {
       setTests(t);
       setSmenas(s);
       if (t.length > 0) setFormTestId(t[0].id);
-    } catch {
-      setError("Ma'lumotnoma yuklanmadi");
+    } catch (err) {
+      setError(extractErrorMessage(err));
     }
     setShowModal(true);
   };
@@ -102,8 +103,8 @@ export default function TestSessionsPage() {
       });
       setShowModal(false);
       fetchSessions();
-    } catch (e: any) {
-      setError(e.response?.data?.detail || "Xatolik yuz berdi");
+    } catch (err) {
+      setError(extractErrorMessage(err));
     } finally {
       setSubmitting(false);
     }
@@ -114,8 +115,8 @@ export default function TestSessionsPage() {
     try {
       await deleteTestSessionApi(session.id);
       fetchSessions();
-    } catch {
-      alert("O'chirishda xatolik");
+    } catch (err) {
+      alert(extractErrorMessage(err));
     }
   };
 

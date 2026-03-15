@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import ThemeSwitcher from "../components/ThemeSwitcher";
+import { extractErrorMessage } from "../utils/errorMessage";
 
 export default function LoginPage() {
   const { login, isAuthenticated, loading } = useAuth();
@@ -22,12 +23,7 @@ export default function LoginPage() {
       await login(username, password);
       navigate("/verify", { replace: true });
     } catch (err: unknown) {
-      if (err && typeof err === "object" && "response" in err) {
-        const axiosErr = err as { response?: { data?: { detail?: string } } };
-        setError(axiosErr.response?.data?.detail || "Server xatosi");
-      } else {
-        setError("Tarmoq xatosi");
-      }
+      setError(extractErrorMessage(err));
     } finally {
       setSubmitting(false);
     }

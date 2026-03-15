@@ -281,6 +281,72 @@ export async function getSessionStatesLookupApi(): Promise<import("./interfaces"
   return res.data;
 }
 
+// === Lookup CRUD API ===
+// Generic helper
+async function lookupList<T>(path: string): Promise<T[]> {
+  const res = await apiClient.get<T[]>(`/lookup/${path}`);
+  return res.data;
+}
+async function lookupCreate<T>(path: string, data: any): Promise<T> {
+  const res = await apiClient.post<T>(`/lookup/${path}`, data);
+  return res.data;
+}
+async function lookupUpdate<T>(path: string, id: number, data: any): Promise<T> {
+  const res = await apiClient.patch<T>(`/lookup/${path}/${id}`, data);
+  return res.data;
+}
+async function lookupDelete(path: string, id: number): Promise<void> {
+  await apiClient.delete(`/lookup/${path}/${id}`);
+}
+
+// Tests
+export const getTestsListApi = () => lookupList<import("./interfaces").LookupTestResponse>("tests");
+export const createTestApi = (d: import("./interfaces").LookupTestCreate) => lookupCreate<import("./interfaces").LookupTestResponse>("tests", d);
+export const updateTestApi = (id: number, d: import("./interfaces").LookupTestUpdate) => lookupUpdate<import("./interfaces").LookupTestResponse>("tests", id, d);
+export const deleteTestApi = (id: number) => lookupDelete("tests", id);
+
+// Smenas
+export const getSmenasListApi = () => lookupList<import("./interfaces").LookupSmenaResponse>("smenas");
+export const createSmenaApi = (d: import("./interfaces").LookupSmenaCreate) => lookupCreate<import("./interfaces").LookupSmenaResponse>("smenas", d);
+export const updateSmenaApi = (id: number, d: import("./interfaces").LookupSmenaUpdate) => lookupUpdate<import("./interfaces").LookupSmenaResponse>("smenas", id, d);
+export const deleteSmenaApi = (id: number) => lookupDelete("smenas", id);
+
+// Session States
+export const getSessionStatesListApi = () => lookupList<import("./interfaces").LookupSessionStateResponse>("session-states");
+export const createSessionStateApi = (d: import("./interfaces").LookupSessionStateCreate) => lookupCreate<import("./interfaces").LookupSessionStateResponse>("session-states", d);
+export const updateSessionStateApi = (id: number, d: import("./interfaces").LookupSessionStateUpdate) => lookupUpdate<import("./interfaces").LookupSessionStateResponse>("session-states", id, d);
+export const deleteSessionStateApi = (id: number) => lookupDelete("session-states", id);
+
+// Regions
+export const getRegionsListApi = () => lookupList<import("./interfaces").LookupRegionResponse>("regions");
+export const createRegionApi = (d: import("./interfaces").LookupRegionCreate) => lookupCreate<import("./interfaces").LookupRegionResponse>("regions", d);
+export const updateRegionApi = (id: number, d: import("./interfaces").LookupRegionUpdate) => lookupUpdate<import("./interfaces").LookupRegionResponse>("regions", id, d);
+export const deleteRegionApi = (id: number) => lookupDelete("regions", id);
+
+// Zones
+export const getZonesListApi = () => lookupList<import("./interfaces").LookupZoneResponse>("zones");
+export const createZoneApi = (d: import("./interfaces").LookupZoneCreate) => lookupCreate<import("./interfaces").LookupZoneResponse>("zones", d);
+export const updateZoneApi = (id: number, d: import("./interfaces").LookupZoneUpdate) => lookupUpdate<import("./interfaces").LookupZoneResponse>("zones", id, d);
+export const deleteZoneApi = (id: number) => lookupDelete("zones", id);
+
+// Roles
+export const getRolesListApi = () => lookupList<import("./interfaces").LookupRoleResponse>("roles");
+export const createRoleApi = (d: import("./interfaces").LookupRoleCreate) => lookupCreate<import("./interfaces").LookupRoleResponse>("roles", d);
+export const updateRoleApi = (id: number, d: import("./interfaces").LookupRoleUpdate) => lookupUpdate<import("./interfaces").LookupRoleResponse>("roles", id, d);
+export const deleteRoleApi = (id: number) => lookupDelete("roles", id);
+
+// Reasons
+export const getReasonsListApi = () => lookupList<import("./interfaces").LookupReasonResponse>("reasons");
+export const createReasonApi = (d: import("./interfaces").LookupReasonCreate) => lookupCreate<import("./interfaces").LookupReasonResponse>("reasons", d);
+export const updateReasonApi = (id: number, d: import("./interfaces").LookupReasonUpdate) => lookupUpdate<import("./interfaces").LookupReasonResponse>("reasons", id, d);
+export const deleteReasonApi = (id: number) => lookupDelete("reasons", id);
+
+// Blacklist
+export const getBlacklistApi = () => lookupList<import("./interfaces").LookupBlacklistResponse>("blacklist");
+export const createBlacklistApi = (d: import("./interfaces").LookupBlacklistCreate) => lookupCreate<import("./interfaces").LookupBlacklistResponse>("blacklist", d);
+export const updateBlacklistApi = (id: number, d: import("./interfaces").LookupBlacklistUpdate) => lookupUpdate<import("./interfaces").LookupBlacklistResponse>("blacklist", id, d);
+export const deleteBlacklistApi = (id: number) => lookupDelete("blacklist", id);
+
 /** Faylni base64 ga aylantirish */
 export function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {

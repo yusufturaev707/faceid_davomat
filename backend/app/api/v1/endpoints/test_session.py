@@ -5,6 +5,7 @@ import math
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
+from app.crud.lookup import DuplicateError
 from app.crud.test_session import (
     add_smena_to_session,
     create_test_session,
@@ -121,15 +122,18 @@ def create_session(
 
     smenas_data = [s.model_dump() for s in body.smenas] if body.smenas else None
 
-    session = create_test_session(
-        db,
-        test_id=body.test_id,
-        name=body.name,
-        start_date=body.start_date,
-        finish_date=body.finish_date,
-        count_sm_per_day=body.count_sm_per_day,
-        smenas=smenas_data,
-    )
+    try:
+        session = create_test_session(
+            db,
+            test_id=body.test_id,
+            name=body.name,
+            start_date=body.start_date,
+            finish_date=body.finish_date,
+            count_sm_per_day=body.count_sm_per_day,
+            smenas=smenas_data,
+        )
+    except DuplicateError as e:
+        raise HTTPException(status_code=409, detail=e.message)
     return session
 
 
@@ -145,7 +149,10 @@ def update_session(
     if not data:
         raise HTTPException(status_code=400, detail="O'zgartirish uchun maydon berilmadi")
 
-    session = update_test_session(db, session_id=session_id, data=data)
+    try:
+        session = update_test_session(db, session_id=session_id, data=data)
+    except DuplicateError as e:
+        raise HTTPException(status_code=409, detail=e.message)
     if not session:
         raise HTTPException(status_code=404, detail="Sessiya topilmadi")
     return session
@@ -181,12 +188,15 @@ def add_smena(
     if not session:
         raise HTTPException(status_code=404, detail="Sessiya topilmadi")
 
-    smena = add_smena_to_session(
-        db,
-        test_session_id=session_id,
-        test_smena_id=body.test_smena_id,
-        day=body.day,
-    )
+    try:
+        smena = add_smena_to_session(
+            db,
+            test_session_id=session_id,
+            test_smena_id=body.test_smena_id,
+            day=body.day,
+        )
+    except DuplicateError as e:
+        raise HTTPException(status_code=409, detail=e.message)
     return smena
 
 
