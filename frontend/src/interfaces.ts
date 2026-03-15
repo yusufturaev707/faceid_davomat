@@ -205,3 +205,81 @@ export interface ApiKeyResponse {
   last_used_at: string | null;
   created_at: string;
 }
+
+// === Test Session ===
+export interface SessionStateResponse {
+  id: number;
+  name: string;
+  key: number;
+  is_active: boolean;
+}
+
+export interface TestResponse {
+  id: number;
+  name: string;
+  key: number;
+  is_active: boolean;
+}
+
+export interface SmenaResponse {
+  id: number;
+  name: string;
+  number: number;
+  is_active: boolean;
+}
+
+export interface TestSessionSmenaResponse {
+  id: number;
+  test_session_id: number;
+  test_smena_id: number;
+  number: number;
+  day: string;
+  is_active: boolean;
+  smena: SmenaResponse | null;
+  created_at: string;
+}
+
+export interface TestSessionResponse {
+  id: number;
+  hash_key: string;
+  test_state_id: number;
+  test_id: number;
+  name: string;
+  number: number;
+  count_sm_per_day: number;
+  count_total_student: number;
+  start_date: string;
+  finish_date: string;
+  is_active: boolean;
+  test_state: SessionStateResponse | null;
+  test: TestResponse | null;
+  smenas: TestSessionSmenaResponse[];
+  created_at: string;
+}
+
+export interface TestSessionListResponse {
+  items: TestSessionResponse[];
+  total: number;
+  page: number;
+  per_page: number;
+  pages: number;
+}
+
+export interface TestSessionCreateRequest {
+  test_id: number;
+  name: string;
+  start_date: string;
+  finish_date: string;
+  count_sm_per_day: number;
+  smenas: { test_smena_id: number; day: string }[];
+}
+
+export interface TestSessionUpdateRequest {
+  test_id?: number;
+  name?: string;
+  test_state_id?: number;
+  start_date?: string;
+  finish_date?: string;
+  count_sm_per_day?: number;
+  is_active?: boolean;
+}

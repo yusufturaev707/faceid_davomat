@@ -1,8 +1,7 @@
-from datetime import date, datetime
+from datetime import datetime
 
-from sqlalchemy import Float, ForeignKey, String, Text, func
-from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy.sql.sqltypes import BIGINT
+from sqlalchemy import BigInteger, ForeignKey, String
+from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
 
@@ -10,9 +9,9 @@ from app.db.base import Base
 class Student(Base):
     __tablename__ = "students"
 
-    id: Mapped[BIGINT] = mapped_column(primary_key=True, index=True)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, index=True)
     session_smena_id: Mapped[int] = mapped_column(ForeignKey("test_session_smena.id"))
-    zone_id: Mapped[int] = mapped_column(ForeignKey("zones.id"))
+    zone_id: Mapped[int] = mapped_column(ForeignKey("zone.id"))
 
     # api
     last_name: Mapped[str] = mapped_column(String(50), index=True)
@@ -21,7 +20,7 @@ class Student(Base):
     imei: Mapped[str | None] = mapped_column(String(14), index=True)
     gr_n: Mapped[int] = mapped_column(default=0)
     sp_n: Mapped[int] = mapped_column(default=0)
-    s_code: Mapped[BIGINT] = mapped_column(default=0)
+    s_code: Mapped[int] = mapped_column(BigInteger, default=0)
     e_date: Mapped[datetime] = mapped_column()
 
     # ms

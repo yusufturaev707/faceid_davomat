@@ -216,6 +216,71 @@ export async function getAuthImageUrl(url: string): Promise<string> {
   return URL.createObjectURL(res.data);
 }
 
+// === Test Sessions API ===
+export async function getTestSessionsApi(params: {
+  page?: number;
+  per_page?: number;
+  is_active?: boolean;
+  test_id?: number;
+}): Promise<import("./interfaces").TestSessionListResponse> {
+  const res = await apiClient.get("/test-sessions", { params });
+  return res.data;
+}
+
+export async function getTestSessionApi(id: number): Promise<import("./interfaces").TestSessionResponse> {
+  const res = await apiClient.get(`/test-sessions/${id}`);
+  return res.data;
+}
+
+export async function createTestSessionApi(
+  data: import("./interfaces").TestSessionCreateRequest,
+): Promise<import("./interfaces").TestSessionResponse> {
+  const res = await apiClient.post("/test-sessions", data);
+  return res.data;
+}
+
+export async function updateTestSessionApi(
+  id: number,
+  data: import("./interfaces").TestSessionUpdateRequest,
+): Promise<import("./interfaces").TestSessionResponse> {
+  const res = await apiClient.patch(`/test-sessions/${id}`, data);
+  return res.data;
+}
+
+export async function deleteTestSessionApi(id: number): Promise<void> {
+  await apiClient.delete(`/test-sessions/${id}`);
+}
+
+export async function addSmenaToSessionApi(
+  sessionId: number,
+  data: { test_smena_id: number; day: string },
+): Promise<import("./interfaces").TestSessionSmenaResponse> {
+  const res = await apiClient.post(`/test-sessions/${sessionId}/smenas`, data);
+  return res.data;
+}
+
+export async function removeSmenaFromSessionApi(
+  sessionId: number,
+  smenaId: number,
+): Promise<void> {
+  await apiClient.delete(`/test-sessions/${sessionId}/smenas/${smenaId}`);
+}
+
+export async function getTestsLookupApi(): Promise<import("./interfaces").TestResponse[]> {
+  const res = await apiClient.get("/test-sessions/tests");
+  return res.data;
+}
+
+export async function getSmenasLookupApi(): Promise<import("./interfaces").SmenaResponse[]> {
+  const res = await apiClient.get("/test-sessions/smenas");
+  return res.data;
+}
+
+export async function getSessionStatesLookupApi(): Promise<import("./interfaces").SessionStateResponse[]> {
+  const res = await apiClient.get("/test-sessions/states");
+  return res.data;
+}
+
 /** Faylni base64 ga aylantirish */
 export function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {

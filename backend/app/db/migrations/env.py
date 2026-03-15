@@ -6,7 +6,13 @@ from sqlalchemy import engine_from_config, pool
 from app.config import settings
 from app.db.base import Base
 # Barcha modellarni import qilish (Alembic autogenerate uchun)
-from app.models import User, VerificationLog, RefreshToken, VerifyFaces, ApiKey  # noqa: F401
+from app.models import (  # noqa: F401
+    User, VerificationLog, RefreshToken, VerifyFaces, ApiKey,
+    Role, Region, Zone, Smena, SessionState,
+    Test, TestSession, TestSessionSmena,
+    Student, StudentLog, StudentPsData, StudentBlacklist,
+    Reason, CheatingLog,
+)
 
 config = context.config
 

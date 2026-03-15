@@ -8,7 +8,7 @@ class Zone(Base):
     __tablename__ = "zone"
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
-    region_id: Mapped[int] = mapped_column(ForeignKey("region.id"), index=True)
+    region_id: Mapped[int] = mapped_column(ForeignKey("regions.id"), index=True)
     name: Mapped[str] = mapped_column(String(100))
     number: Mapped[int] = mapped_column(unique=True)
     is_active: Mapped[bool] = mapped_column(default=True)

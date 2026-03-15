@@ -13,6 +13,7 @@ import EmbeddingPage from "./pages/EmbeddingPage";
 import NotFoundPage from "./pages/NotFoundPage";
 import VerifyPage from "./pages/VerifyPage";
 import SettingsPage from "./pages/SettingsPage";
+import TestSessionsPage from "./pages/TestSessionsPage";
 import VerifyTwoFacePage from "./pages/VerifyTwoFacePage";
 
 export default function App() {
@@ -33,6 +34,7 @@ export default function App() {
             <Route path="/face-logs" element={<FaceLogsPage />} />
             <Route path="/face-logs/:id" element={<FaceLogDetailPage />} />
             <Route path="/api-keys" element={<ApiKeysPage />} />
+            <Route path="/test-sessions" element={<TestSessionsPage />} />
           </Route>
         </Route>
       </Route>
