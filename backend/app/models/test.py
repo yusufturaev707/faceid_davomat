@@ -9,5 +9,5 @@ class Test(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     name: Mapped[str] = mapped_column(String(255))
-    key: Mapped[int] = mapped_column(unique=True)
+    key: Mapped[str] = mapped_column(String(20))
     is_active: Mapped[bool] = mapped_column(default=True)

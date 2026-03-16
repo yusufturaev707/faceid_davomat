@@ -11,7 +11,7 @@ from app.models import (  # noqa: F401
     Role, Region, Zone, Smena, SessionState,
     Test, TestSession, TestSessionSmena,
     Student, StudentLog, StudentPsData, StudentBlacklist,
-    Reason, CheatingLog,
+    Reason, ReasonType, CheatingLog, Permission,
 )
 
 config = context.config

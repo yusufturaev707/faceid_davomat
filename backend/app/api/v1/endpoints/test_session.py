@@ -1,13 +1,17 @@
 """Test Session CRUD endpoints."""
 
+import logging
 import math
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.crud.lookup import DuplicateError
 from app.crud.test_session import (
+    STATE_KEY_LOADING,
     add_smena_to_session,
+    change_session_state,
     create_test_session,
     delete_test_session,
     get_session_states,
@@ -19,6 +23,7 @@ from app.crud.test_session import (
     update_test_session,
 )
 from app.dependencies import get_current_active_user, get_db, require_admin
+from app.models.session_state import SessionState
 from app.models.user import User
 from app.schemas.test_session import (
     SessionStateResponse,
@@ -31,6 +36,9 @@ from app.schemas.test_session import (
     TestSessionSmenaResponse,
     TestSessionUpdate,
 )
+from app.services.student_loader import StudentLoadError, load_students_for_session
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -144,7 +152,7 @@ def update_session(
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
-    """Test sessiyani yangilash (faqat admin)."""
+    """Test sessiyani yangilash (faqat admin). Holatni o'zgartirish uchun /state endpointdan foydalaning."""
     data = body.model_dump(exclude_unset=True)
     if not data:
         raise HTTPException(status_code=400, detail="O'zgartirish uchun maydon berilmadi")
@@ -158,6 +166,46 @@ def update_session(
     return session
 
 
+class ChangeStateRequest(BaseModel):
+    test_state_id: int
+
+
+@router.patch("/{session_id}/state", response_model=TestSessionResponse)
+def change_state(
+    session_id: int,
+    body: ChangeStateRequest,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """Sessiya holatini o'zgartirish.
+
+    - key=2 ga o'tganda tashqi API dan studentlar yuklanadi
+    - key=4 ga o'tganda is_active=True bo'ladi
+    """
+    try:
+        session = change_session_state(
+            db, session_id=session_id, new_state_id=body.test_state_id
+        )
+    except DuplicateError as e:
+        raise HTTPException(status_code=409, detail=e.message)
+
+    # key=2 → studentlarni yuklash
+    new_state = db.get(SessionState, body.test_state_id)
+    if new_state and new_state.key == STATE_KEY_LOADING:
+        try:
+            count = load_students_for_session(db, session)
+            logger.info(
+                "Session #%d: %d student yuklandi", session_id, count
+            )
+            # Refresh session after student loading (count_total_student updated)
+            db.refresh(session)
+        except StudentLoadError as e:
+            logger.error("Student load error: %s", e.message)
+            raise HTTPException(status_code=400, detail=e.message)
+
+    return session
+
+
 @router.delete("/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_session(
     session_id: int,
@@ -165,8 +213,11 @@ def delete_session(
     _: User = Depends(require_admin),
 ):
     """Test sessiyani o'chirish (faqat admin)."""
-    if not delete_test_session(db, session_id):
-        raise HTTPException(status_code=404, detail="Sessiya topilmadi")
+    try:
+        if not delete_test_session(db, session_id):
+            raise HTTPException(status_code=404, detail="Sessiya topilmadi")
+    except DuplicateError as e:
+        raise HTTPException(status_code=409, detail=e.message)
 
 
 # --- Smena management ---

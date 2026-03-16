@@ -8,14 +8,14 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.crud.api_key import create_api_key, get_all_api_keys, revoke_api_key
-from app.crud.user import create_user, get_all_users, get_user_by_username
+from app.crud.user import create_user, delete_user, get_all_users, get_user_by_username, update_user
 from app.crud.verification_log import get_dashboard_stats, get_log_by_id, get_logs_paginated
 from app.crud.verify_faces import get_face_dashboard_stats, get_face_log_by_id, get_face_logs_paginated
 from app.dependencies import get_db, require_admin
 from app.models.user import User
 from app.schemas.admin import DashboardStats, FaceLogResponse, PaginatedFaceLogs, PaginatedLogs, VerificationLogResponse
 from app.schemas.api_key import ApiKeyCreateRequest, ApiKeyCreateResponse, ApiKeyResponse
-from app.schemas.auth import CreateUserRequest, UserResponse
+from app.schemas.auth import CreateUserRequest, UpdateUserRequest, UserResponse
 
 router = APIRouter()
 
@@ -109,6 +109,37 @@ def create_new_user(
             detail="Bu username allaqachon band",
         )
     return create_user(db, data)
+
+
+@router.patch("/users/{user_id}", response_model=UserResponse, summary="Foydalanuvchini tahrirlash")
+def update_existing_user(
+    user_id: int,
+    data: UpdateUserRequest,
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+) -> UserResponse:
+    """Foydalanuvchini tahrirlash (faqat admin)."""
+    user = update_user(db, user_id, data)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Foydalanuvchi topilmadi",
+        )
+    return user
+
+
+@router.delete("/users/{user_id}", status_code=204, summary="Foydalanuvchini o'chirish")
+def delete_existing_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+):
+    """Foydalanuvchini o'chirish (faqat admin)."""
+    if not delete_user(db, user_id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Foydalanuvchi topilmadi",
+        )
 
 
 # === Yuz solishtirish loglari ===

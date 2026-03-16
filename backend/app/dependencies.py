@@ -1,4 +1,4 @@
-"""Global dependencies: DB session, authentication."""
+"""Global dependencies: DB session, authentication, permission checking."""
 
 from collections.abc import Generator
 
@@ -99,10 +99,37 @@ def get_current_active_user(current_user: User = Depends(get_current_user)) -> U
 
 
 def require_admin(current_user: User = Depends(get_current_active_user)) -> User:
-    """Faqat admin roli uchun."""
-    if current_user.role != "admin":
+    """Faqat admin roli uchun (role key=1)."""
+    if current_user.role_key != 1:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Faqat admin huquqi bilan ruxsat beriladi",
         )
     return current_user
+
+
+class PermissionChecker:
+    """Granular permission tekshiruvchi dependency.
+
+    Ishlatish:
+        @router.get("/users", dependencies=[Depends(PermissionChecker("user:read"))])
+        @router.post("/users", dependencies=[Depends(PermissionChecker("user:create"))])
+
+    Bir nechta permission (kamida bittasi bo'lsa yetarli):
+        @router.get("/reports", dependencies=[Depends(PermissionChecker("report:read", "report:export"))])
+    """
+
+    def __init__(self, *required_permissions: str):
+        self.required_permissions = required_permissions
+
+    def __call__(self, current_user: User = Depends(get_current_active_user)) -> User:
+        # Admin (role_key=1) har doim ruxsat oladi
+        if current_user.role_key == 1:
+            return current_user
+
+        if not current_user.has_any_perm(*self.required_permissions):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Huquq yetarli emas. Kerakli: {', '.join(self.required_permissions)}",
+            )
+        return current_user

@@ -1,6 +1,6 @@
 """CRUD endpoints for all lookup/reference tables."""
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.crud import lookup as crud
@@ -160,8 +160,12 @@ def delete_region(item_id: int, db: Session = Depends(get_db), _: User = Depends
 # ===================== ZONE =====================
 
 @router.get("/zones", response_model=list[schemas.ZoneResponse], tags=["zones"])
-def list_zones(db: Session = Depends(get_db), _: User = Depends(get_current_active_user)):
-    return crud.get_zones(db)
+def list_zones(
+    region_id: int | None = Query(None),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_active_user),
+):
+    return crud.get_zones(db, region_id=region_id)
 
 
 @router.post("/zones", response_model=schemas.ZoneResponse, status_code=201, tags=["zones"])
@@ -257,6 +261,41 @@ def update_reason(item_id: int, body: schemas.ReasonUpdate, db: Session = Depend
 def delete_reason(item_id: int, db: Session = Depends(get_db), _: User = Depends(require_admin)):
     try:
         if not crud.delete_reason(db, item_id):
+            raise HTTPException(404, "Topilmadi")
+    except DuplicateError as e:
+        _handle_duplicate(e)
+
+
+# ===================== REASON TYPE =====================
+
+@router.get("/reason-types", response_model=list[schemas.ReasonTypeResponse], tags=["reason-types"])
+def list_reason_types(db: Session = Depends(get_db), _: User = Depends(get_current_active_user)):
+    return crud.get_reason_types(db)
+
+
+@router.post("/reason-types", response_model=schemas.ReasonTypeResponse, status_code=201, tags=["reason-types"])
+def create_reason_type(body: schemas.ReasonTypeCreate, db: Session = Depends(get_db), _: User = Depends(require_admin)):
+    try:
+        return crud.create_reason_type(db, body.model_dump())
+    except DuplicateError as e:
+        _handle_duplicate(e)
+
+
+@router.patch("/reason-types/{item_id}", response_model=schemas.ReasonTypeResponse, tags=["reason-types"])
+def update_reason_type(item_id: int, body: schemas.ReasonTypeUpdate, db: Session = Depends(get_db), _: User = Depends(require_admin)):
+    try:
+        obj = crud.update_reason_type(db, item_id, body.model_dump(exclude_unset=True))
+    except DuplicateError as e:
+        _handle_duplicate(e)
+    if not obj:
+        raise HTTPException(404, "Topilmadi")
+    return obj
+
+
+@router.delete("/reason-types/{item_id}", status_code=204, tags=["reason-types"])
+def delete_reason_type(item_id: int, db: Session = Depends(get_db), _: User = Depends(require_admin)):
+    try:
+        if not crud.delete_reason_type(db, item_id):
             raise HTTPException(404, "Topilmadi")
     except DuplicateError as e:
         _handle_duplicate(e)

@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Float, ForeignKey, String, Text, func
+from sqlalchemy import BigInteger, Float, ForeignKey, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -9,7 +9,7 @@ from app.db.base import Base
 class VerifyFaces(Base):
     __tablename__ = "verify_faces"
 
-    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, index=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     timestamp: Mapped[datetime] = mapped_column(server_default=func.now(), index=True)
 

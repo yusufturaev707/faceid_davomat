@@ -13,7 +13,7 @@ export default function TestsPage() {
       ]}
       formFields={[
         { key: "name", label: "Nomi", type: "text", required: true },
-        { key: "key", label: "Kalit", type: "number", required: true },
+        { key: "key", label: "Kalit", type: "text", required: true },
       ]}
       fetchAll={getTestsListApi}
       createItem={createTestApi}

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date
 
 from sqlalchemy import BigInteger, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column
@@ -21,7 +21,7 @@ class Student(Base):
     gr_n: Mapped[int] = mapped_column(default=0)
     sp_n: Mapped[int] = mapped_column(default=0)
     s_code: Mapped[int] = mapped_column(BigInteger, default=0)
-    e_date: Mapped[datetime] = mapped_column()
+    e_date: Mapped[date] = mapped_column()
 
     # ms
     subject_id: Mapped[int] = mapped_column(default=0)

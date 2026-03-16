@@ -16,12 +16,14 @@ from app.models.student_log import StudentLog
 from app.models.student_ps_data import StudentPsData
 from app.models.student_blacklist import StudentBlacklist
 from app.models.reason import Reason
+from app.models.reason_type import ReasonType
 from app.models.cheating_log import CheatingLog
+from app.models.permission import Permission
 
 __all__ = [
     "User", "VerificationLog", "RefreshToken", "VerifyFaces", "ApiKey",
     "Role", "Region", "Zone", "Smena", "SessionState",
     "Test", "TestSession", "TestSessionSmena",
     "Student", "StudentLog", "StudentPsData", "StudentBlacklist",
-    "Reason", "CheatingLog",
+    "Reason", "ReasonType", "CheatingLog", "Permission",
 ]

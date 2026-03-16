@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import type {
   SmenaResponse,
   TestResponse,
   TestSessionListResponse,
-  TestSessionResponse,
 } from "../interfaces";
 import {
   createTestSessionApi,
-  deleteTestSessionApi,
   getSmenasLookupApi,
   getTestSessionsApi,
   getTestsLookupApi,
@@ -17,6 +16,7 @@ import Pagination from "../components/Pagination";
 import { extractErrorMessage } from "../utils/errorMessage";
 
 export default function TestSessionsPage() {
+  const navigate = useNavigate();
   const [data, setData] = useState<TestSessionListResponse | null>(null);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
@@ -32,7 +32,9 @@ export default function TestSessionsPage() {
   const [formStartDate, setFormStartDate] = useState("");
   const [formFinishDate, setFormFinishDate] = useState("");
   const [formSmPerDay, setFormSmPerDay] = useState(1);
-  const [formSmenas, setFormSmenas] = useState<{ test_smena_id: number; day: string }[]>([]);
+  const [formSmenas, setFormSmenas] = useState<
+    { test_smena_id: number; day: string }[]
+  >([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
@@ -59,7 +61,10 @@ export default function TestSessionsPage() {
     setFormSmPerDay(1);
     setFormSmenas([]);
     try {
-      const [t, s] = await Promise.all([getTestsLookupApi(), getSmenasLookupApi()]);
+      const [t, s] = await Promise.all([
+        getTestsLookupApi(),
+        getSmenasLookupApi(),
+      ]);
       setTests(t);
       setSmenas(s);
       if (t.length > 0) setFormTestId(t[0].id);
@@ -70,14 +75,21 @@ export default function TestSessionsPage() {
   };
 
   const addSmenaRow = () => {
-    setFormSmenas([...formSmenas, { test_smena_id: smenas[0]?.id || 0, day: formStartDate }]);
+    setFormSmenas([
+      ...formSmenas,
+      { test_smena_id: smenas[0]?.id || 0, day: formStartDate },
+    ]);
   };
 
   const removeSmenaRow = (idx: number) => {
     setFormSmenas(formSmenas.filter((_, i) => i !== idx));
   };
 
-  const updateSmenaRow = (idx: number, field: "test_smena_id" | "day", value: string | number) => {
+  const updateSmenaRow = (
+    idx: number,
+    field: "test_smena_id" | "day",
+    value: string | number,
+  ) => {
     const copy = [...formSmenas];
     if (field === "test_smena_id") copy[idx].test_smena_id = Number(value);
     else copy[idx].day = String(value);
@@ -86,10 +98,29 @@ export default function TestSessionsPage() {
 
   const handleCreate = async () => {
     setError("");
-    if (!formName.trim()) { setError("Nom kiritilmagan"); return; }
-    if (!formTestId) { setError("Test tanlanmagan"); return; }
-    if (!formStartDate || !formFinishDate) { setError("Sanalar kiritilmagan"); return; }
-    if (formFinishDate < formStartDate) { setError("Tugash sanasi boshlanishdan oldin"); return; }
+    if (!formName.trim()) {
+      setError("Nom kiritilmagan");
+      return;
+    }
+    if (!formTestId) {
+      setError("Test tanlanmagan");
+      return;
+    }
+    if (!formStartDate || !formFinishDate) {
+      setError("Sanalar kiritilmagan");
+      return;
+    }
+    if (formFinishDate < formStartDate) {
+      setError("Tugash sanasi boshlanishdan oldin");
+      return;
+    }
+
+    // Smena dublikat tekshirish
+    const smenaKeys = formSmenas.map((s) => `${s.test_smena_id}_${s.day}`);
+    if (new Set(smenaKeys).size !== smenaKeys.length) {
+      setError("Bir xil smena va sana kombinatsiyasi ikki marta kiritilgan");
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -110,15 +141,6 @@ export default function TestSessionsPage() {
     }
   };
 
-  const handleDelete = async (session: TestSessionResponse) => {
-    if (!confirm(`"${session.name}" sessiyasini o'chirishni xohlaysizmi?`)) return;
-    try {
-      await deleteTestSessionApi(session.id);
-      fetchSessions();
-    } catch (err) {
-      alert(extractErrorMessage(err));
-    }
-  };
 
   return (
     <div>
@@ -145,26 +167,51 @@ export default function TestSessionsPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700">
-                  <th className="px-4 py-3.5 text-left font-medium text-gray-500 dark:text-slate-400">#</th>
-                  <th className="px-4 py-3.5 text-left font-medium text-gray-500 dark:text-slate-400">Nomi</th>
-                  <th className="px-4 py-3.5 text-left font-medium text-gray-500 dark:text-slate-400">Test</th>
-                  <th className="px-4 py-3.5 text-left font-medium text-gray-500 dark:text-slate-400">Holat</th>
-                  <th className="px-4 py-3.5 text-center font-medium text-gray-500 dark:text-slate-400">Smenalar</th>
-                  <th className="px-4 py-3.5 text-left font-medium text-gray-500 dark:text-slate-400">Boshlanish</th>
-                  <th className="px-4 py-3.5 text-left font-medium text-gray-500 dark:text-slate-400">Tugash</th>
-                  <th className="px-4 py-3.5 text-center font-medium text-gray-500 dark:text-slate-400">Faol</th>
-                  <th className="px-4 py-3.5 text-center font-medium text-gray-500 dark:text-slate-400">Amallar</th>
+                  <th className="px-4 py-3.5 text-left font-medium text-gray-500 dark:text-slate-400">
+                    #
+                  </th>
+                  <th className="px-4 py-3.5 text-left font-medium text-gray-500 dark:text-slate-400">
+                    Nomi
+                  </th>
+                  <th className="px-4 py-3.5 text-left font-medium text-gray-500 dark:text-slate-400">
+                    Test
+                  </th>
+                  <th className="px-4 py-3.5 text-left font-medium text-gray-500 dark:text-slate-400">
+                    Holat
+                  </th>
+                  <th className="px-4 py-3.5 text-center font-medium text-gray-500 dark:text-slate-400">
+                    Smenalar soni
+                  </th>
+                  <th className="px-4 py-3.5 text-left font-medium text-gray-500 dark:text-slate-400">
+                    Boshlanish
+                  </th>
+                  <th className="px-4 py-3.5 text-left font-medium text-gray-500 dark:text-slate-400">
+                    Tugash
+                  </th>
+                  <th className="px-4 py-3.5 text-center font-medium text-gray-500 dark:text-slate-400">
+                    Umumiy soni
+                  </th>
+                  <th className="px-4 py-3.5 text-center font-medium text-gray-500 dark:text-slate-400">
+                    Faol
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {data.items.map((s) => (
                   <tr
                     key={s.id}
-                    className="border-b border-gray-100 dark:border-slate-700/50 hover:bg-primary-50/50 dark:hover:bg-primary-900/10 transition"
+                    onClick={() => navigate(`/test-sessions/${s.id}`)}
+                    className="border-b border-gray-100 dark:border-slate-700/50 hover:bg-primary-50/50 dark:hover:bg-primary-900/10 transition cursor-pointer"
                   >
-                    <td className="px-4 py-3 text-gray-500 dark:text-slate-400">{s.number}</td>
-                    <td className="px-4 py-3 font-medium text-gray-800 dark:text-slate-200">{s.name}</td>
-                    <td className="px-4 py-3 text-gray-600 dark:text-slate-400">{s.test?.name || "—"}</td>
+                    <td className="px-4 py-3 text-gray-500 dark:text-slate-400">
+                      {s.number}
+                    </td>
+                    <td className="px-4 py-3 font-medium text-gray-800 dark:text-slate-200">
+                      {s.name}
+                    </td>
+                    <td className="px-4 py-3 text-gray-600 dark:text-slate-400">
+                      {s.test?.name || "—"}
+                    </td>
                     <td className="px-4 py-3">
                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400">
                         {s.test_state?.name || "—"}
@@ -173,18 +220,19 @@ export default function TestSessionsPage() {
                     <td className="px-4 py-3 text-center text-gray-600 dark:text-slate-400">
                       {s.smenas.length}
                     </td>
-                    <td className="px-4 py-3 text-gray-600 dark:text-slate-400">{s.start_date}</td>
-                    <td className="px-4 py-3 text-gray-600 dark:text-slate-400">{s.finish_date}</td>
-                    <td className="px-4 py-3 text-center">
-                      <span className={`inline-block w-2.5 h-2.5 rounded-full ${s.is_active ? "bg-emerald-500" : "bg-red-400"}`} />
+                    <td className="px-4 py-3 text-gray-600 dark:text-slate-400">
+                      {s.start_date}
+                    </td>
+                    <td className="px-4 py-3 text-gray-600 dark:text-slate-400">
+                      {s.finish_date}
+                    </td>
+                    <td className="px-4 py-3 text-center text-gray-600 dark:text-slate-400">
+                      {s.count_total_student}
                     </td>
                     <td className="px-4 py-3 text-center">
-                      <button
-                        onClick={() => handleDelete(s)}
-                        className="text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 text-xs font-medium"
-                      >
-                        O'chirish
-                      </button>
+                      <span
+                        className={`inline-block w-2.5 h-2.5 rounded-full ${s.is_active ? "bg-emerald-500" : "bg-red-400"}`}
+                      />
                     </td>
                   </tr>
                 ))}
@@ -194,14 +242,22 @@ export default function TestSessionsPage() {
         )}
       </div>
 
-      {data && <Pagination page={data.page} pages={data.pages} onPageChange={setPage} />}
+      {data && (
+        <Pagination
+          page={data.page}
+          pages={data.pages}
+          onPageChange={setPage}
+        />
+      )}
 
       {/* Create Modal */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
           <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
             <div className="px-6 py-5 border-b border-gray-200 dark:border-slate-700">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Yangi test sessiya</h3>
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                Yangi test sessiya
+              </h3>
             </div>
             <div className="px-6 py-5 space-y-4">
               {error && (
@@ -211,7 +267,9 @@ export default function TestSessionsPage() {
               )}
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Sessiya nomi</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+                  Sessiya nomi
+                </label>
                 <input
                   type="text"
                   value={formName}
@@ -222,21 +280,27 @@ export default function TestSessionsPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Test</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+                  Test
+                </label>
                 <select
                   value={formTestId}
                   onChange={(e) => setFormTestId(Number(e.target.value))}
                   className="input-field"
                 >
                   {tests.map((t) => (
-                    <option key={t.id} value={t.id}>{t.name}</option>
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
                   ))}
                 </select>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Boshlanish sanasi</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+                    Boshlanish sanasi
+                  </label>
                   <input
                     type="date"
                     value={formStartDate}
@@ -245,7 +309,9 @@ export default function TestSessionsPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Tugash sanasi</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+                    Tugash sanasi
+                  </label>
                   <input
                     type="date"
                     value={formFinishDate}
@@ -271,7 +337,9 @@ export default function TestSessionsPage() {
               {/* Smena rows */}
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <label className="text-sm font-medium text-gray-700 dark:text-slate-300">Smenalar</label>
+                  <label className="text-sm font-medium text-gray-700 dark:text-slate-300">
+                    Smenalar
+                  </label>
                   <button
                     type="button"
                     onClick={addSmenaRow}
@@ -281,24 +349,32 @@ export default function TestSessionsPage() {
                   </button>
                 </div>
                 {formSmenas.length === 0 && (
-                  <p className="text-xs text-gray-400 dark:text-slate-500">Smena qo'shilmagan</p>
+                  <p className="text-xs text-gray-400 dark:text-slate-500">
+                    Smena qo'shilmagan
+                  </p>
                 )}
                 <div className="space-y-2">
                   {formSmenas.map((row, idx) => (
                     <div key={idx} className="flex items-center gap-2">
                       <select
                         value={row.test_smena_id}
-                        onChange={(e) => updateSmenaRow(idx, "test_smena_id", e.target.value)}
+                        onChange={(e) =>
+                          updateSmenaRow(idx, "test_smena_id", e.target.value)
+                        }
                         className="input-field !py-1.5 text-sm flex-1"
                       >
                         {smenas.map((sm) => (
-                          <option key={sm.id} value={sm.id}>{sm.name}</option>
+                          <option key={sm.id} value={sm.id}>
+                            {sm.name}
+                          </option>
                         ))}
                       </select>
                       <input
                         type="date"
                         value={row.day}
-                        onChange={(e) => updateSmenaRow(idx, "day", e.target.value)}
+                        onChange={(e) =>
+                          updateSmenaRow(idx, "day", e.target.value)
+                        }
                         className="input-field !py-1.5 text-sm flex-1"
                       />
                       <button
@@ -306,8 +382,18 @@ export default function TestSessionsPage() {
                         onClick={() => removeSmenaRow(idx)}
                         className="text-red-400 hover:text-red-600 p-1"
                       >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        <svg
+                          className="w-4 h-4"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M6 18L18 6M6 6l12 12"
+                          />
                         </svg>
                       </button>
                     </div>

@@ -43,7 +43,43 @@ export interface UserResponse {
   username: string;
   full_name: string | null;
   role: string;
+  role_key: number;
+  zone_id: number | null;
+  telegram_id: string | null;
   is_active: boolean;
+  permissions: string[];
+}
+
+// === Permissions (RBAC) ===
+export interface PermissionResponse {
+  id: number;
+  codename: string;
+  name: string;
+  group: string;
+}
+
+export interface PermissionCreate {
+  codename: string;
+  name: string;
+  group: string;
+}
+
+export interface PermissionUpdate {
+  codename?: string;
+  name?: string;
+  group?: string;
+}
+
+export interface RolePermissionsResponse {
+  id: number;
+  name: string;
+  key: number;
+  is_active: boolean;
+  permissions: PermissionResponse[];
+}
+
+export interface AssignPermissionsRequest {
+  permission_ids: number[];
 }
 
 // === Admin ===
@@ -89,7 +125,19 @@ export interface CreateUserRequest {
   username: string;
   password: string;
   full_name?: string;
-  role?: string;
+  role_id?: number | null;
+  zone_id?: number | null;
+  telegram_id?: string | null;
+}
+
+export interface UpdateUserRequest {
+  username?: string;
+  password?: string;
+  full_name?: string;
+  role_id?: number | null;
+  zone_id?: number | null;
+  telegram_id?: string | null;
+  is_active?: boolean;
 }
 
 export interface ErrorResponse {
@@ -217,7 +265,7 @@ export interface SessionStateResponse {
 export interface TestResponse {
   id: number;
   name: string;
-  key: number;
+  key: string;
   is_active: boolean;
 }
 
@@ -277,7 +325,6 @@ export interface TestSessionCreateRequest {
 export interface TestSessionUpdateRequest {
   test_id?: number;
   name?: string;
-  test_state_id?: number;
   start_date?: string;
   finish_date?: string;
   count_sm_per_day?: number;
@@ -288,18 +335,18 @@ export interface TestSessionUpdateRequest {
 
 export interface LookupTestCreate {
   name: string;
-  key: number;
+  key: string;
   is_active?: boolean;
 }
 export interface LookupTestUpdate {
   name?: string;
-  key?: number;
+  key?: string;
   is_active?: boolean;
 }
 export interface LookupTestResponse {
   id: number;
   name: string;
-  key: number;
+  key: string;
   is_active: boolean;
   created_at: string;
 }
@@ -398,16 +445,37 @@ export interface LookupRoleResponse {
 }
 
 export interface LookupReasonCreate {
+  reason_type_id?: number | null;
   name: string;
   key: number;
   is_active?: boolean;
 }
 export interface LookupReasonUpdate {
+  reason_type_id?: number | null;
   name?: string;
   key?: number;
   is_active?: boolean;
 }
 export interface LookupReasonResponse {
+  id: number;
+  reason_type_id: number | null;
+  name: string;
+  key: number;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface LookupReasonTypeCreate {
+  name: string;
+  key: number;
+  is_active?: boolean;
+}
+export interface LookupReasonTypeUpdate {
+  name?: string;
+  key?: number;
+  is_active?: boolean;
+}
+export interface LookupReasonTypeResponse {
   id: number;
   name: string;
   key: number;
@@ -428,4 +496,186 @@ export interface LookupBlacklistResponse {
   imei: string | null;
   description: string | null;
   created_at: string;
+}
+
+// === Student ===
+export interface StudentCreate {
+  session_smena_id: number;
+  zone_id: number;
+  last_name: string;
+  first_name: string;
+  middle_name?: string | null;
+  imei?: string | null;
+  gr_n?: number;
+  sp_n?: number;
+  s_code?: number;
+  e_date: string;
+  subject_id?: number;
+  subject_name?: string | null;
+  lang_id?: number;
+  level_id?: number;
+}
+
+export interface StudentPsDataUpdate {
+  ps_ser?: string | null;
+  ps_num?: string | null;
+  phone?: string | null;
+  ps_img?: string | null;
+  embedding?: string | null;
+}
+
+export interface StudentUpdate {
+  session_smena_id?: number;
+  zone_id?: number;
+  last_name?: string;
+  first_name?: string;
+  middle_name?: string | null;
+  imei?: string | null;
+  gr_n?: number;
+  sp_n?: number;
+  s_code?: number;
+  e_date?: string;
+  subject_id?: number;
+  subject_name?: string | null;
+  lang_id?: number;
+  level_id?: number;
+  is_ready?: boolean;
+  is_face?: boolean;
+  is_image?: boolean;
+  is_cheating?: boolean;
+  is_blacklist?: boolean;
+  is_entered?: boolean;
+  ps_data?: StudentPsDataUpdate;
+}
+
+export interface StudentPsDataResponse {
+  id: number;
+  student_id: number;
+  ps_ser: string;
+  ps_num: string;
+  phone: string | null;
+  ps_img: string | null;
+  embedding: string | null;
+}
+
+export interface StudentResponse {
+  id: number;
+  session_smena_id: number;
+  test_session_id: number | null;
+  test_name: string | null;
+  zone_id: number;
+  zone_name: string | null;
+  region_name: string | null;
+  smena_name: string | null;
+  last_name: string;
+  first_name: string;
+  middle_name: string | null;
+  imei: string | null;
+  gr_n: number;
+  sp_n: number;
+  s_code: number;
+  e_date: string;
+  subject_id: number;
+  subject_name: string | null;
+  lang_id: number;
+  level_id: number;
+  is_ready: boolean;
+  is_face: boolean;
+  is_image: boolean;
+  is_cheating: boolean;
+  is_blacklist: boolean;
+  is_entered: boolean;
+  ps_data: StudentPsDataResponse | null;
+}
+
+export interface StudentListResponse {
+  items: StudentResponse[];
+  total: number;
+  page: number;
+  per_page: number;
+  pages: number;
+}
+
+// === StudentLog ===
+export interface StudentLogCreate {
+  student_id: number;
+  first_captured?: string | null;
+  last_captured?: string | null;
+  first_enter_time?: string | null;
+  last_enter_time?: string | null;
+  score?: number;
+  max_score?: number;
+  is_check_hand?: boolean;
+  ip_address?: string | null;
+  mac_address?: string | null;
+}
+
+export interface StudentLogUpdate {
+  student_id?: number;
+  first_captured?: string | null;
+  last_captured?: string | null;
+  first_enter_time?: string | null;
+  last_enter_time?: string | null;
+  score?: number;
+  max_score?: number;
+  is_check_hand?: boolean;
+  ip_address?: string | null;
+  mac_address?: string | null;
+}
+
+export interface StudentLogResponse {
+  id: number;
+  student_id: number;
+  first_captured: string | null;
+  last_captured: string | null;
+  first_enter_time: string | null;
+  last_enter_time: string | null;
+  score: number;
+  max_score: number;
+  is_check_hand: boolean;
+  ip_address: string | null;
+  mac_address: string | null;
+  student_full_name: string | null;
+}
+
+export interface StudentLogListResponse {
+  items: StudentLogResponse[];
+  total: number;
+  page: number;
+  per_page: number;
+  pages: number;
+}
+
+// === CheatingLog ===
+export interface CheatingLogCreate {
+  student_id: number;
+  reason_id: number;
+  user_id: number;
+  image_path?: string | null;
+}
+
+export interface CheatingLogUpdate {
+  student_id?: number;
+  reason_id?: number;
+  user_id?: number;
+  image_path?: string | null;
+}
+
+export interface CheatingLogResponse {
+  id: number;
+  student_id: number;
+  reason_id: number;
+  user_id: number;
+  image_path: string | null;
+  student_full_name: string | null;
+  reason_name: string | null;
+  username: string | null;
+}
+
+export interface CheatingLogListResponse {
+  items: CheatingLogResponse[];
+  total: number;
+  page: number;
+  per_page: number;
+  pages: number;
 }

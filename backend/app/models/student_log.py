@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from sqlalchemy import BigInteger, ForeignKey, String, Text
+from sqlalchemy.dialects.postgresql import INET
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -18,5 +19,5 @@ class StudentLog(Base):
     score: Mapped[int] = mapped_column(default=0)
     max_score: Mapped[int] = mapped_column(default=0)
     is_check_hand: Mapped[bool] = mapped_column(default=False)
-    ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True)
-    mac_address: Mapped[str] = mapped_column(String(17), unique=True)
+    ip_address: Mapped[str | None] = mapped_column(INET, nullable=True)
+    mac_address: Mapped[str] = mapped_column(String(17), nullable=True)

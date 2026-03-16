@@ -1,6 +1,7 @@
 """CRUD operations for TestSession and related models."""
 
 import hashlib
+import logging
 import math
 import uuid
 from datetime import date
@@ -16,6 +17,14 @@ from app.models.test import Test
 from app.models.test_session import TestSession
 from app.models.test_session_smena import TestSessionSmena
 from app.crud.lookup import DuplicateError, _check_unique_before_write, _parse_integrity_error
+
+logger = logging.getLogger(__name__)
+
+# SessionState key constants
+STATE_KEY_CREATED = 1
+STATE_KEY_LOADING = 2
+STATE_KEY_LOADED = 3
+STATE_KEY_ACTIVE = 4
 
 
 # --- SessionState ---
@@ -52,13 +61,17 @@ def _generate_hash_key() -> str:
 
 
 def _next_session_number(db: Session) -> int:
-    result = db.execute(select(func.max(TestSession.number))).scalar()
-    return (result or 0) + 1
+    result = db.execute(
+        select(func.coalesce(func.max(TestSession.number), 0))
+    ).scalar()
+    return result + 1
 
 
 def _next_smena_number(db: Session) -> int:
-    result = db.execute(select(func.max(TestSessionSmena.number))).scalar()
-    return (result or 0) + 1
+    result = db.execute(
+        select(func.coalesce(func.max(TestSessionSmena.number), 0))
+    ).scalar()
+    return result + 1
 
 
 def get_test_sessions_paginated(
@@ -100,11 +113,13 @@ def create_test_session(
     count_sm_per_day: int = 0,
     smenas: list[dict[str, Any]] | None = None,
 ) -> TestSession:
-    # Default state: 1 (birinchi holat - "Yaratilgan")
+    # Default state: key=1 bo'lgan SessionState
     default_state = db.execute(
-        select(SessionState).where(SessionState.is_active.is_(True)).limit(1)
+        select(SessionState).where(SessionState.key == 1)
     ).scalar()
-    test_state_id = default_state.id if default_state else 1
+    if not default_state:
+        raise DuplicateError("SessionState key=1 topilmadi. Avval holat yarating")
+    test_state_id = default_state.id
 
     session = TestSession(
         hash_key=_generate_hash_key(),
@@ -119,13 +134,22 @@ def create_test_session(
     db.add(session)
     db.flush()
 
-    # Smena larni qo'shish
+    # Smena larni qo'shish (batch ichida dublikat tekshirish)
     if smenas:
-        for smena_data in smenas:
+        seen: set[tuple[int, str]] = set()
+        base_number = _next_smena_number(db)
+        for i, smena_data in enumerate(smenas):
+            key = (smena_data["test_smena_id"], str(smena_data["day"]))
+            if key in seen:
+                db.rollback()
+                raise DuplicateError(
+                    f"Bir sessiyada {smena_data['day']} sanasida bitta smena ikki marta kiritilgan"
+                )
+            seen.add(key)
             smena = TestSessionSmena(
                 test_session_id=session.id,
                 test_smena_id=smena_data["test_smena_id"],
-                number=_next_smena_number(db),
+                number=base_number + i,
                 day=smena_data["day"],
             )
             db.add(smena)
@@ -133,6 +157,7 @@ def create_test_session(
     try:
         db.commit()
     except IntegrityError as e:
+        logger.error("TestSession create IntegrityError: %s", e.orig or e)
         db.rollback()
         raise DuplicateError(_parse_integrity_error(e)) from e
     db.refresh(session)
@@ -145,11 +170,48 @@ def update_test_session(
     session = db.get(TestSession, session_id)
     if not session:
         return None
+    # test_state_id o'zgartirilsa change_session_state orqali boshqariladi
+    # shuning uchun bu yerda state o'zgartirish bo'lmasin
+    data.pop("test_state_id", None)
+    if not data:
+        db.refresh(session)
+        return session
     # Pre-check unique fields BEFORE update → prevents sequence gap
     _check_unique_before_write(db, TestSession, data, exclude_id=session_id)
     for key, value in data.items():
         if value is not None:
             setattr(session, key, value)
+    try:
+        db.commit()
+    except IntegrityError as e:
+        db.rollback()
+        raise DuplicateError(_parse_integrity_error(e)) from e
+    db.refresh(session)
+    return session
+
+
+def change_session_state(
+    db: Session, *, session_id: int, new_state_id: int
+) -> TestSession:
+    """Change session state with business rules.
+
+    - key=4 → is_active=True, boshqalarda is_active=False
+    - key=2 → studentlarni tashqi API dan yuklash kerak (endpoint da bajariladi)
+    """
+    session = db.get(TestSession, session_id)
+    if not session:
+        raise DuplicateError("Sessiya topilmadi")
+
+    new_state = db.get(SessionState, new_state_id)
+    if not new_state:
+        raise DuplicateError("Holat topilmadi")
+
+    # Holatni yangilash
+    session.test_state_id = new_state_id
+
+    # key=4 → is_active=True, boshqalarda False
+    session.is_active = (new_state.key == STATE_KEY_ACTIVE)
+
     try:
         db.commit()
     except IntegrityError as e:
@@ -170,7 +232,12 @@ def delete_test_session(db: Session, session_id: int) -> bool:
         )
     )
     db.delete(session)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as e:
+        logger.error("TestSession delete IntegrityError: %s", e.orig or e)
+        db.rollback()
+        raise DuplicateError(_parse_integrity_error(e)) from e
     return True
 
 
@@ -183,6 +250,19 @@ def add_smena_to_session(
     test_smena_id: int,
     day: date,
 ) -> TestSessionSmena:
+    # Unique tekshirish: bir sessiyada bir smenada bir kunda faqat bitta yozuv
+    existing = db.execute(
+        select(TestSessionSmena).where(
+            TestSessionSmena.test_session_id == test_session_id,
+            TestSessionSmena.test_smena_id == test_smena_id,
+            TestSessionSmena.day == day,
+        )
+    ).scalar()
+    if existing:
+        raise DuplicateError(
+            f"Bu sessiyada {day} sanasida ushbu smena allaqachon mavjud"
+        )
+
     smena = TestSessionSmena(
         test_session_id=test_session_id,
         test_smena_id=test_smena_id,

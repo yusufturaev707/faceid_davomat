@@ -17,7 +17,7 @@ class SessionStateResponse(BaseModel):
 class TestResponse(BaseModel):
     id: int
     name: str
-    key: int
+    key: str
     is_active: bool
 
     model_config = {"from_attributes": True}
@@ -65,7 +65,6 @@ class TestSessionCreate(BaseModel):
 class TestSessionUpdate(BaseModel):
     test_id: int | None = None
     name: str | None = Field(default=None, max_length=100)
-    test_state_id: int | None = None
     start_date: date | None = None
     finish_date: date | None = None
     count_sm_per_day: int | None = Field(default=None, ge=0)

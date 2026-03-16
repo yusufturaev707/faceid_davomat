@@ -25,7 +25,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   const isAuthenticated = user !== null;
-  const isAdmin = user?.role === "admin";
+  const isAdmin = user?.role_key === 1;
 
   // Ilovani ochganda cookie dagi refresh token orqali sessiyani tiklash
   useEffect(() => {

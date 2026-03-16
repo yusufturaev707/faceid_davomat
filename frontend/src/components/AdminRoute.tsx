@@ -2,7 +2,7 @@ import { Navigate, Outlet } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 
 export default function AdminRoute() {
-  const { isAdmin, loading } = useAuth();
+  const { user, isAdmin, loading } = useAuth();
 
   if (loading) {
     return (
@@ -12,7 +12,10 @@ export default function AdminRoute() {
     );
   }
 
-  if (!isAdmin) {
+  // Admin yoki kamida bitta permissioni bor foydalanuvchi kiroladi
+  const hasAnyPermission = isAdmin || (user?.permissions && user.permissions.length > 0);
+
+  if (!hasAnyPermission) {
     return <Navigate to="/verify" replace />;
   }
 

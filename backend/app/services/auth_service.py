@@ -41,7 +41,7 @@ def create_token_pair(db: Session, user: User) -> tuple[str, str]:
     Returns: (access_token, refresh_token_str)
     """
     access_token = create_access_token(
-        data={"sub": str(user.id), "role": user.role}
+        data={"sub": str(user.id), "role": user.role, "role_key": user.role_key}
     )
     refresh_token = create_refresh_token(db, user.id)
     return access_token, refresh_token

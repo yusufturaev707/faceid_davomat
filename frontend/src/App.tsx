@@ -14,6 +14,7 @@ import NotFoundPage from "./pages/NotFoundPage";
 import VerifyPage from "./pages/VerifyPage";
 import SettingsPage from "./pages/SettingsPage";
 import TestSessionsPage from "./pages/TestSessionsPage";
+import TestSessionDetailPage from "./pages/TestSessionDetailPage";
 import TestDashboardPage from "./pages/TestDashboardPage";
 import UsersPage from "./pages/UsersPage";
 import TestsPage from "./pages/TestsPage";
@@ -23,8 +24,13 @@ import RegionsPage from "./pages/RegionsPage";
 import ZonesPage from "./pages/ZonesPage";
 import RolesPage from "./pages/RolesPage";
 import ReasonsPage from "./pages/ReasonsPage";
+import ReasonTypesPage from "./pages/ReasonTypesPage";
 import BlacklistPage from "./pages/BlacklistPage";
 import VerifyTwoFacePage from "./pages/VerifyTwoFacePage";
+import StudentsPage from "./pages/StudentsPage";
+import StudentLogsPage from "./pages/StudentLogsPage";
+import CheatingLogsPage from "./pages/CheatingLogsPage";
+import RolePermissionsPage from "./pages/RolePermissionsPage";
 
 export default function App() {
   return (
@@ -48,6 +54,10 @@ export default function App() {
             {/* Test markazi */}
             <Route path="/test-dashboard" element={<TestDashboardPage />} />
             <Route path="/test-sessions" element={<TestSessionsPage />} />
+            <Route path="/test-sessions/:id" element={<TestSessionDetailPage />} />
+            <Route path="/students" element={<StudentsPage />} />
+            <Route path="/student-logs" element={<StudentLogsPage />} />
+            <Route path="/cheating-logs" element={<CheatingLogsPage />} />
             <Route path="/users" element={<UsersPage />} />
             {/* Sozlamalar (lookup) */}
             <Route path="/manage-tests" element={<TestsPage />} />
@@ -56,7 +66,9 @@ export default function App() {
             <Route path="/manage-regions" element={<RegionsPage />} />
             <Route path="/manage-zones" element={<ZonesPage />} />
             <Route path="/manage-roles" element={<RolesPage />} />
+            <Route path="/manage-permissions" element={<RolePermissionsPage />} />
             <Route path="/manage-reasons" element={<ReasonsPage />} />
+            <Route path="/manage-reason-types" element={<ReasonTypesPage />} />
             <Route path="/manage-blacklist" element={<BlacklistPage />} />
           </Route>
         </Route>

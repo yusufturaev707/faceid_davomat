@@ -10,6 +10,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models.reason import Reason
+from app.models.reason_type import ReasonType
 from app.models.region import Region
 from app.models.role import Role
 from app.models.session_state import SessionState
@@ -34,41 +35,62 @@ _UNIQUE_FIELD_LABELS: dict[str, str] = {
 
 
 def _parse_integrity_error(exc: IntegrityError) -> str:
-    """Extract a user-friendly Uzbek message from IntegrityError."""
+    """Extract a user-friendly Uzbek message from IntegrityError.
+
+    Handles both English and Russian PostgreSQL locale messages.
+    """
     msg = str(exc.orig) if exc.orig else str(exc)
 
-    # PostgreSQL unique violation: Key (column)=(value) already exists
+    # PostgreSQL unique violation (EN): Key (column)=(value) already exists
     match = re.search(r'Key \((\w+)\)=\((.+?)\) already exists', msg)
+    if not match:
+        # PostgreSQL unique violation (RU): Ключ (column)=(value) уже существует
+        match = re.search(r'[\u041a\u043a]\u043b\u044e\u0447 \((\w+)\)=\((.+?)\) \u0443\u0436\u0435 \u0441\u0443\u0449\u0435\u0441\u0442\u0432\u0443\u0435\u0442', msg)
     if match:
         col, val = match.group(1), match.group(2)
         label = _UNIQUE_FIELD_LABELS.get(col, col)
         return f"{label} \"{val}\" allaqachon mavjud. Iltimos, boshqa qiymat kiriting"
 
-    # PostgreSQL unique violation (table_column_key pattern)
-    match = re.search(r'unique constraint "(\w+)"', msg, re.IGNORECASE)
+    # PostgreSQL unique constraint name (EN or RU)
+    match = re.search(r'(?:unique constraint|уникальности) "(\w+)"', msg, re.IGNORECASE)
     if match:
         constraint = match.group(1)
-        # Try to extract column name from constraint name (e.g. regions_number_key → number)
+        # Composite constraint — friendly message
+        if constraint == "uq_session_smena_day":
+            return "Bu sessiyada ushbu smena va sana kombinatsiyasi allaqachon mavjud"
         for field, label in _UNIQUE_FIELD_LABELS.items():
             if field in constraint:
                 return f"{label} allaqachon mavjud. Iltimos, boshqa qiymat kiriting"
-        return f"Bu qiymat allaqachon mavjud (takroriy ma'lumot kiritildi)"
+        return "Bu qiymat allaqachon mavjud (takroriy ma'lumot kiritildi)"
 
-    # ForeignKey violation
-    if "foreign key" in msg.lower() or "ForeignKeyViolation" in msg:
+    # ForeignKey violation (EN + RU)
+    is_fk = ("foreign key" in msg.lower() or "ForeignKeyViolation" in msg
+             or "внешнего ключа" in msg.lower())
+    if is_fk:
+        # Referenced from another table
         match_fk = re.search(r'is still referenced from table "(\w+)"', msg)
+        if not match_fk:
+            match_fk = re.search(r'из таблицы "(\w+)"', msg)
         if match_fk:
             table = match_fk.group(1)
             return f"Bu yozuv boshqa joyda ishlatilmoqda ({table}). Avval bog'liq ma'lumotlarni o'chiring"
+
+        # FK target not found
         match_fk2 = re.search(r'is not present in table "(\w+)"', msg)
+        if not match_fk2:
+            match_fk2 = re.search(r'отсутствует в таблице "(\w+)"', msg)
         if match_fk2:
             table = match_fk2.group(1)
             return f"Tanlangan qiymat topilmadi ({table}). Iltimos, to'g'ri qiymat tanlang"
         return "Bog'liq ma'lumotlar bilan ziddiyat yuz berdi"
 
-    # Not null violation
-    if "not-null" in msg.lower() or "NotNullViolation" in msg:
+    # Not null violation (EN + RU)
+    is_not_null = ("not-null" in msg.lower() or "NotNullViolation" in msg
+                   or "not_null" in msg.lower() or "не может быть NULL" in msg)
+    if is_not_null:
         match_nn = re.search(r'column "(\w+)"', msg)
+        if not match_nn:
+            match_nn = re.search(r'столбце "(\w+)"', msg)
         if match_nn:
             col = match_nn.group(1)
             label = _UNIQUE_FIELD_LABELS.get(col, col)
@@ -146,7 +168,7 @@ def _get_all(db: Session, model: type, only_active: bool = False) -> list:
     stmt = select(model).order_by(model.id)
     if only_active and hasattr(model, "is_active"):
         stmt = stmt.where(model.is_active.is_(True))
-    return list(db.execute(stmt).scalars().all())
+    return list(db.execute(stmt).unique().scalars().all())
 
 
 def _get_by_id(db: Session, model: type, item_id: int):
@@ -267,11 +289,13 @@ def delete_region(db: Session, item_id: int):
 
 
 # ---- Zone ----
-def get_zones(db: Session, only_active: bool = False):
+def get_zones(db: Session, only_active: bool = False, region_id: int | None = None):
     stmt = select(Zone).order_by(Zone.id)
     if only_active:
         stmt = stmt.where(Zone.is_active.is_(True))
-    return list(db.execute(stmt).scalars().all())
+    if region_id is not None:
+        stmt = stmt.where(Zone.region_id == region_id)
+    return list(db.execute(stmt).unique().scalars().all())
 
 def get_zone(db: Session, item_id: int):
     return _get_by_id(db, Zone, item_id)
@@ -318,6 +342,23 @@ def update_reason(db: Session, item_id: int, data: dict):
 
 def delete_reason(db: Session, item_id: int):
     return _delete(db, Reason, item_id)
+
+
+# ---- ReasonType ----
+def get_reason_types(db: Session, only_active: bool = False):
+    return _get_all(db, ReasonType, only_active)
+
+def get_reason_type(db: Session, item_id: int):
+    return _get_by_id(db, ReasonType, item_id)
+
+def create_reason_type(db: Session, data: dict):
+    return _create(db, ReasonType, data)
+
+def update_reason_type(db: Session, item_id: int, data: dict):
+    return _update(db, ReasonType, item_id, data)
+
+def delete_reason_type(db: Session, item_id: int):
+    return _delete(db, ReasonType, item_id)
 
 
 # ---- StudentBlacklist ----

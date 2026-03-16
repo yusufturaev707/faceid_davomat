@@ -8,18 +8,18 @@ from pydantic import BaseModel, Field
 # ---- Test ----
 class TestCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
-    key: int
+    key: str = Field(..., min_length=1, max_length=20)
     is_active: bool = True
 
 class TestUpdate(BaseModel):
     name: str | None = Field(default=None, max_length=255)
-    key: int | None = None
+    key: str | None = Field(default=None, max_length=20)
     is_active: bool | None = None
 
 class TestResponse(BaseModel):
     id: int
     name: str
-    key: int
+    key: str
     is_active: bool
     created_at: datetime
     model_config = {"from_attributes": True}
@@ -130,16 +130,39 @@ class RoleResponse(BaseModel):
 
 # ---- Reason ----
 class ReasonCreate(BaseModel):
+    reason_type_id: int | None = None
     name: str = Field(..., min_length=1, max_length=255)
     key: int
     is_active: bool = True
 
 class ReasonUpdate(BaseModel):
+    reason_type_id: int | None = None
     name: str | None = Field(default=None, max_length=255)
     key: int | None = None
     is_active: bool | None = None
 
 class ReasonResponse(BaseModel):
+    id: int
+    reason_type_id: int | None
+    name: str
+    key: int
+    is_active: bool
+    created_at: datetime
+    model_config = {"from_attributes": True}
+
+
+# ---- ReasonType ----
+class ReasonTypeCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=255)
+    key: int
+    is_active: bool = True
+
+class ReasonTypeUpdate(BaseModel):
+    name: str | None = Field(default=None, max_length=255)
+    key: int | None = None
+    is_active: bool | None = None
+
+class ReasonTypeResponse(BaseModel):
     id: int
     name: str
     key: int

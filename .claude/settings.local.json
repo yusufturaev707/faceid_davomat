@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dir)",
+      "Bash(cd /c/FastApi/faceid/backend && python -m alembic heads 2>&1)",
+      "Bash(cd C:\\\\\\\\FastApi\\\\\\\\faceid\\\\\\\\backend && python -m alembic heads 2>&1)",
+      "Bash(cd /c/FastApi/faceid/frontend && npx tsc --noEmit 2>&1 | head -30)"
+    ]
+  }
+}

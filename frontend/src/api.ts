@@ -173,6 +173,15 @@ export async function createUserApi(data: CreateUserRequest): Promise<UserRespon
   return res.data;
 }
 
+export async function updateUserApi(id: number, data: import("./interfaces").UpdateUserRequest): Promise<UserResponse> {
+  const res = await apiClient.patch<UserResponse>(`/admin/users/${id}`, data);
+  return res.data;
+}
+
+export async function deleteUserApi(id: number): Promise<void> {
+  await apiClient.delete(`/admin/users/${id}`);
+}
+
 // === Admin Face Logs API ===
 export async function getFaceLogsApi(params: {
   page?: number;
@@ -244,6 +253,14 @@ export async function updateTestSessionApi(
   data: import("./interfaces").TestSessionUpdateRequest,
 ): Promise<import("./interfaces").TestSessionResponse> {
   const res = await apiClient.patch(`/test-sessions/${id}`, data);
+  return res.data;
+}
+
+export async function changeSessionStateApi(
+  id: number,
+  test_state_id: number,
+): Promise<import("./interfaces").TestSessionResponse> {
+  const res = await apiClient.patch(`/test-sessions/${id}/state`, { test_state_id });
   return res.data;
 }
 
@@ -325,6 +342,10 @@ export const deleteRegionApi = (id: number) => lookupDelete("regions", id);
 
 // Zones
 export const getZonesListApi = () => lookupList<import("./interfaces").LookupZoneResponse>("zones");
+export async function getZonesByRegionApi(regionId: number): Promise<import("./interfaces").LookupZoneResponse[]> {
+  const res = await apiClient.get<import("./interfaces").LookupZoneResponse[]>(`/lookup/zones`, { params: { region_id: regionId } });
+  return res.data;
+}
 export const createZoneApi = (d: import("./interfaces").LookupZoneCreate) => lookupCreate<import("./interfaces").LookupZoneResponse>("zones", d);
 export const updateZoneApi = (id: number, d: import("./interfaces").LookupZoneUpdate) => lookupUpdate<import("./interfaces").LookupZoneResponse>("zones", id, d);
 export const deleteZoneApi = (id: number) => lookupDelete("zones", id);
@@ -341,11 +362,141 @@ export const createReasonApi = (d: import("./interfaces").LookupReasonCreate) =>
 export const updateReasonApi = (id: number, d: import("./interfaces").LookupReasonUpdate) => lookupUpdate<import("./interfaces").LookupReasonResponse>("reasons", id, d);
 export const deleteReasonApi = (id: number) => lookupDelete("reasons", id);
 
+// Reason Types
+export const getReasonTypesListApi = () => lookupList<import("./interfaces").LookupReasonTypeResponse>("reason-types");
+export const createReasonTypeApi = (d: import("./interfaces").LookupReasonTypeCreate) => lookupCreate<import("./interfaces").LookupReasonTypeResponse>("reason-types", d);
+export const updateReasonTypeApi = (id: number, d: import("./interfaces").LookupReasonTypeUpdate) => lookupUpdate<import("./interfaces").LookupReasonTypeResponse>("reason-types", id, d);
+export const deleteReasonTypeApi = (id: number) => lookupDelete("reason-types", id);
+
 // Blacklist
 export const getBlacklistApi = () => lookupList<import("./interfaces").LookupBlacklistResponse>("blacklist");
 export const createBlacklistApi = (d: import("./interfaces").LookupBlacklistCreate) => lookupCreate<import("./interfaces").LookupBlacklistResponse>("blacklist", d);
 export const updateBlacklistApi = (id: number, d: import("./interfaces").LookupBlacklistUpdate) => lookupUpdate<import("./interfaces").LookupBlacklistResponse>("blacklist", id, d);
 export const deleteBlacklistApi = (id: number) => lookupDelete("blacklist", id);
+
+// === Students API ===
+export async function getStudentsApi(params: {
+  page?: number;
+  per_page?: number;
+  session_smena_id?: number;
+  zone_id?: number;
+  test_id?: number;
+  region_id?: number;
+  smena_id?: number;
+  gr_n?: number;
+  e_date_from?: string;
+  e_date_to?: string;
+  is_entered?: boolean;
+  is_cheating?: boolean;
+  is_blacklist?: boolean;
+  is_face?: boolean;
+  is_image?: boolean;
+  is_ready?: boolean;
+  search?: string;
+}): Promise<import("./interfaces").StudentListResponse> {
+  const res = await apiClient.get("/students", { params });
+  return res.data;
+}
+
+export async function getStudentApi(id: number): Promise<import("./interfaces").StudentResponse> {
+  const res = await apiClient.get(`/students/${id}`);
+  return res.data;
+}
+
+export async function createStudentApi(data: import("./interfaces").StudentCreate): Promise<import("./interfaces").StudentResponse> {
+  const res = await apiClient.post("/students", data);
+  return res.data;
+}
+
+export async function updateStudentApi(id: number, data: import("./interfaces").StudentUpdate): Promise<import("./interfaces").StudentResponse> {
+  const res = await apiClient.patch(`/students/${id}`, data);
+  return res.data;
+}
+
+export async function deleteStudentApi(id: number): Promise<void> {
+  await apiClient.delete(`/students/${id}`);
+}
+
+// === StudentLog API ===
+export async function getStudentLogsApi(params: {
+  page?: number;
+  per_page?: number;
+  student_id?: number;
+}): Promise<import("./interfaces").StudentLogListResponse> {
+  const res = await apiClient.get("/students/logs", { params });
+  return res.data;
+}
+
+export async function createStudentLogApi(data: import("./interfaces").StudentLogCreate): Promise<import("./interfaces").StudentLogResponse> {
+  const res = await apiClient.post("/students/logs", data);
+  return res.data;
+}
+
+export async function updateStudentLogApi(id: number, data: import("./interfaces").StudentLogUpdate): Promise<import("./interfaces").StudentLogResponse> {
+  const res = await apiClient.patch(`/students/logs/${id}`, data);
+  return res.data;
+}
+
+export async function deleteStudentLogApi(id: number): Promise<void> {
+  await apiClient.delete(`/students/logs/${id}`);
+}
+
+// === CheatingLog API ===
+export async function getCheatingLogsApi(params: {
+  page?: number;
+  per_page?: number;
+  student_id?: number;
+}): Promise<import("./interfaces").CheatingLogListResponse> {
+  const res = await apiClient.get("/students/cheating-logs", { params });
+  return res.data;
+}
+
+export async function createCheatingLogApi(data: import("./interfaces").CheatingLogCreate): Promise<import("./interfaces").CheatingLogResponse> {
+  const res = await apiClient.post("/students/cheating-logs", data);
+  return res.data;
+}
+
+export async function updateCheatingLogApi(id: number, data: import("./interfaces").CheatingLogUpdate): Promise<import("./interfaces").CheatingLogResponse> {
+  const res = await apiClient.patch(`/students/cheating-logs/${id}`, data);
+  return res.data;
+}
+
+export async function deleteCheatingLogApi(id: number): Promise<void> {
+  await apiClient.delete(`/students/cheating-logs/${id}`);
+}
+
+// === Permissions API ===
+export async function getPermissionsApi(): Promise<import("./interfaces").PermissionResponse[]> {
+  const res = await apiClient.get("/permissions");
+  return res.data;
+}
+
+export async function createPermissionApi(data: import("./interfaces").PermissionCreate): Promise<import("./interfaces").PermissionResponse> {
+  const res = await apiClient.post("/permissions", data);
+  return res.data;
+}
+
+export async function updatePermissionApi(id: number, data: import("./interfaces").PermissionUpdate): Promise<import("./interfaces").PermissionResponse> {
+  const res = await apiClient.patch(`/permissions/${id}`, data);
+  return res.data;
+}
+
+export async function deletePermissionApi(id: number): Promise<void> {
+  await apiClient.delete(`/permissions/${id}`);
+}
+
+export async function getRolesWithPermissionsApi(): Promise<import("./interfaces").RolePermissionsResponse[]> {
+  const res = await apiClient.get("/permissions/roles");
+  return res.data;
+}
+
+export async function assignPermissionsToRoleApi(
+  roleId: number,
+  data: import("./interfaces").AssignPermissionsRequest,
+): Promise<import("./interfaces").RolePermissionsResponse> {
+  const res = await apiClient.put(`/permissions/roles/${roleId}`, data);
+  return res.data;
+}
 
 /** Faylni base64 ga aylantirish */
 export function fileToBase64(file: File): Promise<string> {

@@ -37,8 +37,8 @@ export default function ZonesPage() {
 
   return (
     <LookupCrudPage
-      title="Zonalar"
-      subtitle="Test o'tkazish zonalari"
+      title="Binolar"
+      subtitle="Test o'tkazish binolari"
       columns={columns}
       formFields={formFields}
       fetchAll={getZonesListApi}

@@ -50,6 +50,12 @@ class Settings(BaseSettings):
     # CORS
     CORS_ORIGINS: list[str]
 
+    # Tashqi API
+    API_CEFR: str = ""
+    API_MS: str = ""
+    API_IIV: str = ""
+    API_IIV_TOKEN: str = ""
+
     class Config:
         env_file = ".env"
 
