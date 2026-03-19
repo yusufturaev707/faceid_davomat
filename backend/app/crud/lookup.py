@@ -9,6 +9,7 @@ from sqlalchemy import func, inspect as sa_inspect, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.models.gender import Gender
 from app.models.reason import Reason
 from app.models.reason_type import ReasonType
 from app.models.region import Region
@@ -376,3 +377,20 @@ def update_blacklist_item(db: Session, item_id: int, data: dict):
 
 def delete_blacklist_item(db: Session, item_id: int):
     return _delete(db, StudentBlacklist, item_id)
+
+
+# ---- Gender ----
+def get_genders(db: Session, only_active: bool = False):
+    return _get_all(db, Gender, only_active)
+
+def get_gender(db: Session, item_id: int):
+    return _get_by_id(db, Gender, item_id)
+
+def create_gender(db: Session, data: dict):
+    return _create(db, Gender, data)
+
+def update_gender(db: Session, item_id: int, data: dict):
+    return _update(db, Gender, item_id, data)
+
+def delete_gender(db: Session, item_id: int):
+    return _delete(db, Gender, item_id)

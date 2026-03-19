@@ -8,6 +8,8 @@ class UserResponse(BaseModel):
     role: str
     role_key: int
     zone_id: int | None = None
+    zone_name: str = ""
+    region_name: str = ""
     telegram_id: str | None = None
     is_active: bool
     permissions: list[str] = []

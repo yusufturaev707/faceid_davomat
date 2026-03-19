@@ -1,15 +1,19 @@
-import base64
-import io
+"""Yuz aniqlash va tekshirish xizmati.
+
+InsightFace modeli bilan yuz aniqlash, solishtirish, rasm saqlash.
+PIL/Pillow ishlatilmaydi — faqat cv2.
+"""
+
+import logging
 import os
+import tempfile
 import threading
 import uuid
-from concurrent.futures import ThreadPoolExecutor
 
 import cv2
 import numpy as np
 from fastapi import HTTPException, status
 from insightface.app import FaceAnalysis
-from PIL import Image
 
 from app.config import settings
 from app.schemas.photo import (
@@ -19,20 +23,25 @@ from app.schemas.photo import (
     PhotoVerifyResponse,
     TwoFaceVerifyResponse,
 )
+from app.services.image_decoder import decode_base64_image
 
-_io_pool = ThreadPoolExecutor(max_workers=4)
+logger = logging.getLogger("faceid.face_service")
 
-# InsightFace modelini bir marta yuklash (singleton)
+# InsightFace modelini bir marta yuklash (singleton — har worker process uchun)
 _face_app: FaceAnalysis | None = None
 _face_app_ready = threading.Event()
 
 
 def init_face_app() -> None:
-    """Tizim ishga tushganda modelni yuklash (lifespan da background threadda chaqiriladi)."""
+    """InsightFace modelini yuklash.
+
+    Celery worker_process_init signalida yoki FastAPI lifespan da chaqiriladi.
+    Har process uchun faqat 1 marta ishlaydi.
+    """
     global _face_app
     if _face_app is not None:
         return
-    print("InsightFace model yuklanmoqda...")
+    logger.info("InsightFace model yuklanmoqda...")
     _face_app = FaceAnalysis(
         name="buffalo_l",
         providers=["CPUExecutionProvider"],
@@ -41,68 +50,50 @@ def init_face_app() -> None:
     det_thresh = settings.FACE_DET_THRESH
     _face_app.prepare(ctx_id=0, det_thresh=det_thresh, det_size=(det_sz, det_sz))
     _face_app_ready.set()
-    print("InsightFace model tayyor!")
+    logger.info("InsightFace model tayyor!")
 
 
 def get_face_app() -> FaceAnalysis:
-    """Tayyor modelni olish. Agar hali yuklanmagan bo'lsa, kutadi."""
-    _face_app_ready.wait()
+    """Tayyor modelni olish. Agar hali yuklanmagan bo'lsa, kutadi (max 30s).
+
+    Returns:
+        FaceAnalysis instansiyasi.
+
+    Raises:
+        RuntimeError: Model 30 sekund ichida yuklanmasa.
+    """
+    if not _face_app_ready.wait(timeout=30):
+        raise RuntimeError("FaceAnalysis model 30s ichida yuklanmadi")
     return _face_app
 
 
-def decode_base64_image(img_b64: str) -> tuple[np.ndarray, float]:
-    """Base64 rasmni dekodlash va numpy arrayga aylantirish.
-    Returns: (image_array, file_size_bytes)
-    """
-    # Data URL prefiksini olib tashlash (agar mavjud bo'lsa)
-    if "," in img_b64:
-        img_b64 = img_b64.split(",", 1)[1]
-
-    # Hajm tekshiruvi
-    raw_size = len(img_b64)
-    if raw_size > settings.MAX_BASE64_SIZE:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Rasm hajmi {settings.MAX_BASE64_SIZE // (1024 * 1024)}MB dan oshmasligi kerak",
-        )
-
-    try:
-        img_bytes = base64.b64decode(img_b64)
-    except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Base64 dekodlash xatosi: yaroqsiz format",
-        )
-
-    file_size = len(img_bytes)
-
-    # PIL orqali ochish va numpy arrayga aylantirish
-    try:
-        pil_image = Image.open(io.BytesIO(img_bytes)).convert("RGB")
-        img_array = np.array(pil_image)
-        # OpenCV BGR formatiga aylantirish
-        img_bgr = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
-    except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Rasmni ochishda xatolik: yaroqsiz rasm formati",
-        )
-
-    return img_bgr, float(file_size)
-
-
 def detect_faces(img_bgr: np.ndarray) -> list:
-    """InsightFace yordamida yuzlarni aniqlash."""
+    """InsightFace yordamida yuzlarni aniqlash.
+
+    Args:
+        img_bgr: BGR formatdagi rasm.
+
+    Returns:
+        Aniqlangan yuzlar ro'yxati.
+    """
     app = get_face_app()
     faces = app.get(img_bgr)
+    logger.debug("Yuzlar aniqlandi: %d", len(faces))
     return faces
 
 
 def check_age(faces: list, expected_age: int) -> bool:
-    """Aniqlangan yuz yoshini tekshirish (±tolerance)."""
+    """Aniqlangan yuz yoshini tekshirish (±tolerance).
+
+    Args:
+        faces: InsightFace aniqlagan yuzlar.
+        expected_age: Kutilgan yosh.
+
+    Returns:
+        Yosh tolerance ichida bo'lsa True.
+    """
     if not faces:
         return False
-    # Birinchi (eng katta) yuzni olish
     face = faces[0]
     detected_age = face.age
     return abs(detected_age - expected_age) <= settings.AGE_TOLERANCE
@@ -110,24 +101,38 @@ def check_age(faces: list, expected_age: int) -> bool:
 
 def calculate_back_color(img_bgr: np.ndarray) -> list[int]:
     """Rasmning chetlaridan orqa fon rangini aniqlash.
+
     4 burchakdan 10x10 piksel oladi va o'rtacha hisoblaydi.
+
+    Args:
+        img_bgr: BGR formatdagi rasm.
+
+    Returns:
+        [R, G, B] formatda fon rangi.
     """
     h, w = img_bgr.shape[:2]
     margin = 10
     corners = [
-        img_bgr[0:margin, 0:margin],  # chap-yuqori
-        img_bgr[0:margin, w - margin : w],  # o'ng-yuqori
-        img_bgr[h - margin : h, 0:margin],  # chap-pastki
-        img_bgr[h - margin : h, w - margin : w],  # o'ng-pastki
+        img_bgr[0:margin, 0:margin],
+        img_bgr[0:margin, w - margin : w],
+        img_bgr[h - margin : h, 0:margin],
+        img_bgr[h - margin : h, w - margin : w],
     ]
     all_pixels = np.concatenate([c.reshape(-1, 3) for c in corners])
     mean_bgr = np.mean(all_pixels, axis=0).astype(int)
-    # BGR -> RGB formatga aylantirish
+    # BGR -> RGB
     return [int(mean_bgr[2]), int(mean_bgr[1]), int(mean_bgr[0])]
 
 
 def calculate_palitra(img_bgr: np.ndarray) -> PalitraRGB:
-    """Rasm palitrasining min va max RGB qiymatlarini hisoblash."""
+    """Rasm palitrasining min va max RGB qiymatlarini hisoblash.
+
+    Args:
+        img_bgr: BGR formatdagi rasm.
+
+    Returns:
+        PalitraRGB obyekti.
+    """
     img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
     min_vals = np.min(img_rgb.reshape(-1, 3), axis=0).tolist()
     max_vals = np.max(img_rgb.reshape(-1, 3), axis=0).tolist()
@@ -135,18 +140,72 @@ def calculate_palitra(img_bgr: np.ndarray) -> PalitraRGB:
 
 
 def is_background_valid(back_color: list[int]) -> bool:
-    """Orqa fon rangini tekshirish (ochiq rang: oq, kulrang, och ko'k va h.k.)."""
+    """Orqa fon rangini tekshirish (ochiq rang).
+
+    Args:
+        back_color: [R, G, B] formatda fon rangi.
+
+    Returns:
+        Fon rangi yetarlicha ochiq bo'lsa True.
+    """
     return all(c >= settings.BG_COLOR_THRESHOLD for c in back_color)
 
 
 def is_palitra_valid(palitra: PalitraRGB) -> bool:
-    """Palitra qiymatlari minimal chegaradan yuqori ekanligini tekshirish."""
+    """Palitra qiymatlari minimal chegaradan yuqori ekanligini tekshirish.
+
+    Args:
+        palitra: PalitraRGB obyekti.
+
+    Returns:
+        Palitra qiymatlari yetarli bo'lsa True.
+    """
     return all(v >= settings.MIN_PALITRA_VALUE for v in palitra.min_palitra)
+
+
+def _atomic_write_webp(img_bgr: np.ndarray, target_path: str, quality: int) -> None:
+    """Rasmni WebP formatda atomik yozish: tempfile -> os.replace().
+
+    Args:
+        img_bgr: BGR formatdagi rasm.
+        target_path: Yakuniy fayl yo'li.
+        quality: WebP sifat darajasi (1-100).
+
+    Raises:
+        RuntimeError: cv2.imencode muvaffaqiyatsiz bo'lsa.
+        OSError: Diskka yozishda xatolik.
+    """
+    dir_name = os.path.dirname(target_path)
+    success, buf = cv2.imencode(".webp", img_bgr, [cv2.IMWRITE_WEBP_QUALITY, quality])
+    if not success:
+        raise RuntimeError(f"cv2.imencode muvaffaqiyatsiz: {target_path}")
+
+    fd, tmp_path = tempfile.mkstemp(dir=dir_name, suffix=".tmp")
+    try:
+        os.write(fd, buf.tobytes())
+        os.fsync(fd)
+        os.close(fd)
+        fd = -1  # closed marker
+        os.replace(tmp_path, target_path)
+    except BaseException:
+        if fd >= 0:
+            os.close(fd)
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
+        raise
 
 
 def save_image_webp(img_bgr: np.ndarray, uploads_dir: str | None = None) -> str:
     """Rasmni WebP formatda diskka saqlash + thumbnail yaratish.
-    Returns: fayl nomi (extension siz, masalan '550e8400-e29b')
+
+    Atomic write ishlatiladi — crash bo'lsa buzilgan fayl qolmaydi.
+
+    Args:
+        img_bgr: BGR formatdagi rasm.
+        uploads_dir: Saqlash papkasi. None bo'lsa UPLOADS_PHOTO_DIR ishlatiladi.
+
+    Returns:
+        Fayl nomi (extension siz, masalan '550e8400e29b1234').
     """
     if uploads_dir is None:
         uploads_dir = settings.UPLOADS_PHOTO_DIR
@@ -154,25 +213,34 @@ def save_image_webp(img_bgr: np.ndarray, uploads_dir: str | None = None) -> str:
 
     filename = uuid.uuid4().hex[:16]
 
-    # Original — WebP formatda saqlash
-    pil_img = Image.fromarray(cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB))
+    # Original — WebP
     original_path = os.path.join(uploads_dir, f"{filename}.webp")
-    pil_img.save(original_path, "WEBP", quality=settings.WEBP_QUALITY)
+    _atomic_write_webp(img_bgr, original_path, settings.WEBP_QUALITY)
 
-    # Thumbnail — kichik versiya
+    # Thumbnail
+    h, w = img_bgr.shape[:2]
     thumb_size = settings.THUMBNAIL_SIZE
-    ratio = thumb_size / max(pil_img.width, pil_img.height)
-    thumb_w = int(pil_img.width * ratio)
-    thumb_h = int(pil_img.height * ratio)
-    thumb_img = pil_img.resize((thumb_w, thumb_h), Image.LANCZOS)
+    ratio = thumb_size / max(w, h)
+    thumb_w = int(w * ratio)
+    thumb_h = int(h * ratio)
+    thumb_bgr = cv2.resize(img_bgr, (thumb_w, thumb_h), interpolation=cv2.INTER_AREA)
     thumb_path = os.path.join(uploads_dir, f"{filename}_thumb.webp")
-    thumb_img.save(thumb_path, "WEBP", quality=70)
+    _atomic_write_webp(thumb_bgr, thumb_path, 70)
 
+    logger.debug("Rasm saqlandi: %s (%dx%d)", filename, w, h)
     return filename
 
 
 def cosine_similarity(emb1: np.ndarray, emb2: np.ndarray) -> float:
-    """Ikki embedding vektori orasidagi cosine o'xshashlikni hisoblash."""
+    """Ikki embedding vektori orasidagi cosine o'xshashlikni hisoblash.
+
+    Args:
+        emb1: Birinchi embedding vektori.
+        emb2: Ikkinchi embedding vektori.
+
+    Returns:
+        O'xshashlik balli (0.0 - 1.0).
+    """
     dot = np.dot(emb1, emb2)
     norm = np.linalg.norm(emb1) * np.linalg.norm(emb2)
     if norm == 0:
@@ -184,7 +252,13 @@ def compare_two_faces(
     ps_img_b64: str, lv_img_b64: str
 ) -> tuple[TwoFaceVerifyResponse, np.ndarray, np.ndarray]:
     """Ikki rasmdagi yuzlarni solishtirish.
-    Returns: (natija, ps_img_bgr, lv_img_bgr)
+
+    Args:
+        ps_img_b64: Pasport rasmi base64 formatda.
+        lv_img_b64: Jonli rasm base64 formatda.
+
+    Returns:
+        (natija, ps_img_bgr, lv_img_bgr) — response va original rasmlar.
     """
     errors: list[str] = []
 
@@ -225,6 +299,11 @@ def compare_two_faces(
     else:
         message = f"Yuzlar mos kelmadi (ball: {score:.4f}, chegara: {threshold})"
 
+    logger.info(
+        "Ikki yuz solishtirish: score=%.4f, threshold=%.4f, verified=%s",
+        score, threshold, verified,
+    )
+
     response = TwoFaceVerifyResponse(
         score=round(score, 4),
         thresh_score=threshold,
@@ -244,7 +323,14 @@ def compare_two_faces(
 
 
 def extract_embedding(img_b64: str) -> EmbeddingResponse:
-    """Rasmdagi yuzni aniqlash va embedding vektorini qaytarish."""
+    """Rasmdagi yuzni aniqlash va embedding vektorini qaytarish.
+
+    Args:
+        img_b64: Base64 kodlangan rasm.
+
+    Returns:
+        EmbeddingResponse — yuz embedding va meta-ma'lumot.
+    """
     # 1. Base64 dekodlash
     img_bgr, file_size = decode_base64_image(img_b64)
 
@@ -266,6 +352,8 @@ def extract_embedding(img_b64: str) -> EmbeddingResponse:
         embedding = face.embedding.tolist()
         embedding_size = len(embedding)
 
+    logger.info("Embedding: detection=%s, embedding_size=%d", detection, embedding_size)
+
     return EmbeddingResponse(
         detection=detection,
         embedding=embedding,
@@ -279,7 +367,13 @@ def extract_embedding(img_b64: str) -> EmbeddingResponse:
 
 def verify_photo(img_b64: str, age: int) -> tuple[PhotoVerifyResponse, np.ndarray]:
     """Rasmni to'liq tekshirish — asosiy biznes logikasi.
-    Returns: (natija, img_bgr) — natija va original rasm massivi
+
+    Args:
+        img_b64: Base64 kodlangan rasm.
+        age: Kutilgan yosh.
+
+    Returns:
+        (natija, img_bgr) — natija va original rasm massivi.
     """
     # 1. Base64 dekodlash
     img_bgr, file_size = decode_base64_image(img_b64)
@@ -327,6 +421,11 @@ def verify_photo(img_b64: str, age: int) -> tuple[PhotoVerifyResponse, np.ndarra
         )
 
     success = len(errors) == 0
+
+    logger.info(
+        "Rasm tekshiruvi: success=%s, detection=%s, age_match=%s, size=%dx%d",
+        success, detection, age_match, w, h,
+    )
 
     response = PhotoVerifyResponse(
         success=success,

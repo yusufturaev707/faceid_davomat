@@ -1,7 +1,16 @@
-from fastapi import APIRouter, Depends, status
+"""Rasm tekshiruv va yuz solishtirish endpointlari.
+
+Backpressure: queue to'lganda HTTP 429 qaytaradi (Retry-After header bilan).
+"""
+
+import logging
+
+import redis
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.celery_app import celery_app
+from app.config import settings
 from app.dependencies import get_current_active_user, get_db
 from app.models.user import User
 from app.schemas.photo import (
@@ -15,7 +24,58 @@ from app.schemas.photo import (
 )
 from app.tasks.verify_task import process_verify_photo, process_verify_two_faces
 
+logger = logging.getLogger("faceid.api.photo")
+
 router = APIRouter()
+
+# Redis ulanishi — backpressure tekshiruvi uchun
+_redis_client: redis.Redis | None = None
+
+
+def _get_redis() -> redis.Redis:
+    """Redis clientni olish (singleton).
+
+    Returns:
+        Redis client instansiyasi.
+    """
+    global _redis_client
+    if _redis_client is None:
+        _redis_client = redis.Redis.from_url(
+            settings.REDIS_URL,
+            decode_responses=False,
+            socket_connect_timeout=2,
+        )
+    return _redis_client
+
+
+def _check_queue_backpressure(queue_name: str = "verify") -> None:
+    """Queue to'lganligini tekshirish.
+
+    Agar queue dagi tasklar soni QUEUE_MAX_SIZE dan oshsa, HTTP 429 qaytaradi.
+
+    Args:
+        queue_name: Tekshiriladigan queue nomi.
+
+    Raises:
+        HTTPException 429: Queue to'lgan bo'lsa.
+    """
+    try:
+        r = _get_redis()
+        queue_length = r.llen(queue_name)
+    except redis.ConnectionError:
+        logger.warning("Redis ulanish xatosi — backpressure tekshiruvi o'tkazib yuborildi")
+        return
+
+    if queue_length >= settings.QUEUE_MAX_SIZE:
+        logger.warning(
+            "Backpressure: queue=%s, length=%d, max=%d",
+            queue_name, queue_length, settings.QUEUE_MAX_SIZE,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Server band. Iltimos, keyinroq urinib ko'ring.",
+            headers={"Retry-After": str(settings.BACKPRESSURE_RETRY_AFTER)},
+        )
 
 
 @router.post(
@@ -31,11 +91,14 @@ def submit_verify_photo(
     _db: Session = Depends(get_db),
 ) -> TaskSubmitResponse:
     """Rasm tekshiruvini navbatga qo'shish. Darhol task_id qaytaradi."""
+    _check_queue_backpressure("verify")
+
     task = process_verify_photo.delay(
         img_b64=request.img_b64,
         age=request.age,
         user_id=current_user.id,
     )
+    logger.info("Rasm tekshiruvi yuborildi: task_id=%s, user_id=%d", task.id, current_user.id)
     return TaskSubmitResponse(task_id=task.id)
 
 
@@ -86,11 +149,14 @@ def submit_verify_two_face(
     current_user: User = Depends(get_current_active_user),
 ) -> TaskSubmitResponse:
     """Ikki yuzni solishtirish taskini navbatga qo'shish."""
+    _check_queue_backpressure("verify")
+
     task = process_verify_two_faces.delay(
         ps_img_b64=request.ps_img,
         lv_img_b64=request.lv_img,
         user_id=current_user.id,
     )
+    logger.info("Ikki yuz solishtirish yuborildi: task_id=%s, user_id=%d", task.id, current_user.id)
     return TaskSubmitResponse(task_id=task.id)
 
 

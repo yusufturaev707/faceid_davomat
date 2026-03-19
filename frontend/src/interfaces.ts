@@ -498,6 +498,24 @@ export interface LookupBlacklistResponse {
   created_at: string;
 }
 
+// === Gender ===
+export interface LookupGenderCreate {
+  name: string;
+  key: number;
+  is_active?: boolean;
+}
+export interface LookupGenderUpdate {
+  name?: string;
+  key?: number;
+  is_active?: boolean;
+}
+export interface LookupGenderResponse {
+  id: number;
+  name: string;
+  key: number;
+  is_active: boolean;
+}
+
 // === Student ===
 export interface StudentCreate {
   session_smena_id: number;
@@ -556,6 +574,8 @@ export interface StudentPsDataResponse {
   phone: string | null;
   ps_img: string | null;
   embedding: string | null;
+  gender_id: number | null;
+  gender_name: string | null;
 }
 
 export interface StudentResponse {

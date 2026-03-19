@@ -1,6 +1,9 @@
 """Authentication business logic."""
 
+from datetime import datetime, timedelta, timezone
+
 from fastapi import HTTPException, status
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from app.core.security import create_access_token, verify_password
@@ -11,8 +14,12 @@ from app.crud.refresh_token import (
     revoke_refresh_token,
 )
 from app.crud.user import get_user_by_username
+from app.models.refresh_token import RefreshToken
 from app.models.user import User
 from app.schemas.auth import TokenPairResponse, UserResponse
+
+# Eski refresh token rotation dan keyin qancha vaqt yaroqli bo'ladi
+_GRACE_PERIOD_SECONDS = 30
 
 
 def authenticate_user(db: Session, username: str, password: str) -> User:
@@ -59,11 +66,18 @@ def rotate_refresh_token(db: Session, token_str: str) -> tuple[TokenPairResponse
             detail="Refresh token yaroqsiz yoki muddati tugagan",
         )
 
-    # Eski tokenni bekor qilish (rotation)
-    revoke_refresh_token(db, token_str)
-
     user = token_record.user
     access_token, new_refresh_token = create_token_pair(db, user)
+
+    # Eski tokenni darhol bekor qilish o'rniga, muddatini qisqartirish (grace period).
+    # Ctrl+Shift+R tez bosilganda brauzer hali yangi cookie ni saqlamagan bo'lishi mumkin.
+    grace_expires = datetime.now(timezone.utc) + timedelta(seconds=_GRACE_PERIOD_SECONDS)
+    db.execute(
+        update(RefreshToken)
+        .where(RefreshToken.token == token_str)
+        .values(expires_at=grace_expires)
+    )
+    db.commit()
 
     response = TokenPairResponse(
         access_token=access_token,

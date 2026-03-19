@@ -91,6 +91,20 @@ class TestSessionResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class ActiveSmenaResponse(TestSessionSmenaResponse):
+    """Smena + shu zonadagi student soni."""
+
+    sm_student_count: int = 0
+
+
+class ActiveTestSessionResponse(TestSessionResponse):
+    """Aktiv sessiya response — userni zonasidagi student soni bilan."""
+
+    zone_name: str = ""
+    zone_student_count: int = 0
+    smenas: list[ActiveSmenaResponse] = []
+
+
 class TestSessionListResponse(BaseModel):
     items: list[TestSessionResponse]
     total: int

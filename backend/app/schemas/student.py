@@ -18,6 +18,8 @@ class StudentPsDataResponse(BaseModel):
     phone: str | None = None
     ps_img: str | None = None
     embedding: str | None = None
+    gender_id: int | None = None
+    gender_name: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -50,6 +52,7 @@ class StudentPsDataUpdate(BaseModel):
     phone: str | None = Field(default=None, max_length=13)
     ps_img: str | None = None
     embedding: str | None = None
+    gender_id: int | None = None
 
 
 class StudentUpdate(BaseModel):

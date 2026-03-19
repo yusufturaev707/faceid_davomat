@@ -26,6 +26,7 @@ class User(Base):
     )
 
     role_ref = relationship("Role", lazy="joined")
+    zone = relationship("Zone", lazy="joined")
     verification_logs: Mapped[list["VerificationLog"]] = relationship(
         back_populates="user"
     )  # noqa: F821
@@ -45,6 +46,20 @@ class User(Base):
         if self.role_ref:
             return self.role_ref.key
         return 0
+
+    @hybrid_property
+    def zone_name(self) -> str:
+        """Zone name from zone table."""
+        if self.zone:
+            return self.zone.name
+        return ""
+
+    @hybrid_property
+    def region_name(self) -> str:
+        """Region name from zone → region."""
+        if self.zone and self.zone.region:
+            return self.zone.region.name
+        return ""
 
     @property
     def permissions(self) -> list[str]:

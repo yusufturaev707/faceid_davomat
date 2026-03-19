@@ -1,7 +1,18 @@
+"""Celery konfiguratsiyasi.
+
+Ikki queue: verify (yuz tekshirish) va storage (rasm saqlash).
+InsightFace modeli har worker process uchun 1 marta yuklanadi.
+"""
+
+import logging
+
 from celery import Celery
 from celery.signals import worker_init, worker_process_init
+from kombu import Queue
 
 from app.config import settings
+
+logger = logging.getLogger("faceid.celery")
 
 celery_app = Celery(
     "faceid",
@@ -19,13 +30,27 @@ celery_app.conf.update(
     worker_prefetch_multiplier=1,
     # Task tugagandan keyin acknowledge — crash bo'lsa navbatga qaytadi
     task_acks_late=True,
+    # Worker crash bo'lsa task reject qilinadi (navbatga qaytadi)
+    task_reject_on_worker_lost=True,
+    # Task uchun vaqt chegarasi
+    task_time_limit=settings.TASK_TIME_LIMIT,
+    # Worker cancel qilish ulanish uzilganda
     worker_cancel_long_running_tasks_on_connection_loss=True,
     # Task STARTED holatini kuzatish
     task_track_started=True,
+    # Memory leak oldini olish — har N taskdan keyin worker restart
+    worker_max_tasks_per_child=settings.WORKER_MAX_TASKS_PER_CHILD,
 )
 
+# Ikki queue: verify (yuz tekshirish) va storage (rasm saqlash)
+celery_app.conf.task_queues = [
+    Queue("verify", routing_key="verify.#"),
+    Queue("storage", routing_key="storage.#"),
+]
+celery_app.conf.task_default_queue = "verify"
 
-def _load_model():
+
+def _load_model() -> None:
     """InsightFace modelini yuklash."""
     from app.services.face_service import init_face_app
     init_face_app()
@@ -34,10 +59,12 @@ def _load_model():
 @worker_init.connect
 def on_worker_init(sender, **kwargs):
     """Worker ishga tushganda modelni yuklash (solo/threads pool uchun)."""
+    logger.info("Worker init — model yuklanmoqda")
     _load_model()
 
 
 @worker_process_init.connect
 def on_worker_process_init(sender, **kwargs):
     """Har bir prefork subprocess ishga tushganda modelni yuklash."""
+    logger.info("Worker process init — model yuklanmoqda")
     _load_model()

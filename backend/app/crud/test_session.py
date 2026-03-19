@@ -11,8 +11,12 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.models.cheating_log import CheatingLog
 from app.models.session_state import SessionState
 from app.models.smena import Smena
+from app.models.student import Student
+from app.models.student_log import StudentLog
+from app.models.student_ps_data import StudentPsData
 from app.models.test import Test
 from app.models.test_session import TestSession
 from app.models.test_session_smena import TestSessionSmena
@@ -23,8 +27,9 @@ logger = logging.getLogger(__name__)
 # SessionState key constants
 STATE_KEY_CREATED = 1
 STATE_KEY_LOADING = 2
-STATE_KEY_LOADED = 3
+STATE_KEY_EMBEDDING = 3
 STATE_KEY_ACTIVE = 4
+STATE_KEY_FINISHED = 5
 
 
 # --- SessionState ---
@@ -97,6 +102,53 @@ def get_test_sessions_paginated(
         db.execute(stmt.offset((page - 1) * per_page).limit(per_page)).scalars().all()
     )
     return items, total
+
+
+def get_active_test_sessions(db: Session) -> list[TestSession]:
+    """Barcha aktiv sessiyalarni olish (is_active=True)."""
+    stmt = (
+        select(TestSession)
+        .where(TestSession.is_active.is_(True))
+        .order_by(TestSession.id.desc())
+    )
+    return list(db.execute(stmt).scalars().all())
+
+
+def count_students_by_session_and_zone(
+    db: Session, *, test_session_id: int, zone_id: int
+) -> int:
+    """Sessiyaga tegishli ma'lum zonadagi studentlar sonini olish."""
+    stmt = (
+        select(func.count(Student.id))
+        .join(TestSessionSmena, Student.session_smena_id == TestSessionSmena.id)
+        .where(
+            TestSessionSmena.test_session_id == test_session_id,
+            Student.zone_id == zone_id,
+        )
+    )
+    return db.execute(stmt).scalar() or 0
+
+
+def count_students_per_smena_by_zone(
+    db: Session, *, test_session_id: int, zone_id: int
+) -> dict[int, int]:
+    """Sessiyaning har bir smenasi uchun zonadagi student sonini olish.
+
+    Returns: {smena_id: count, ...}
+    """
+    stmt = (
+        select(
+            Student.session_smena_id,
+            func.count(Student.id),
+        )
+        .join(TestSessionSmena, Student.session_smena_id == TestSessionSmena.id)
+        .where(
+            TestSessionSmena.test_session_id == test_session_id,
+            Student.zone_id == zone_id,
+        )
+        .group_by(Student.session_smena_id)
+    )
+    return {smena_id: cnt for smena_id, cnt in db.execute(stmt).all()}
 
 
 def get_test_session(db: Session, session_id: int) -> TestSession | None:
@@ -209,8 +261,11 @@ def change_session_state(
     # Holatni yangilash
     session.test_state_id = new_state_id
 
-    # key=4 → is_active=True, boshqalarda False
-    session.is_active = (new_state.key == STATE_KEY_ACTIVE)
+    # key=4 → is_active=True, key=5 → is_active=False
+    if new_state.key == STATE_KEY_ACTIVE:
+        session.is_active = True
+    elif new_state.key == STATE_KEY_FINISHED:
+        session.is_active = False
 
     try:
         db.commit()
@@ -221,17 +276,62 @@ def change_session_state(
     return session
 
 
+def _delete_students_by_smena_ids(db: Session, smena_ids: list[int]) -> None:
+    """Berilgan smena ID larga tegishli studentlar va ularning bog'liq datalarini o'chirish."""
+    if not smena_ids:
+        return
+    student_ids = [
+        row[0]
+        for row in db.execute(
+            select(Student.id).where(Student.session_smena_id.in_(smena_ids))
+        )
+    ]
+    if not student_ids:
+        return
+    db.execute(
+        CheatingLog.__table__.delete().where(CheatingLog.student_id.in_(student_ids))
+    )
+    db.execute(
+        StudentLog.__table__.delete().where(StudentLog.student_id.in_(student_ids))
+    )
+    db.execute(
+        StudentPsData.__table__.delete().where(StudentPsData.student_id.in_(student_ids))
+    )
+    db.execute(
+        Student.__table__.delete().where(Student.id.in_(student_ids))
+    )
+
+
+def _delete_students_by_session(db: Session, session_id: int) -> None:
+    """Sessiyaga tegishli barcha studentlarni o'chirish."""
+    smena_ids = [
+        row[0]
+        for row in db.execute(
+            select(TestSessionSmena.id).where(
+                TestSessionSmena.test_session_id == session_id
+            )
+        )
+    ]
+    _delete_students_by_smena_ids(db, smena_ids)
+
+
 def delete_test_session(db: Session, session_id: int) -> bool:
     session = db.get(TestSession, session_id)
     if not session:
         return False
-    # Avval bog'liq smena larni o'chiramiz
+
+    _delete_students_by_session(db, session_id)
+
+    # TestSessionSmena larni o'chirish
     db.execute(
         TestSessionSmena.__table__.delete().where(
             TestSessionSmena.test_session_id == session_id
         )
     )
-    db.delete(session)
+    # TestSession ni o'chirish (ORM emas, to'g'ridan-to'g'ri SQL)
+    db.execute(
+        TestSession.__table__.delete().where(TestSession.id == session_id)
+    )
     try:
         db.commit()
     except IntegrityError as e:
@@ -283,6 +383,36 @@ def remove_smena_from_session(db: Session, smena_id: int) -> bool:
     smena = db.get(TestSessionSmena, smena_id)
     if not smena:
         return False
+
+    test_session_id = smena.test_session_id
+
+    # Avval shu smenaga tegishli studentlar va ularning bog'liq datalarini o'chirish
+    _delete_students_by_smena_ids(db, [smena_id])
+
     db.delete(smena)
+    db.flush()
+
+    # TestSession dagi count_total_student ni yangilash
+    test_session = db.get(TestSession, test_session_id)
+    if test_session:
+        smena_ids = [
+            row[0]
+            for row in db.execute(
+                select(TestSessionSmena.id).where(
+                    TestSessionSmena.test_session_id == test_session_id
+                )
+            )
+        ]
+        actual_count = (
+            db.scalar(
+                select(func.count(Student.id)).where(
+                    Student.session_smena_id.in_(smena_ids)
+                )
+            )
+            if smena_ids
+            else 0
+        )
+        test_session.count_total_student = actual_count
+
     db.commit()
     return True

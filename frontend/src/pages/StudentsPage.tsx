@@ -16,6 +16,7 @@ import {
   createStudentApi,
   updateStudentApi,
   deleteStudentApi,
+  fetchGtspImageApi,
   getTestsLookupApi,
   getTestSessionsApi,
   getRegionsListApi,
@@ -74,6 +75,7 @@ export default function StudentsPage() {
   // Detail panel
   const [selected, setSelected] = useState<StudentResponse | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [fetchingGtsp, setFetchingGtsp] = useState(false);
 
   // Modal
   const [showModal, setShowModal] = useState(false);
@@ -519,155 +521,184 @@ export default function StudentsPage() {
       </div>
 
       {/* ===== Detail slide-out panel ===== */}
-      {selected && (
-        <div className="w-[460px] flex-shrink-0 ml-5 animate-slide-in-right">
-          <div className="glass-card overflow-hidden sticky top-4">
-            {/* Header with photo */}
-            <div className="relative bg-gradient-to-br from-primary-600 to-primary-700 dark:from-primary-700 dark:to-primary-800 px-6 pt-5 pb-5">
-              <div className="flex items-start gap-4">
-                <div className="flex-shrink-0">
-                  {selected.ps_data?.ps_img ? (
-                    <img
-                      src={selected.ps_data.ps_img.startsWith("data:") ? selected.ps_data.ps_img : `data:image/jpeg;base64,${selected.ps_data.ps_img}`}
-                      alt="Pasport rasmi"
-                      className="w-20 h-24 rounded-xl object-cover border-2 border-white/30 shadow-lg"
-                    />
-                  ) : (
-                    <div className="w-20 h-24 rounded-xl bg-white/10 border-2 border-white/20 flex items-center justify-center">
-                      <svg className="w-8 h-8 text-white/40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                      </svg>
-                    </div>
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-mono text-primary-200">ID: {selected.id}</span>
-                    <button onClick={() => setSelected(null)} className="text-primary-200 hover:text-white transition-colors p-0.5">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
+      <div className={`detail-panel-wrapper flex-shrink-0 ${selected ? "open" : "closed"}`}>
+        {selected && (
+          <div className="w-[460px] animate-slide-in-right" key={selected.id}>
+            <div className="glass-card overflow-hidden sticky top-4">
+              {/* Header with photo */}
+              <div className="relative bg-gradient-to-br from-primary-600 to-primary-700 dark:from-primary-700 dark:to-primary-800 px-6 pt-5 pb-5">
+                <div className="flex items-start gap-4">
+                  <div className="flex-shrink-0 detail-photo-animate">
+                    {selected.ps_data?.ps_img ? (
+                      <img
+                        src={selected.ps_data.ps_img.startsWith("data:") ? selected.ps_data.ps_img : `data:image/jpeg;base64,${selected.ps_data.ps_img}`}
+                        alt="Pasport rasmi"
+                        className="w-20 h-24 rounded-xl object-cover border-2 border-white/30 shadow-lg"
+                      />
+                    ) : (
+                      <div className="w-20 h-24 rounded-xl bg-white/10 border-2 border-white/20 flex items-center justify-center">
+                        <svg className="w-8 h-8 text-white/40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                        </svg>
+                      </div>
+                    )}
                   </div>
-                  <h3 className="text-lg font-bold text-white leading-tight mt-1">
-                    {selected.last_name} {selected.first_name}
-                  </h3>
-                  {selected.middle_name && (
-                    <p className="text-sm text-primary-100 mt-0.5">{selected.middle_name}</p>
-                  )}
-                  {selected.subject_name && (
-                    <p className="text-sm text-primary-200 mt-2 truncate" title={selected.subject_name}>{selected.subject_name}</p>
-                  )}
-                </div>
-              </div>
-              {detailLoading && (
-                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-white/10 overflow-hidden">
-                  <div className="h-full w-1/3 bg-white/50 animate-pulse rounded" />
-                </div>
-              )}
-            </div>
-
-            <div className="max-h-[calc(100vh-16rem)] overflow-y-auto">
-              {/* Status badges */}
-              <div className="px-5 py-4 border-b border-gray-100 dark:border-slate-700">
-                <SectionLabel>Holat</SectionLabel>
-                <div className="flex flex-wrap gap-1.5 mt-2">
-                  <Badge label="Qora ro'yxat" active={selected.is_blacklist} on="bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" />
-                  <Badge label="Cheating" active={selected.is_cheating} on="bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400" />
-                  <Badge label="Kirgan" active={selected.is_entered} on="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400" />
-                  <Badge label="Tayyor" active={selected.is_ready} on="bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400" />
-                  <Badge label="Yuz" active={selected.is_face} on="bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400" />
-                  <Badge label="Rasm" active={selected.is_image} on="bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400" />
-                </div>
-              </div>
-
-              {/* Personal */}
-              <div className="px-5 py-4 border-b border-gray-100 dark:border-slate-700">
-                <SectionLabel>Shaxsiy ma'lumotlar</SectionLabel>
-                <div className="mt-2.5 space-y-2">
-                  <DetailRow label="Familiya" value={selected.last_name} />
-                  <DetailRow label="Ism" value={selected.first_name} />
-                  <DetailRow label="Otasining ismi" value={selected.middle_name} />
-                  <DetailRow label="PINFL (IMEI)" value={selected.imei} mono />
-                </div>
-              </div>
-
-              {/* Test info */}
-              <div className="px-5 py-4 border-b border-gray-100 dark:border-slate-700">
-                <SectionLabel>Test ma'lumotlari</SectionLabel>
-                <div className="mt-2.5 space-y-2">
-                  <DetailRow label="Test" value={selected.test_name} />
-                  <DetailRow label="Sessiya ID" value={selected.test_session_id ? String(selected.test_session_id) : null} mono />
-                  <DetailRow label="Smena" value={selected.smena_name} />
-                  <DetailRow label="Viloyat" value={selected.region_name} />
-                  <DetailRow label="Bino" value={selected.zone_name} />
-                  <DetailRow label="Test sanasi" value={formatDate(selected.e_date)} />
-                  <DetailRow label="Guruh / Joy" value={`${selected.gr_n || "—"} / ${selected.sp_n || "—"}`} mono />
-                  <DetailRow label="S-kod" value={selected.s_code ? String(selected.s_code) : null} mono />
-                  <DetailRow label="Fan" value={selected.subject_name} />
-                  {selected.lang_id > 0 && (
-                    <DetailRow label="Til / Daraja" value={`${selected.lang_id} / ${selected.level_id}`} mono />
-                  )}
-                </div>
-              </div>
-
-              {/* Passport data */}
-              <div className="px-5 py-4 border-b border-gray-100 dark:border-slate-700">
-                <SectionLabel>Pasport ma'lumotlari</SectionLabel>
-                {selected.ps_data ? (
-                  <div className="mt-2.5 space-y-2">
-                    <DetailRow label="Seriya" value={selected.ps_data.ps_ser} mono bold />
-                    <DetailRow label="Raqam" value={selected.ps_data.ps_num} mono bold />
-                    <DetailRow label="Telefon" value={selected.ps_data.phone} />
-                    <div className="mt-2.5">
-                      <p className="text-xs text-gray-400 dark:text-slate-500 mb-1">Embedding</p>
-                      {selected.ps_data.embedding ? (
-                        <>
-                          <div className="bg-gray-50 dark:bg-slate-800 rounded-lg px-3 py-2 max-h-16 overflow-hidden relative">
-                            <p className="text-[10px] font-mono text-gray-500 dark:text-slate-400 leading-tight break-all line-clamp-3">
-                              [{selected.ps_data.embedding.length > 200 ? selected.ps_data.embedding.slice(0, 200) + "..." : selected.ps_data.embedding}]
-                            </p>
-                            <div className="absolute bottom-0 left-0 right-0 h-4 bg-gradient-to-t from-gray-50 dark:from-slate-800 to-transparent" />
-                          </div>
-                          <p className="text-[10px] text-gray-400 dark:text-slate-500 mt-1">
-                            {selected.ps_data.embedding.split(",").length} o'lcham
-                          </p>
-                        </>
-                      ) : (
-                        <span className="text-sm text-gray-400 dark:text-slate-500 italic">Yo'q</span>
-                      )}
+                  <div className="flex-1 min-w-0 detail-header-text">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-mono text-primary-200">ID: {selected.id}</span>
+                      <button onClick={() => setSelected(null)} className="text-primary-200 hover:text-white transition-colors p-0.5">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
                     </div>
+                    <h3 className="text-lg font-bold text-white leading-tight mt-1">
+                      {selected.last_name} {selected.first_name}
+                    </h3>
+                    {selected.middle_name && (
+                      <p className="text-sm text-primary-100 mt-0.5">{selected.middle_name}</p>
+                    )}
+                    {selected.subject_name && (
+                      <p className="text-sm text-primary-200 mt-2 truncate" title={selected.subject_name}>{selected.subject_name}</p>
+                    )}
                   </div>
-                ) : (
-                  <p className="text-sm text-gray-400 dark:text-slate-500 italic mt-2.5">Pasport ma'lumotlari mavjud emas</p>
+                </div>
+                {detailLoading && (
+                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-white/10 overflow-hidden">
+                    <div className="h-full w-1/3 bg-white/50 animate-pulse rounded" />
+                  </div>
                 )}
               </div>
 
-              {/* Actions */}
-              <div className="px-5 py-4 flex gap-2">
-                <button
-                  onClick={(e) => { e.stopPropagation(); openEdit(selected); }}
-                  className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2.5 text-sm font-medium text-primary-700 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/20 hover:bg-primary-100 dark:hover:bg-primary-900/30 rounded-lg transition-colors"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                  </svg>
-                  Tahrirlash
-                </button>
-                <button
-                  onClick={(e) => { e.stopPropagation(); confirmDelete(selected.id, `${selected.last_name} ${selected.first_name}`); }}
-                  className="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 text-sm font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                  </svg>
-                  O'chirish
-                </button>
+              <div className="max-h-[calc(100vh-16rem)] overflow-y-auto">
+                {/* Status badges */}
+                <div className="detail-section px-5 py-4 border-b border-gray-100 dark:border-slate-700">
+                  <SectionLabel>Holat</SectionLabel>
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    <Badge label="Qora ro'yxat" active={selected.is_blacklist} on="bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" />
+                    <Badge label="Cheating" active={selected.is_cheating} on="bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400" />
+                    <Badge label="Kirgan" active={selected.is_entered} on="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400" />
+                    <Badge label="Tayyor" active={selected.is_ready} on="bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400" />
+                    <Badge label="Yuz" active={selected.is_face} on="bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400" />
+                    <Badge label="Rasm" active={selected.is_image} on="bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400" />
+                  </div>
+                </div>
+
+                {/* Personal */}
+                <div className="detail-section px-5 py-4 border-b border-gray-100 dark:border-slate-700">
+                  <SectionLabel>Shaxsiy ma'lumotlar</SectionLabel>
+                  <div className="mt-2.5 space-y-2">
+                    <DetailRow label="Familiya" value={selected.last_name} />
+                    <DetailRow label="Ism" value={selected.first_name} />
+                    <DetailRow label="Otasining ismi" value={selected.middle_name} />
+                    <DetailRow label="PINFL (IMEI)" value={selected.imei} mono />
+                  </div>
+                </div>
+
+                {/* Test info */}
+                <div className="detail-section px-5 py-4 border-b border-gray-100 dark:border-slate-700">
+                  <SectionLabel>Test ma'lumotlari</SectionLabel>
+                  <div className="mt-2.5 space-y-2">
+                    <DetailRow label="Test" value={selected.test_name} />
+                    <DetailRow label="Sessiya ID" value={selected.test_session_id ? String(selected.test_session_id) : null} mono />
+                    <DetailRow label="Smena" value={selected.smena_name} />
+                    <DetailRow label="Viloyat" value={selected.region_name} />
+                    <DetailRow label="Bino" value={selected.zone_name} />
+                    <DetailRow label="Test sanasi" value={formatDate(selected.e_date)} />
+                    <DetailRow label="Guruh / Joy" value={`${selected.gr_n || "—"} / ${selected.sp_n || "—"}`} mono />
+                    <DetailRow label="S-kod" value={selected.s_code ? String(selected.s_code) : null} mono />
+                    <DetailRow label="Fan" value={selected.subject_name} />
+                    {selected.lang_id > 0 && (
+                      <DetailRow label="Til / Daraja" value={`${selected.lang_id} / ${selected.level_id}`} mono />
+                    )}
+                  </div>
+                </div>
+
+                {/* Passport data */}
+                <div className="detail-section px-5 py-4 border-b border-gray-100 dark:border-slate-700">
+                  <SectionLabel>Pasport ma'lumotlari</SectionLabel>
+                  {selected.ps_data ? (
+                    <div className="mt-2.5 space-y-2">
+                      <DetailRow label="Seriya" value={selected.ps_data.ps_ser} mono bold />
+                      <DetailRow label="Raqam" value={selected.ps_data.ps_num} mono bold />
+                      <DetailRow label="Telefon" value={selected.ps_data.phone} />
+                      <DetailRow label="Jinsi" value={selected.ps_data.gender_name} />
+                      <div className="mt-2.5">
+                        <p className="text-xs text-gray-400 dark:text-slate-500 mb-1">Embedding</p>
+                        {selected.ps_data.embedding ? (
+                          <>
+                            <div className="bg-gray-50 dark:bg-slate-800 rounded-lg px-3 py-2 max-h-16 overflow-hidden relative">
+                              <p className="text-[10px] font-mono text-gray-500 dark:text-slate-400 leading-tight break-all line-clamp-3">
+                                [{selected.ps_data.embedding.length > 200 ? selected.ps_data.embedding.slice(0, 200) + "..." : selected.ps_data.embedding}]
+                              </p>
+                              <div className="absolute bottom-0 left-0 right-0 h-4 bg-gradient-to-t from-gray-50 dark:from-slate-800 to-transparent" />
+                            </div>
+                            <p className="text-[10px] text-gray-400 dark:text-slate-500 mt-1">
+                              {selected.ps_data.embedding.split(",").length} o'lcham
+                            </p>
+                          </>
+                        ) : (
+                          <span className="text-sm text-gray-400 dark:text-slate-500 italic">Yo'q</span>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-400 dark:text-slate-500 italic mt-2.5">Pasport ma'lumotlari mavjud emas</p>
+                  )}
+                </div>
+
+                {/* Actions */}
+                <div className="detail-section px-5 py-4 flex gap-2">
+                  <button
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      setFetchingGtsp(true);
+                      try {
+                        const updated = await fetchGtspImageApi(selected.id);
+                        setSelected(updated);
+                        // Ro'yxatni ham yangilash
+                        setData((prev) => prev ? {
+                          ...prev,
+                          items: prev.items.map((s) => s.id === updated.id ? { ...s, ...updated } : s),
+                        } : prev);
+                      } catch (err) {
+                        alert(extractErrorMessage(err));
+                      } finally {
+                        setFetchingGtsp(false);
+                      }
+                    }}
+                    disabled={fetchingGtsp}
+                    className="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 text-sm font-medium text-teal-700 dark:text-teal-400 bg-teal-50 dark:bg-teal-900/20 hover:bg-teal-100 dark:hover:bg-teal-900/30 rounded-lg transition-colors disabled:opacity-50"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                    {fetchingGtsp ? "Yuklanmoqda..." : "GTSP rasm"}
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); openEdit(selected); }}
+                    className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2.5 text-sm font-medium text-primary-700 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/20 hover:bg-primary-100 dark:hover:bg-primary-900/30 rounded-lg transition-colors"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                    Tahrirlash
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); confirmDelete(selected.id, `${selected.last_name} ${selected.first_name}`); }}
+                    className="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 text-sm font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                    O'chirish
+                  </button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* ===== Delete Confirmation Modal ===== */}
       {deleteTarget && (

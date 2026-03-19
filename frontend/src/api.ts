@@ -24,88 +24,73 @@ import { getAccessToken, setAccessToken } from "./tokenStore";
 
 const API_BASE = "/api/v1";
 
-const apiClient = axios.create({
-  baseURL: API_BASE,
-  headers: { "Content-Type": "application/json" },
-  withCredentials: true, // Cookie yuborish uchun
-});
+const apiClient = axios.create({ baseURL: API_BASE, withCredentials: true });
 
-// Request interceptor: JWT Bearer token qo'shish
+// Request interceptor — access tokenni headerga qo'shish
 apiClient.interceptors.request.use((config) => {
   const token = getAccessToken();
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
+  if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
 
-// Concurrent refresh himoyasi — faqat bitta refresh so'rov yuboriladi
-let refreshPromise: Promise<TokenPairResponse> | null = null;
+// Response interceptor — 401 bo'lganda token yangilash
+let refreshPromise: Promise<string> | null = null;
 
-async function doRefresh(): Promise<TokenPairResponse> {
-  // Cookie avtomatik yuboriladi (withCredentials: true)
-  const res = await axios.post<TokenPairResponse>(
-    `${API_BASE}/auth/refresh`,
-    {},
-    { withCredentials: true },
-  );
-  return res.data;
-}
-
-// Response interceptor: 401 da auto-refresh (race-condition safe)
 apiClient.interceptors.response.use(
-  (response) => response,
+  (res) => res,
   async (error) => {
-    const originalRequest = error.config;
-
-    // Faqat 401 va auth bo'lmagan endpointlar uchun retry
-    if (
-      error.response?.status === 401 &&
-      !originalRequest._retry &&
-      !originalRequest.url?.includes("/auth/")
-    ) {
-      originalRequest._retry = true;
-
+    const original = error.config;
+    if (error.response?.status === 401 && !original._retry && !original.url?.includes("/auth/")) {
+      original._retry = true;
       try {
-        // Agar allaqachon refresh bo'layotgan bo'lsa, o'sha promise ni kutamiz
+        // Bir vaqtda faqat bitta refresh so'rov yuboriladi
         if (!refreshPromise) {
-          refreshPromise = doRefresh();
+          refreshPromise = refreshApi()
+            .then((tokens) => {
+              setAccessToken(tokens.access_token);
+              return tokens.access_token;
+            })
+            .finally(() => {
+              refreshPromise = null;
+            });
         }
-        const tokens = await refreshPromise;
-
-        setAccessToken(tokens.access_token);
-        originalRequest.headers.Authorization = `Bearer ${tokens.access_token}`;
-        return apiClient(originalRequest);
+        const newToken = await refreshPromise;
+        original.headers.Authorization = `Bearer ${newToken}`;
+        return apiClient(original);
       } catch {
-        // Refresh muvaffaqiyatsiz — tokenni tozalash
         setAccessToken(null);
-      } finally {
-        refreshPromise = null;
       }
     }
     return Promise.reject(error);
-  },
+  }
 );
+
+// === Utility ===
+export function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
 
 // === Auth API ===
 export async function loginApi(data: LoginRequest): Promise<TokenPairResponse> {
-  const formData = new URLSearchParams();
-  formData.append("username", data.username);
-  formData.append("password", data.password);
-  const res = await apiClient.post<TokenPairResponse>("/auth/login", formData, {
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-  });
+  const form = new URLSearchParams();
+  form.append("username", data.username);
+  form.append("password", data.password);
+  const res = await apiClient.post<TokenPairResponse>("/auth/login", form);
   return res.data;
 }
 
 export async function refreshApi(): Promise<TokenPairResponse> {
-  // Cookie avtomatik yuboriladi
-  const res = await apiClient.post<TokenPairResponse>("/auth/refresh", {});
+  const res = await apiClient.post<TokenPairResponse>("/auth/refresh");
   return res.data;
 }
 
 export async function logoutApi(): Promise<void> {
-  await apiClient.post("/auth/logout", {});
+  await apiClient.post("/auth/logout");
 }
 
 export async function getMeApi(): Promise<UserResponse> {
@@ -113,7 +98,7 @@ export async function getMeApi(): Promise<UserResponse> {
   return res.data;
 }
 
-// === Photo API ===
+// === Photo Verify API ===
 export async function submitVerifyPhoto(data: PhotoVerifyRequest): Promise<TaskSubmitResponse> {
   const res = await apiClient.post<TaskSubmitResponse>("/photo/verify-photo", data);
   return res.data;
@@ -147,13 +132,7 @@ export async function getLogByIdApi(logId: number): Promise<VerificationLogRespo
   return res.data;
 }
 
-export async function getLogsApi(params: {
-  page?: number;
-  per_page?: number;
-  user_id?: number;
-  date_from?: string;
-  date_to?: string;
-}): Promise<PaginatedLogs> {
+export async function getLogsApi(params: Record<string, string | number>): Promise<PaginatedLogs> {
   const res = await apiClient.get<PaginatedLogs>("/admin/logs", { params });
   return res.data;
 }
@@ -163,6 +142,22 @@ export async function getStatsApi(): Promise<DashboardStats> {
   return res.data;
 }
 
+export async function getFaceStatsApi(): Promise<DashboardStats> {
+  const res = await apiClient.get<DashboardStats>("/admin/face-stats");
+  return res.data;
+}
+
+export async function getFaceLogsApi(params: Record<string, string | number>): Promise<PaginatedFaceLogs> {
+  const res = await apiClient.get<PaginatedFaceLogs>("/admin/face-logs", { params });
+  return res.data;
+}
+
+export async function getFaceLogByIdApi(logId: number): Promise<FaceLogResponse> {
+  const res = await apiClient.get<FaceLogResponse>(`/admin/face-logs/${logId}`);
+  return res.data;
+}
+
+// === Users API ===
 export async function getUsersApi(): Promise<UserResponse[]> {
   const res = await apiClient.get<UserResponse[]>("/admin/users");
   return res.data;
@@ -173,45 +168,23 @@ export async function createUserApi(data: CreateUserRequest): Promise<UserRespon
   return res.data;
 }
 
-export async function updateUserApi(id: number, data: import("./interfaces").UpdateUserRequest): Promise<UserResponse> {
-  const res = await apiClient.patch<UserResponse>(`/admin/users/${id}`, data);
+export async function updateUserApi(userId: number, data: Record<string, unknown>): Promise<UserResponse> {
+  const res = await apiClient.patch<UserResponse>(`/admin/users/${userId}`, data);
   return res.data;
 }
 
-export async function deleteUserApi(id: number): Promise<void> {
-  await apiClient.delete(`/admin/users/${id}`);
+export async function deleteUserApi(userId: number): Promise<void> {
+  await apiClient.delete(`/admin/users/${userId}`);
 }
 
-// === Admin Face Logs API ===
-export async function getFaceLogsApi(params: {
-  page?: number;
-  per_page?: number;
-  user_id?: number;
-  date_from?: string;
-  date_to?: string;
-}): Promise<PaginatedFaceLogs> {
-  const res = await apiClient.get<PaginatedFaceLogs>("/admin/face-logs", { params });
-  return res.data;
-}
-
-export async function getFaceLogByIdApi(logId: number): Promise<FaceLogResponse> {
-  const res = await apiClient.get<FaceLogResponse>(`/admin/face-logs/${logId}`);
-  return res.data;
-}
-
-export async function getFaceStatsApi(): Promise<DashboardStats> {
-  const res = await apiClient.get<DashboardStats>("/admin/face-stats");
-  return res.data;
-}
-
-// === Admin API Keys ===
-export async function getApiKeysApi(): Promise<ApiKeyResponse[]> {
-  const res = await apiClient.get<ApiKeyResponse[]>("/admin/api-keys");
-  return res.data;
-}
-
+// === API Keys ===
 export async function createApiKeyApi(data: ApiKeyCreateRequest): Promise<ApiKeyCreateResponse> {
   const res = await apiClient.post<ApiKeyCreateResponse>("/admin/api-keys", data);
+  return res.data;
+}
+
+export async function getApiKeysApi(): Promise<ApiKeyResponse[]> {
+  const res = await apiClient.get<ApiKeyResponse[]>("/admin/api-keys");
   return res.data;
 }
 
@@ -219,70 +192,83 @@ export async function revokeApiKeyApi(keyId: number): Promise<void> {
   await apiClient.delete(`/admin/api-keys/${keyId}`);
 }
 
-/** Authenticated rasm URL olish (blob URL qaytaradi) */
-export async function getAuthImageUrl(url: string): Promise<string> {
-  const res = await apiClient.get(url, { responseType: "blob" });
+// === Auth Image ===
+export async function getAuthImageUrl(src: string): Promise<string> {
+  const res = await apiClient.get(src, { responseType: "blob" });
   return URL.createObjectURL(res.data);
 }
 
 // === Test Sessions API ===
-export async function getTestSessionsApi(params: {
-  page?: number;
-  per_page?: number;
-  is_active?: boolean;
-  test_id?: number;
-}): Promise<import("./interfaces").TestSessionListResponse> {
+export async function getTestSessionsApi(params: Record<string, string | number>): Promise<import("./interfaces").TestSessionListResponse> {
   const res = await apiClient.get("/test-sessions", { params });
   return res.data;
 }
 
-export async function getTestSessionApi(id: number): Promise<import("./interfaces").TestSessionResponse> {
-  const res = await apiClient.get(`/test-sessions/${id}`);
+export async function getTestSessionApi(sessionId: number): Promise<import("./interfaces").TestSessionResponse> {
+  const res = await apiClient.get(`/test-sessions/${sessionId}`);
   return res.data;
 }
 
-export async function createTestSessionApi(
-  data: import("./interfaces").TestSessionCreateRequest,
-): Promise<import("./interfaces").TestSessionResponse> {
+export async function createTestSessionApi(data: import("./interfaces").TestSessionCreateRequest): Promise<import("./interfaces").TestSessionResponse> {
   const res = await apiClient.post("/test-sessions", data);
   return res.data;
 }
 
-export async function updateTestSessionApi(
-  id: number,
-  data: import("./interfaces").TestSessionUpdateRequest,
-): Promise<import("./interfaces").TestSessionResponse> {
-  const res = await apiClient.patch(`/test-sessions/${id}`, data);
+export async function updateTestSessionApi(sessionId: number, data: import("./interfaces").TestSessionUpdateRequest): Promise<import("./interfaces").TestSessionResponse> {
+  const res = await apiClient.patch(`/test-sessions/${sessionId}`, data);
   return res.data;
 }
 
-export async function changeSessionStateApi(
-  id: number,
-  test_state_id: number,
-): Promise<import("./interfaces").TestSessionResponse> {
-  const res = await apiClient.patch(`/test-sessions/${id}/state`, { test_state_id });
+export async function changeSessionStateApi(sessionId: number, testStateId: number): Promise<import("./interfaces").TestSessionResponse> {
+  const res = await apiClient.patch(`/test-sessions/${sessionId}/state`, { test_state_id: testStateId });
   return res.data;
 }
 
-export async function deleteTestSessionApi(id: number): Promise<void> {
-  await apiClient.delete(`/test-sessions/${id}`);
-}
-
-export async function addSmenaToSessionApi(
-  sessionId: number,
-  data: { test_smena_id: number; day: string },
-): Promise<import("./interfaces").TestSessionSmenaResponse> {
-  const res = await apiClient.post(`/test-sessions/${sessionId}/smenas`, data);
+export async function getEmbeddingProgressApi(sessionId: number): Promise<{
+  current: number;
+  total: number;
+  success: number;
+  no_image: number;
+  no_face: number;
+  errors: number;
+  failed: number;
+  percent: number;
+  status: string;
+}> {
+  const res = await apiClient.get(`/test-sessions/${sessionId}/embedding-progress`);
   return res.data;
 }
 
-export async function removeSmenaFromSessionApi(
-  sessionId: number,
-  smenaId: number,
-): Promise<void> {
+export async function deleteTestSessionApi(sessionId: number): Promise<void> {
+  await apiClient.delete(`/test-sessions/${sessionId}`);
+}
+
+export async function addSmenaToSessionApi(sessionId: number, body: { test_smena_id: number; day: string }): Promise<import("./interfaces").TestSessionSmenaResponse> {
+  const res = await apiClient.post(`/test-sessions/${sessionId}/smenas`, body);
+  return res.data;
+}
+
+export async function removeSmenaFromSessionApi(sessionId: number, smenaId: number): Promise<void> {
   await apiClient.delete(`/test-sessions/${sessionId}/smenas/${smenaId}`);
 }
 
+export async function getSessionStudentStatsApi(sessionId: number): Promise<{
+  total: number;
+  ready: number;
+  not_ready: number;
+  no_image: number;
+  no_face: number;
+}> {
+  const res = await apiClient.get(`/test-sessions/${sessionId}/student-stats`);
+  return res.data;
+}
+
+export async function retryEmbeddingApi(sessionId: number): Promise<{ message: string; not_ready: number }> {
+  const res = await apiClient.post(`/test-sessions/${sessionId}/retry-embedding`);
+  return res.data;
+}
+
+// === Test Sessions Lookups ===
 export async function getTestsLookupApi(): Promise<import("./interfaces").TestResponse[]> {
   const res = await apiClient.get("/test-sessions/tests");
   return res.data;
@@ -298,102 +284,184 @@ export async function getSessionStatesLookupApi(): Promise<import("./interfaces"
   return res.data;
 }
 
-// === Lookup CRUD API ===
-// Generic helper
-async function lookupList<T>(path: string): Promise<T[]> {
-  const res = await apiClient.get<T[]>(`/lookup/${path}`);
-  return res.data;
-}
-async function lookupCreate<T>(path: string, data: any): Promise<T> {
-  const res = await apiClient.post<T>(`/lookup/${path}`, data);
-  return res.data;
-}
-async function lookupUpdate<T>(path: string, id: number, data: any): Promise<T> {
-  const res = await apiClient.patch<T>(`/lookup/${path}/${id}`, data);
-  return res.data;
-}
-async function lookupDelete(path: string, id: number): Promise<void> {
-  await apiClient.delete(`/lookup/${path}/${id}`);
-}
+// === Lookup CRUD APIs ===
 
 // Tests
-export const getTestsListApi = () => lookupList<import("./interfaces").LookupTestResponse>("tests");
-export const createTestApi = (d: import("./interfaces").LookupTestCreate) => lookupCreate<import("./interfaces").LookupTestResponse>("tests", d);
-export const updateTestApi = (id: number, d: import("./interfaces").LookupTestUpdate) => lookupUpdate<import("./interfaces").LookupTestResponse>("tests", id, d);
-export const deleteTestApi = (id: number) => lookupDelete("tests", id);
-
-// Smenas
-export const getSmenasListApi = () => lookupList<import("./interfaces").LookupSmenaResponse>("smenas");
-export const createSmenaApi = (d: import("./interfaces").LookupSmenaCreate) => lookupCreate<import("./interfaces").LookupSmenaResponse>("smenas", d);
-export const updateSmenaApi = (id: number, d: import("./interfaces").LookupSmenaUpdate) => lookupUpdate<import("./interfaces").LookupSmenaResponse>("smenas", id, d);
-export const deleteSmenaApi = (id: number) => lookupDelete("smenas", id);
-
-// Session States
-export const getSessionStatesListApi = () => lookupList<import("./interfaces").LookupSessionStateResponse>("session-states");
-export const createSessionStateApi = (d: import("./interfaces").LookupSessionStateCreate) => lookupCreate<import("./interfaces").LookupSessionStateResponse>("session-states", d);
-export const updateSessionStateApi = (id: number, d: import("./interfaces").LookupSessionStateUpdate) => lookupUpdate<import("./interfaces").LookupSessionStateResponse>("session-states", id, d);
-export const deleteSessionStateApi = (id: number) => lookupDelete("session-states", id);
-
-// Regions
-export const getRegionsListApi = () => lookupList<import("./interfaces").LookupRegionResponse>("regions");
-export const createRegionApi = (d: import("./interfaces").LookupRegionCreate) => lookupCreate<import("./interfaces").LookupRegionResponse>("regions", d);
-export const updateRegionApi = (id: number, d: import("./interfaces").LookupRegionUpdate) => lookupUpdate<import("./interfaces").LookupRegionResponse>("regions", id, d);
-export const deleteRegionApi = (id: number) => lookupDelete("regions", id);
-
-// Zones
-export const getZonesListApi = () => lookupList<import("./interfaces").LookupZoneResponse>("zones");
-export async function getZonesByRegionApi(regionId: number): Promise<import("./interfaces").LookupZoneResponse[]> {
-  const res = await apiClient.get<import("./interfaces").LookupZoneResponse[]>(`/lookup/zones`, { params: { region_id: regionId } });
+export async function getTestsListApi(): Promise<import("./interfaces").LookupTestResponse[]> {
+  const res = await apiClient.get("/lookup/tests");
   return res.data;
 }
-export const createZoneApi = (d: import("./interfaces").LookupZoneCreate) => lookupCreate<import("./interfaces").LookupZoneResponse>("zones", d);
-export const updateZoneApi = (id: number, d: import("./interfaces").LookupZoneUpdate) => lookupUpdate<import("./interfaces").LookupZoneResponse>("zones", id, d);
-export const deleteZoneApi = (id: number) => lookupDelete("zones", id);
+export async function createTestApi(data: import("./interfaces").LookupTestCreate): Promise<import("./interfaces").LookupTestResponse> {
+  const res = await apiClient.post("/lookup/tests", data);
+  return res.data;
+}
+export async function updateTestApi(id: number, data: import("./interfaces").LookupTestUpdate): Promise<import("./interfaces").LookupTestResponse> {
+  const res = await apiClient.patch(`/lookup/tests/${id}`, data);
+  return res.data;
+}
+export async function deleteTestApi(id: number): Promise<void> {
+  await apiClient.delete(`/lookup/tests/${id}`);
+}
+
+// Smenas
+export async function getSmenasListApi(): Promise<import("./interfaces").LookupSmenaResponse[]> {
+  const res = await apiClient.get("/lookup/smenas");
+  return res.data;
+}
+export async function createSmenaApi(data: import("./interfaces").LookupSmenaCreate): Promise<import("./interfaces").LookupSmenaResponse> {
+  const res = await apiClient.post("/lookup/smenas", data);
+  return res.data;
+}
+export async function updateSmenaApi(id: number, data: import("./interfaces").LookupSmenaUpdate): Promise<import("./interfaces").LookupSmenaResponse> {
+  const res = await apiClient.patch(`/lookup/smenas/${id}`, data);
+  return res.data;
+}
+export async function deleteSmenaApi(id: number): Promise<void> {
+  await apiClient.delete(`/lookup/smenas/${id}`);
+}
+
+// Session States
+export async function getSessionStatesListApi(): Promise<import("./interfaces").LookupSessionStateResponse[]> {
+  const res = await apiClient.get("/lookup/session-states");
+  return res.data;
+}
+export async function createSessionStateApi(data: import("./interfaces").LookupSessionStateCreate): Promise<import("./interfaces").LookupSessionStateResponse> {
+  const res = await apiClient.post("/lookup/session-states", data);
+  return res.data;
+}
+export async function updateSessionStateApi(id: number, data: import("./interfaces").LookupSessionStateUpdate): Promise<import("./interfaces").LookupSessionStateResponse> {
+  const res = await apiClient.patch(`/lookup/session-states/${id}`, data);
+  return res.data;
+}
+export async function deleteSessionStateApi(id: number): Promise<void> {
+  await apiClient.delete(`/lookup/session-states/${id}`);
+}
+
+// Regions
+export async function getRegionsListApi(): Promise<import("./interfaces").LookupRegionResponse[]> {
+  const res = await apiClient.get("/lookup/regions");
+  return res.data;
+}
+export async function createRegionApi(data: import("./interfaces").LookupRegionCreate): Promise<import("./interfaces").LookupRegionResponse> {
+  const res = await apiClient.post("/lookup/regions", data);
+  return res.data;
+}
+export async function updateRegionApi(id: number, data: import("./interfaces").LookupRegionUpdate): Promise<import("./interfaces").LookupRegionResponse> {
+  const res = await apiClient.patch(`/lookup/regions/${id}`, data);
+  return res.data;
+}
+export async function deleteRegionApi(id: number): Promise<void> {
+  await apiClient.delete(`/lookup/regions/${id}`);
+}
+
+// Zones
+export async function getZonesListApi(): Promise<import("./interfaces").LookupZoneResponse[]> {
+  const res = await apiClient.get("/lookup/zones");
+  return res.data;
+}
+export async function getZonesByRegionApi(regionId: number): Promise<import("./interfaces").LookupZoneResponse[]> {
+  const res = await apiClient.get("/lookup/zones", { params: { region_id: regionId } });
+  return res.data;
+}
+export async function createZoneApi(data: import("./interfaces").LookupZoneCreate): Promise<import("./interfaces").LookupZoneResponse> {
+  const res = await apiClient.post("/lookup/zones", data);
+  return res.data;
+}
+export async function updateZoneApi(id: number, data: import("./interfaces").LookupZoneUpdate): Promise<import("./interfaces").LookupZoneResponse> {
+  const res = await apiClient.patch(`/lookup/zones/${id}`, data);
+  return res.data;
+}
+export async function deleteZoneApi(id: number): Promise<void> {
+  await apiClient.delete(`/lookup/zones/${id}`);
+}
 
 // Roles
-export const getRolesListApi = () => lookupList<import("./interfaces").LookupRoleResponse>("roles");
-export const createRoleApi = (d: import("./interfaces").LookupRoleCreate) => lookupCreate<import("./interfaces").LookupRoleResponse>("roles", d);
-export const updateRoleApi = (id: number, d: import("./interfaces").LookupRoleUpdate) => lookupUpdate<import("./interfaces").LookupRoleResponse>("roles", id, d);
-export const deleteRoleApi = (id: number) => lookupDelete("roles", id);
+export async function getRolesListApi(): Promise<import("./interfaces").LookupRoleResponse[]> {
+  const res = await apiClient.get("/lookup/roles");
+  return res.data;
+}
+export async function createRoleApi(data: import("./interfaces").LookupRoleCreate): Promise<import("./interfaces").LookupRoleResponse> {
+  const res = await apiClient.post("/lookup/roles", data);
+  return res.data;
+}
+export async function updateRoleApi(id: number, data: import("./interfaces").LookupRoleUpdate): Promise<import("./interfaces").LookupRoleResponse> {
+  const res = await apiClient.patch(`/lookup/roles/${id}`, data);
+  return res.data;
+}
+export async function deleteRoleApi(id: number): Promise<void> {
+  await apiClient.delete(`/lookup/roles/${id}`);
+}
 
 // Reasons
-export const getReasonsListApi = () => lookupList<import("./interfaces").LookupReasonResponse>("reasons");
-export const createReasonApi = (d: import("./interfaces").LookupReasonCreate) => lookupCreate<import("./interfaces").LookupReasonResponse>("reasons", d);
-export const updateReasonApi = (id: number, d: import("./interfaces").LookupReasonUpdate) => lookupUpdate<import("./interfaces").LookupReasonResponse>("reasons", id, d);
-export const deleteReasonApi = (id: number) => lookupDelete("reasons", id);
+export async function getReasonsListApi(): Promise<import("./interfaces").LookupReasonResponse[]> {
+  const res = await apiClient.get("/lookup/reasons");
+  return res.data;
+}
+export async function createReasonApi(data: import("./interfaces").LookupReasonCreate): Promise<import("./interfaces").LookupReasonResponse> {
+  const res = await apiClient.post("/lookup/reasons", data);
+  return res.data;
+}
+export async function updateReasonApi(id: number, data: import("./interfaces").LookupReasonUpdate): Promise<import("./interfaces").LookupReasonResponse> {
+  const res = await apiClient.patch(`/lookup/reasons/${id}`, data);
+  return res.data;
+}
+export async function deleteReasonApi(id: number): Promise<void> {
+  await apiClient.delete(`/lookup/reasons/${id}`);
+}
 
 // Reason Types
-export const getReasonTypesListApi = () => lookupList<import("./interfaces").LookupReasonTypeResponse>("reason-types");
-export const createReasonTypeApi = (d: import("./interfaces").LookupReasonTypeCreate) => lookupCreate<import("./interfaces").LookupReasonTypeResponse>("reason-types", d);
-export const updateReasonTypeApi = (id: number, d: import("./interfaces").LookupReasonTypeUpdate) => lookupUpdate<import("./interfaces").LookupReasonTypeResponse>("reason-types", id, d);
-export const deleteReasonTypeApi = (id: number) => lookupDelete("reason-types", id);
+export async function getReasonTypesListApi(): Promise<import("./interfaces").LookupReasonTypeResponse[]> {
+  const res = await apiClient.get("/lookup/reason-types");
+  return res.data;
+}
+export async function createReasonTypeApi(data: import("./interfaces").LookupReasonTypeCreate): Promise<import("./interfaces").LookupReasonTypeResponse> {
+  const res = await apiClient.post("/lookup/reason-types", data);
+  return res.data;
+}
+export async function updateReasonTypeApi(id: number, data: import("./interfaces").LookupReasonTypeUpdate): Promise<import("./interfaces").LookupReasonTypeResponse> {
+  const res = await apiClient.patch(`/lookup/reason-types/${id}`, data);
+  return res.data;
+}
+export async function deleteReasonTypeApi(id: number): Promise<void> {
+  await apiClient.delete(`/lookup/reason-types/${id}`);
+}
 
 // Blacklist
-export const getBlacklistApi = () => lookupList<import("./interfaces").LookupBlacklistResponse>("blacklist");
-export const createBlacklistApi = (d: import("./interfaces").LookupBlacklistCreate) => lookupCreate<import("./interfaces").LookupBlacklistResponse>("blacklist", d);
-export const updateBlacklistApi = (id: number, d: import("./interfaces").LookupBlacklistUpdate) => lookupUpdate<import("./interfaces").LookupBlacklistResponse>("blacklist", id, d);
-export const deleteBlacklistApi = (id: number) => lookupDelete("blacklist", id);
+export async function getBlacklistApi(): Promise<import("./interfaces").LookupBlacklistResponse[]> {
+  const res = await apiClient.get("/lookup/blacklist");
+  return res.data;
+}
+export async function createBlacklistApi(data: import("./interfaces").LookupBlacklistCreate): Promise<import("./interfaces").LookupBlacklistResponse> {
+  const res = await apiClient.post("/lookup/blacklist", data);
+  return res.data;
+}
+export async function updateBlacklistApi(id: number, data: import("./interfaces").LookupBlacklistUpdate): Promise<import("./interfaces").LookupBlacklistResponse> {
+  const res = await apiClient.patch(`/lookup/blacklist/${id}`, data);
+  return res.data;
+}
+export async function deleteBlacklistApi(id: number): Promise<void> {
+  await apiClient.delete(`/lookup/blacklist/${id}`);
+}
+
+// Genders
+export async function getGendersListApi(): Promise<import("./interfaces").LookupGenderResponse[]> {
+  const res = await apiClient.get("/lookup/genders");
+  return res.data;
+}
+export async function createGenderApi(data: import("./interfaces").LookupGenderCreate): Promise<import("./interfaces").LookupGenderResponse> {
+  const res = await apiClient.post("/lookup/genders", data);
+  return res.data;
+}
+export async function updateGenderApi(id: number, data: import("./interfaces").LookupGenderUpdate): Promise<import("./interfaces").LookupGenderResponse> {
+  const res = await apiClient.patch(`/lookup/genders/${id}`, data);
+  return res.data;
+}
+export async function deleteGenderApi(id: number): Promise<void> {
+  await apiClient.delete(`/lookup/genders/${id}`);
+}
 
 // === Students API ===
-export async function getStudentsApi(params: {
-  page?: number;
-  per_page?: number;
-  session_smena_id?: number;
-  zone_id?: number;
-  test_id?: number;
-  region_id?: number;
-  smena_id?: number;
-  gr_n?: number;
-  e_date_from?: string;
-  e_date_to?: string;
-  is_entered?: boolean;
-  is_cheating?: boolean;
-  is_blacklist?: boolean;
-  is_face?: boolean;
-  is_image?: boolean;
-  is_ready?: boolean;
-  search?: string;
-}): Promise<import("./interfaces").StudentListResponse> {
+export async function getStudentsApi(params?: Record<string, unknown>): Promise<import("./interfaces").StudentListResponse> {
   const res = await apiClient.get("/students", { params });
   return res.data;
 }
@@ -417,12 +485,18 @@ export async function deleteStudentApi(id: number): Promise<void> {
   await apiClient.delete(`/students/${id}`);
 }
 
-// === StudentLog API ===
-export async function getStudentLogsApi(params: {
-  page?: number;
-  per_page?: number;
-  student_id?: number;
-}): Promise<import("./interfaces").StudentLogListResponse> {
+export async function uploadStudentImageApi(studentId: number, ps_img: string): Promise<import("./interfaces").StudentResponse> {
+  const res = await apiClient.post(`/students/${studentId}/upload-image`, { ps_img });
+  return res.data;
+}
+
+export async function fetchGtspImageApi(studentId: number): Promise<import("./interfaces").StudentResponse> {
+  const res = await apiClient.post(`/students/${studentId}/fetch-gtsp`);
+  return res.data;
+}
+
+// === Student Logs API ===
+export async function getStudentLogsApi(params: Record<string, string | number>): Promise<import("./interfaces").StudentLogListResponse> {
   const res = await apiClient.get("/students/logs", { params });
   return res.data;
 }
@@ -441,12 +515,8 @@ export async function deleteStudentLogApi(id: number): Promise<void> {
   await apiClient.delete(`/students/logs/${id}`);
 }
 
-// === CheatingLog API ===
-export async function getCheatingLogsApi(params: {
-  page?: number;
-  per_page?: number;
-  student_id?: number;
-}): Promise<import("./interfaces").CheatingLogListResponse> {
+// === Cheating Logs API ===
+export async function getCheatingLogsApi(params: Record<string, string | number>): Promise<import("./interfaces").CheatingLogListResponse> {
   const res = await apiClient.get("/students/cheating-logs", { params });
   return res.data;
 }
@@ -471,39 +541,12 @@ export async function getPermissionsApi(): Promise<import("./interfaces").Permis
   return res.data;
 }
 
-export async function createPermissionApi(data: import("./interfaces").PermissionCreate): Promise<import("./interfaces").PermissionResponse> {
-  const res = await apiClient.post("/permissions", data);
-  return res.data;
-}
-
-export async function updatePermissionApi(id: number, data: import("./interfaces").PermissionUpdate): Promise<import("./interfaces").PermissionResponse> {
-  const res = await apiClient.patch(`/permissions/${id}`, data);
-  return res.data;
-}
-
-export async function deletePermissionApi(id: number): Promise<void> {
-  await apiClient.delete(`/permissions/${id}`);
-}
-
 export async function getRolesWithPermissionsApi(): Promise<import("./interfaces").RolePermissionsResponse[]> {
   const res = await apiClient.get("/permissions/roles");
   return res.data;
 }
 
-export async function assignPermissionsToRoleApi(
-  roleId: number,
-  data: import("./interfaces").AssignPermissionsRequest,
-): Promise<import("./interfaces").RolePermissionsResponse> {
+export async function assignPermissionsToRoleApi(roleId: number, data: import("./interfaces").AssignPermissionsRequest): Promise<import("./interfaces").RolePermissionsResponse> {
   const res = await apiClient.put(`/permissions/roles/${roleId}`, data);
   return res.data;
-}
-
-/** Faylni base64 ga aylantirish */
-export function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = reject;
-  });
 }

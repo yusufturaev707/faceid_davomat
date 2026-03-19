@@ -12,3 +12,5 @@ class Zone(Base):
     name: Mapped[str] = mapped_column(String(100))
     number: Mapped[int] = mapped_column(default=0)
     is_active: Mapped[bool] = mapped_column(default=True)
+
+    region = relationship("Region", lazy="joined")

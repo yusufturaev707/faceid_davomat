@@ -14,3 +14,4 @@ class StudentPsData(Base):
     phone: Mapped[str | None] = mapped_column(String(13), nullable=True)
     ps_img: Mapped[str | None] = mapped_column(Text, nullable=True)
     embedding: Mapped[str | None] = mapped_column(Text, nullable=True)
+    gender_id: Mapped[int | None] = mapped_column(ForeignKey("gender.id"), nullable=True)

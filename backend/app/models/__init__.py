@@ -19,11 +19,12 @@ from app.models.reason import Reason
 from app.models.reason_type import ReasonType
 from app.models.cheating_log import CheatingLog
 from app.models.permission import Permission
+from app.models.gender import Gender
 
 __all__ = [
     "User", "VerificationLog", "RefreshToken", "VerifyFaces", "ApiKey",
     "Role", "Region", "Zone", "Smena", "SessionState",
     "Test", "TestSession", "TestSessionSmena",
     "Student", "StudentLog", "StudentPsData", "StudentBlacklist",
-    "Reason", "ReasonType", "CheatingLog", "Permission",
+    "Reason", "ReasonType", "CheatingLog", "Permission", "Gender",
 ]

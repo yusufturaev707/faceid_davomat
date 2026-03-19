@@ -8,8 +8,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.models.gender import Gender
 from app.models.region import Region
 from app.models.student import Student
+from app.models.student_blacklist import StudentBlacklist
 from app.models.student_ps_data import StudentPsData
 from app.models.test_session import TestSession
 from app.models.test_session_smena import TestSessionSmena
@@ -151,8 +153,8 @@ def _parse_cefr(item: dict, zone_map: dict[int, int]) -> tuple[dict, dict] | Non
         "sp_n": 0,
         "s_code": int(item.get("task_id", 0)),
         "e_date": e_date,
-        "subject_id": 0,
-        "subject_name": None,
+        "subject_id": 1,
+        "subject_name": "CEFR",
         "lang_id": int(item.get("lang_id", 0)),
         "level_id": int(item.get("level_id", 0)),
         "_smena_number": int(item.get("smen", 1)),
@@ -311,6 +313,18 @@ def load_students_for_session(db: Session, session: TestSession) -> int:
             total_pages_key="pageCount",
         )
 
+    # Gender key → id mapping
+    gender_key_map: dict[int, int] = {}
+    for g in db.execute(select(Gender)).scalars().all():
+        gender_key_map[g.key] = g.id
+
+    # Blacklist IMEI lari to'plami
+    blacklist_imeis: set[str] = set(
+        row[0]
+        for row in db.execute(select(StudentBlacklist.imei).where(StudentBlacklist.imei.isnot(None)))
+        if row[0]
+    )
+
     total_loaded = 0
 
     for day_str in sorted(smena_days):
@@ -352,21 +366,29 @@ def load_students_for_session(db: Session, session: TestSession) -> int:
                 # Find matching session_smena
                 session_smena_id = smena_map.get((smena_number, item_day))
                 if not session_smena_id:
-                    # Try first smena for this day
-                    for (sn, sd), sid in smena_map.items():
-                        if sd == item_day:
-                            session_smena_id = sid
-                            break
-                if not session_smena_id:
                     skipped += 1
                     continue
 
                 student_data["session_smena_id"] = session_smena_id
                 student_data["is_image"] = bool(ps_data.get("ps_img"))
 
+                # Blacklist tekshirish
+                imei_val = student_data.get("imei") or ""
+                if imei_val and imei_val in blacklist_imeis:
+                    student_data["is_blacklist"] = True
+
                 student = Student(**student_data)
                 db.add(student)
                 db.flush()
+
+                # Gender aniqlash: imei ning birinchi raqami 3/5 → key=1, 4/6 → key=2, boshqa → key=0
+                imei_val = student_data.get("imei") or ""
+                if imei_val and imei_val[0] in ("3", "5"):
+                    ps_data["gender_id"] = gender_key_map.get(1)
+                elif imei_val and imei_val[0] in ("4", "6"):
+                    ps_data["gender_id"] = gender_key_map.get(2)
+                else:
+                    ps_data["gender_id"] = gender_key_map.get(0)
 
                 ps_data["student_id"] = student.id
                 db.add(StudentPsData(**ps_data))

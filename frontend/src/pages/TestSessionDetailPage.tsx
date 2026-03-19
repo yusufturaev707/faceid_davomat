@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import type {
   SessionStateResponse,
   SmenaResponse,
+  StudentResponse,
   TestResponse,
   TestSessionResponse,
 } from "../interfaces";
@@ -10,12 +11,18 @@ import {
   addSmenaToSessionApi,
   changeSessionStateApi,
   deleteTestSessionApi,
+  getEmbeddingProgressApi,
   getSessionStatesLookupApi,
+  getSessionStudentStatsApi,
   getSmenasLookupApi,
+  getStudentsApi,
   getTestSessionApi,
   getTestsLookupApi,
   removeSmenaFromSessionApi,
+  retryEmbeddingApi,
   updateTestSessionApi,
+  uploadStudentImageApi,
+  fileToBase64,
 } from "../api";
 import PageLoader from "../components/PageLoader";
 import { extractErrorMessage } from "../utils/errorMessage";
@@ -35,7 +42,9 @@ export default function TestSessionDetailPage() {
 
   // State change (stepper)
   const [changingState, setChangingState] = useState(false);
+  const [targetStateId, setTargetStateId] = useState<number | null>(null);
   const [loadProgress, setLoadProgress] = useState(0);
+  const [progressLabel, setProgressLabel] = useState("");
 
   // Edit modal
   const [showEdit, setShowEdit] = useState(false);
@@ -67,6 +76,16 @@ export default function TestSessionDetailPage() {
   } | null>(null);
   const [removingSmena, setRemovingSmena] = useState(false);
 
+  // Student stats & failed students
+  const [studentStats, setStudentStats] = useState<{
+    total: number; ready: number; not_ready: number; no_image: number; no_face: number;
+  } | null>(null);
+  const [failedStudents, setFailedStudents] = useState<StudentResponse[]>([]);
+  const [showFailedStudents, setShowFailedStudents] = useState(false);
+  const [loadingFailedStudents, setLoadingFailedStudents] = useState(false);
+  const [retryingEmbedding, setRetryingEmbedding] = useState(false);
+  const [uploadingImageId, setUploadingImageId] = useState<number | null>(null);
+
   const fetchSession = useCallback(async () => {
     if (!id) return;
     try {
@@ -79,6 +98,31 @@ export default function TestSessionDetailPage() {
       setLoading(false);
     }
   }, [id]);
+
+  const fetchStudentStats = useCallback(async () => {
+    if (!id) return;
+    try {
+      const stats = await getSessionStudentStatsApi(Number(id));
+      setStudentStats(stats);
+    } catch { /* ignore */ }
+  }, [id]);
+
+  const fetchFailedStudents = useCallback(async (sess: TestSessionResponse) => {
+    setLoadingFailedStudents(true);
+    try {
+      const allFailed: StudentResponse[] = [];
+      for (const sm of sess.smenas) {
+        const res = await getStudentsApi({
+          session_smena_id: sm.id,
+          is_ready: false,
+          per_page: 100,
+        });
+        allFailed.push(...res.items);
+      }
+      setFailedStudents(allFailed);
+    } catch { /* ignore */ }
+    setLoadingFailedStudents(false);
+  }, []);
 
   useEffect(() => {
     fetchSession();
@@ -97,7 +141,89 @@ export default function TestSessionDetailPage() {
     });
   }, []);
 
+  // Fetch student stats when session is loaded and state >= 3
+  useEffect(() => {
+    if (!session || !states.length) return;
+    const stateKey = states.find((s) => s.id === session.test_state_id)?.key ?? 0;
+    if (stateKey >= 3) {
+      fetchStudentStats();
+    }
+  }, [session?.id, session?.test_state_id, states.length, fetchStudentStats]);
+
   const [stateError, setStateError] = useState("");
+
+  // Embedding polling funksiyasi — handleNextStep va useEffect da ishlatiladi
+  const startEmbeddingPolling = useCallback((sessionId: number) => {
+    const poll = setInterval(async () => {
+      try {
+        const p = await getEmbeddingProgressApi(sessionId);
+        if (p.total > 0) {
+          setLoadProgress(p.percent);
+          const parts: string[] = [`${p.current}/${p.total}`];
+          if (p.success > 0) parts.push(`${p.success} tayyor`);
+          if (p.no_image > 0) parts.push(`${p.no_image} rasmsiz`);
+          if (p.no_face > 0) parts.push(`${p.no_face} yuzsiz`);
+          if (p.errors > 0) parts.push(`${p.errors} xato`);
+          setProgressLabel(`Embedding: ${parts.join(", ")}`);
+        }
+
+        if (p.status === "completed" || p.status === "completed_with_errors") {
+          clearInterval(poll);
+          setLoadProgress(100);
+
+          const failed = (p.no_image || 0) + (p.no_face || 0) + (p.errors || 0);
+          if (failed > 0) {
+            const msgs: string[] = [];
+            if (p.no_image > 0) msgs.push(`${p.no_image} ta studentda rasm topilmadi`);
+            if (p.no_face > 0) msgs.push(`${p.no_face} ta studentda yuz aniqlanmadi`);
+            if (p.errors > 0) msgs.push(`${p.errors} ta studentda xatolik`);
+            setProgressLabel(`Embedding tugadi: ${msgs.join(", ")}`);
+          } else {
+            setProgressLabel("Embedding muvaffaqiyatli tugadi!");
+          }
+
+          setTimeout(async () => {
+            try {
+              const refreshed = await getTestSessionApi(sessionId);
+              setSession(refreshed);
+              // Student stats yangilash
+              const stats = await getSessionStudentStatsApi(sessionId);
+              setStudentStats(stats);
+            } catch { /* ignore */ }
+            setChangingState(false);
+            setTargetStateId(null);
+            setLoadProgress(0);
+            setProgressLabel("");
+          }, 1000);
+        }
+      } catch {
+        // polling xatosi — davom etamiz
+      }
+    }, 1500);
+    return poll;
+  }, []);
+
+  // Sahifa yuklanganda embedding davom etayotganini tekshirish
+  useEffect(() => {
+    if (!session || !states.length || changingState) return;
+    const currentState = states.find((s) => s.id === session.test_state_id);
+    if (!currentState || currentState.key !== 3) return;
+
+    let pollId: ReturnType<typeof setInterval> | null = null;
+
+    getEmbeddingProgressApi(session.id).then((p) => {
+      if (p.status === "processing") {
+        setChangingState(true);
+        setTargetStateId(session.test_state_id);
+        setLoadProgress(p.percent);
+        setProgressLabel("Embedding davom etmoqda...");
+        pollId = startEmbeddingPolling(session.id);
+      }
+    }).catch(() => { /* ignore */ });
+
+    return () => { if (pollId) clearInterval(pollId); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.id, session?.test_state_id, states.length, startEmbeddingPolling]);
 
   // Sorted states by key for stepper
   const sortedStates = [...states].sort((a, b) => a.key - b.key);
@@ -114,34 +240,153 @@ export default function TestSessionDetailPage() {
     if (!nextState) return;
 
     setChangingState(true);
+    setTargetStateId(nextState.id);
     setStateError("");
     setLoadProgress(0);
+    setProgressLabel("");
 
-    // Simulate progress for loading state (key=2)
+    // State 3 (embedding) — Celery task, alohida flow
+    if (nextState.key === 3) {
+      try {
+        const updated = await changeSessionStateApi(session.id, nextState.id);
+        setSession(updated);
+        // Celery task boshlandi — endi polling boshlaymiz
+        setProgressLabel("Embedding boshlanmoqda...");
+        setLoadProgress(0.5);
+        startEmbeddingPolling(session.id);
+      } catch (err) {
+        setChangingState(false);
+        setTargetStateId(null);
+        setStateError(extractErrorMessage(err));
+      }
+      return;
+    }
+
+    // Boshqa statelar uchun umumiy flow
     let progressInterval: ReturnType<typeof setInterval> | null = null;
+
     if (nextState.key === 2) {
+      setProgressLabel("Talabalar yuklanmoqda...");
       progressInterval = setInterval(() => {
         setLoadProgress((prev) => {
           if (prev >= 92) return prev;
           return prev + Math.random() * 8 + 2;
         });
       }, 400);
+    } else {
+      const labels: Record<number, string> = {
+        4: "Sessiya faollashtirilmoqda...",
+        5: "Sessiya yakunlanmoqda...",
+      };
+      setProgressLabel(labels[nextState.key] || "Holat o'zgartirilmoqda...");
+      setLoadProgress(5);
+      progressInterval = setInterval(() => {
+        setLoadProgress((prev) => {
+          if (prev >= 95) return prev;
+          return prev + Math.random() * 15 + 10;
+        });
+      }, 200);
     }
 
     try {
       const updated = await changeSessionStateApi(session.id, nextState.id);
-      if (progressInterval) {
-        clearInterval(progressInterval);
-        setLoadProgress(100);
-      }
-      // Small delay to show 100% before transitioning
-      await new Promise((r) => setTimeout(r, 500));
+      if (progressInterval) clearInterval(progressInterval);
+      setLoadProgress(100);
+      await new Promise((r) => setTimeout(r, 600));
       setSession(updated);
       setLoadProgress(0);
+      setProgressLabel("");
+      setTargetStateId(null);
     } catch (err) {
       if (progressInterval) clearInterval(progressInterval);
       setLoadProgress(0);
+      setProgressLabel("");
+      setTargetStateId(null);
       setStateError(extractErrorMessage(err));
+      try {
+        const refreshed = await getTestSessionApi(session.id);
+        setSession(refreshed);
+      } catch {
+        // Qayta yuklash ham xato bo'lsa, hozirgi holatda qolamiz
+      }
+    } finally {
+      setChangingState(false);
+    }
+  };
+
+
+  const handleRetryEmbedding = async () => {
+    if (!session) return;
+    setRetryingEmbedding(true);
+    setStateError("");
+    try {
+      await retryEmbeddingApi(session.id);
+      // Celery task boshlandi — polling boshlaymiz
+      setChangingState(true);
+      setTargetStateId(session.test_state_id);
+      setProgressLabel("Qayta embedding boshlanmoqda...");
+      setLoadProgress(0.5);
+      startEmbeddingPolling(session.id);
+    } catch (err) {
+      setStateError(extractErrorMessage(err));
+    } finally {
+      setRetryingEmbedding(false);
+    }
+  };
+
+  const handleUploadImage = async (studentId: number, file: File) => {
+    setUploadingImageId(studentId);
+    try {
+      const base64 = await fileToBase64(file);
+      // data:image/...;base64,XXXXX formatdan faqat base64 qismini olish
+      const b64Data = base64.includes(",") ? base64.split(",")[1] : base64;
+      await uploadStudentImageApi(studentId, b64Data);
+      // Muvaffaqiyatli — ro'yxatni yangilash
+      if (session) {
+        await fetchFailedStudents(session);
+        await fetchStudentStats();
+      }
+    } catch (err) {
+      alert(extractErrorMessage(err));
+    } finally {
+      setUploadingImageId(null);
+    }
+  };
+
+  const handlePrevStep = async () => {
+    if (!session || currentStateKey !== 5) return;
+    const prevState = sortedStates.find((s) => s.key === 4);
+    if (!prevState) return;
+
+    setChangingState(true);
+    setTargetStateId(prevState.id);
+    setStateError("");
+    setLoadProgress(5);
+    setProgressLabel("Oldingi holatga qaytarilmoqda...");
+
+    const progressInterval = setInterval(() => {
+      setLoadProgress((prev) => (prev >= 95 ? prev : prev + Math.random() * 15 + 10));
+    }, 200);
+
+    try {
+      const updated = await changeSessionStateApi(session.id, prevState.id);
+      clearInterval(progressInterval);
+      setLoadProgress(100);
+      await new Promise((r) => setTimeout(r, 600));
+      setSession(updated);
+      setLoadProgress(0);
+      setProgressLabel("");
+      setTargetStateId(null);
+    } catch (err) {
+      clearInterval(progressInterval);
+      setLoadProgress(0);
+      setProgressLabel("");
+      setTargetStateId(null);
+      setStateError(extractErrorMessage(err));
+      try {
+        const refreshed = await getTestSessionApi(session.id);
+        setSession(refreshed);
+      } catch { /* ignore */ }
     } finally {
       setChangingState(false);
     }
@@ -359,9 +604,10 @@ export default function TestSessionDetailPage() {
         {/* Step indicators */}
         <div className="flex items-center w-full mb-6">
           {sortedStates.map((state, idx) => {
-            const isDone = state.key < currentStateKey;
+            const isDone = state.key < currentStateKey || (changingState && targetStateId && state.key < (sortedStates.find(s => s.id === targetStateId)?.key ?? 0));
             const isCurrent = state.id === session.test_state_id;
-            const isLoading = isCurrent && changingState;
+            const isTarget = changingState && state.id === targetStateId;
+            const isLoading = isTarget;
 
             return (
               <div key={state.id} className="flex items-center flex-1 last:flex-none">
@@ -371,7 +617,7 @@ export default function TestSessionDetailPage() {
                     className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all duration-300 ${
                       isDone
                         ? "bg-primary-600 border-primary-600 text-white"
-                        : isCurrent
+                        : isCurrent || isTarget
                           ? "bg-white dark:bg-slate-800 border-primary-600 text-primary-600 dark:text-primary-400 shadow-lg shadow-primary-200 dark:shadow-primary-900/30"
                           : "bg-gray-100 dark:bg-slate-700 border-gray-300 dark:border-slate-600 text-gray-400 dark:text-slate-500"
                     }`}
@@ -393,7 +639,7 @@ export default function TestSessionDetailPage() {
                     className={`mt-2 text-xs font-medium whitespace-nowrap ${
                       isDone
                         ? "text-primary-600 dark:text-primary-400"
-                        : isCurrent
+                        : isCurrent || isTarget
                           ? "text-gray-900 dark:text-white"
                           : "text-gray-400 dark:text-slate-500"
                     }`}
@@ -408,12 +654,17 @@ export default function TestSessionDetailPage() {
                       <div
                         className="h-full rounded-full bg-primary-600 transition-all duration-500 ease-out"
                         style={{
-                          width:
-                            state.key < currentStateKey
-                              ? "100%"
-                              : state.id === session.test_state_id && changingState
-                                ? `${loadProgress}%`
-                                : "0%",
+                          width: (() => {
+                            const targetKey = sortedStates.find(s => s.id === targetStateId)?.key ?? 0;
+                            if (changingState && targetStateId) {
+                              // O'tish paytida: oldingi steplar to'liq, target step ga boradigan connector progress
+                              if (state.key < currentStateKey) return "100%";
+                              if (state.key >= currentStateKey && state.key < targetKey - 1) return "100%";
+                              if (state.key === targetKey - 1) return `${loadProgress}%`;
+                              return "0%";
+                            }
+                            return state.key < currentStateKey ? "100%" : "0%";
+                          })(),
                         }}
                       />
                     </div>
@@ -429,13 +680,13 @@ export default function TestSessionDetailPage() {
           <div className="mb-4">
             <div className="flex items-center justify-between mb-1.5">
               <span className="text-xs font-medium text-gray-600 dark:text-slate-400">
-                Talabalar yuklanmoqda...
+                {progressLabel || "Jarayon davom etmoqda..."}
               </span>
               <span className="text-xs font-bold text-primary-600 dark:text-primary-400">
                 {Math.round(loadProgress)}%
               </span>
             </div>
-            <div className="w-full h-2 bg-gray-200 dark:bg-slate-700 rounded-full overflow-hidden">
+            <div className="w-full h-2.5 bg-gray-200 dark:bg-slate-700 rounded-full overflow-hidden">
               <div
                 className="h-full rounded-full bg-gradient-to-r from-primary-500 to-primary-600 transition-all duration-300 ease-out"
                 style={{ width: `${loadProgress}%` }}
@@ -446,12 +697,33 @@ export default function TestSessionDetailPage() {
 
         {/* Error message */}
         {stateError && (
-          <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 rounded-lg">
-            <p className="text-xs text-red-600 dark:text-red-400">{stateError}</p>
+          <div className="mb-4 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/40 rounded-xl flex items-start gap-3">
+            <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-red-100 dark:bg-red-900/30 flex items-center justify-center mt-0.5">
+              <svg className="w-4 h-4 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+              </svg>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-red-800 dark:text-red-300">
+                Holatni o'zgartirishda xatolik
+              </p>
+              <p className="text-sm text-red-600 dark:text-red-400 mt-1">{stateError}</p>
+              <p className="text-xs text-red-500/70 dark:text-red-400/60 mt-2">
+                Sessiya oldingi holatida qoldi. Qayta urinib ko'ring yoki administratorga murojaat qiling.
+              </p>
+            </div>
+            <button
+              onClick={() => setStateError("")}
+              className="flex-shrink-0 text-red-400 hover:text-red-600 dark:text-red-500 dark:hover:text-red-300 transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
           </div>
         )}
 
-        {/* Next step button */}
+        {/* Step buttons */}
         <div className="flex items-center justify-between">
           <p className="text-xs text-gray-400 dark:text-slate-500">
             Hozirgi holat:{" "}
@@ -459,38 +731,54 @@ export default function TestSessionDetailPage() {
               {sortedStates.find((s) => s.id === session.test_state_id)?.name || "—"}
             </span>
           </p>
-          {currentStepIndex < sortedStates.length - 1 && (
-            <button
-              onClick={handleNextStep}
-              disabled={changingState}
-              className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white bg-primary-600 hover:bg-primary-700 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow-md"
-            >
-              {changingState ? (
-                <>
-                  <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                  Jarayon davom etmoqda...
-                </>
-              ) : (
-                <>
-                  Keyingi: {sortedStates[currentStepIndex + 1]?.name}
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                  </svg>
-                </>
-              )}
-            </button>
-          )}
-          {currentStepIndex === sortedStates.length - 1 && (
-            <span className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 rounded-xl">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
-              Barcha bosqichlar yakunlandi
-            </span>
-          )}
+          <div className="flex items-center gap-2">
+            {/* Faqat state 5 dan state 4 ga qaytish tugmasi */}
+            {currentStateKey === 5 && (
+              <button
+                onClick={handlePrevStep}
+                disabled={changingState}
+                className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-gray-700 dark:text-slate-300 bg-gray-100 dark:bg-slate-700 hover:bg-gray-200 dark:hover:bg-slate-600 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+                Faollashtirish
+              </button>
+            )}
+            {/* Keyingi holatga o'tish tugmasi */}
+            {currentStepIndex < sortedStates.length - 1 && (
+              <button
+                onClick={handleNextStep}
+                disabled={changingState}
+                className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white bg-primary-600 hover:bg-primary-700 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow-md"
+              >
+                {changingState ? (
+                  <>
+                    <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    Jarayon davom etmoqda...
+                  </>
+                ) : (
+                  <>
+                    Keyingi: {sortedStates[currentStepIndex + 1]?.name}
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </>
+                )}
+              </button>
+            )}
+            {currentStepIndex === sortedStates.length - 1 && (
+              <span className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 rounded-xl">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                Barcha bosqichlar yakunlandi
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
@@ -519,6 +807,133 @@ export default function TestSessionDetailPage() {
           </p>
         </div>
       </div>
+
+      {/* Student Stats Panel — state >= 3 da ko'rsatiladi */}
+      {studentStats && studentStats.not_ready > 0 && (
+        <div className="glass-card p-6 mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-semibold text-gray-800 dark:text-slate-200">
+              Talabalar holati
+            </h3>
+            <div className="flex items-center gap-2">
+              {!changingState && studentStats.not_ready > 0 && (
+                <button
+                  onClick={handleRetryEmbedding}
+                  disabled={retryingEmbedding}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-amber-600 hover:bg-amber-700 rounded-lg transition disabled:opacity-50"
+                >
+                  {retryingEmbedding ? "Boshlanmoqda..." : "Qayta embedding"}
+                </button>
+              )}
+              <button
+                onClick={() => {
+                  if (!showFailedStudents && session) {
+                    fetchFailedStudents(session);
+                  }
+                  setShowFailedStudents(!showFailedStudents);
+                }}
+                className="text-xs text-primary-600 dark:text-primary-400 hover:underline font-medium"
+              >
+                {showFailedStudents ? "Yopish" : "Batafsil"}
+              </button>
+            </div>
+          </div>
+
+          {/* Stats summary */}
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-4">
+            <div className="bg-gray-50 dark:bg-slate-800 rounded-lg p-3 text-center">
+              <p className="text-lg font-bold text-gray-800 dark:text-slate-200">{studentStats.total}</p>
+              <p className="text-xs text-gray-500 dark:text-slate-400">Jami</p>
+            </div>
+            <div className="bg-emerald-50 dark:bg-emerald-900/20 rounded-lg p-3 text-center">
+              <p className="text-lg font-bold text-emerald-600 dark:text-emerald-400">{studentStats.ready}</p>
+              <p className="text-xs text-emerald-600/70 dark:text-emerald-400/70">Tayyor</p>
+            </div>
+            <div className="bg-red-50 dark:bg-red-900/20 rounded-lg p-3 text-center">
+              <p className="text-lg font-bold text-red-600 dark:text-red-400">{studentStats.not_ready}</p>
+              <p className="text-xs text-red-600/70 dark:text-red-400/70">Tayyor emas</p>
+            </div>
+            <div className="bg-orange-50 dark:bg-orange-900/20 rounded-lg p-3 text-center">
+              <p className="text-lg font-bold text-orange-600 dark:text-orange-400">{studentStats.no_image}</p>
+              <p className="text-xs text-orange-600/70 dark:text-orange-400/70">Rasmsiz</p>
+            </div>
+            <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-3 text-center">
+              <p className="text-lg font-bold text-purple-600 dark:text-purple-400">{studentStats.no_face}</p>
+              <p className="text-xs text-purple-600/70 dark:text-purple-400/70">Yuzsiz</p>
+            </div>
+          </div>
+
+          {/* Tayyor emas bo'lgan studentlar ro'yxati */}
+          {showFailedStudents && (
+            <div className="border border-gray-200 dark:border-slate-700 rounded-xl overflow-hidden">
+              {loadingFailedStudents ? (
+                <div className="text-center py-6 text-gray-400 text-sm">Yuklanmoqda...</div>
+              ) : failedStudents.length === 0 ? (
+                <div className="text-center py-6 text-gray-400 text-sm">Tayyor bo'lmagan talabalar topilmadi</div>
+              ) : (
+                <div className="overflow-x-auto max-h-80 overflow-y-auto">
+                  <table className="w-full text-sm">
+                    <thead className="sticky top-0">
+                      <tr className="bg-gray-50 dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700">
+                        <th className="px-3 py-2 text-left font-medium text-gray-500 dark:text-slate-400">ID</th>
+                        <th className="px-3 py-2 text-left font-medium text-gray-500 dark:text-slate-400">F.I.O</th>
+                        <th className="px-3 py-2 text-center font-medium text-gray-500 dark:text-slate-400">Rasm</th>
+                        <th className="px-3 py-2 text-center font-medium text-gray-500 dark:text-slate-400">Yuz</th>
+                        <th className="px-3 py-2 text-center font-medium text-gray-500 dark:text-slate-400">Amal</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {failedStudents.map((st) => (
+                        <tr key={st.id} className="border-b border-gray-100 dark:border-slate-700/50">
+                          <td className="px-3 py-2 text-gray-500 dark:text-slate-400 font-mono text-xs">{st.id}</td>
+                          <td className="px-3 py-2 font-medium text-gray-800 dark:text-slate-200">
+                            {st.last_name} {st.first_name} {st.middle_name || ""}
+                          </td>
+                          <td className="px-3 py-2 text-center">
+                            <span className={`inline-block w-2.5 h-2.5 rounded-full ${st.is_image ? "bg-emerald-500" : "bg-red-400"}`} />
+                          </td>
+                          <td className="px-3 py-2 text-center">
+                            <span className={`inline-block w-2.5 h-2.5 rounded-full ${st.is_face ? "bg-emerald-500" : "bg-red-400"}`} />
+                          </td>
+                          <td className="px-3 py-2 text-center">
+                            {!st.is_image ? (
+                              <label className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/20 rounded-lg cursor-pointer hover:bg-primary-100 dark:hover:bg-primary-900/30 transition">
+                                {uploadingImageId === st.id ? (
+                                  "Yuklanmoqda..."
+                                ) : (
+                                  <>
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                    </svg>
+                                    Rasm yuklash
+                                  </>
+                                )}
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  className="hidden"
+                                  disabled={uploadingImageId === st.id}
+                                  onChange={(e) => {
+                                    const file = e.target.files?.[0];
+                                    if (file) handleUploadImage(st.id, file);
+                                    e.target.value = "";
+                                  }}
+                                />
+                              </label>
+                            ) : !st.is_face ? (
+                              <span className="text-xs text-gray-400 dark:text-slate-500">Yuz aniqlanmadi</span>
+                            ) : null}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Smenas table */}
       <div className="glass-card overflow-hidden">

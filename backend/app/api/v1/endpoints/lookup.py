@@ -334,3 +334,38 @@ def delete_blacklist(item_id: int, db: Session = Depends(get_db), _: User = Depe
             raise HTTPException(404, "Topilmadi")
     except DuplicateError as e:
         _handle_duplicate(e)
+
+
+# ===================== GENDER =====================
+
+@router.get("/genders", response_model=list[schemas.GenderResponse], tags=["genders"])
+def list_genders(db: Session = Depends(get_db), _: User = Depends(get_current_active_user)):
+    return crud.get_genders(db)
+
+
+@router.post("/genders", response_model=schemas.GenderResponse, status_code=201, tags=["genders"])
+def create_gender(body: schemas.GenderCreate, db: Session = Depends(get_db), _: User = Depends(require_admin)):
+    try:
+        return crud.create_gender(db, body.model_dump())
+    except DuplicateError as e:
+        _handle_duplicate(e)
+
+
+@router.patch("/genders/{item_id}", response_model=schemas.GenderResponse, tags=["genders"])
+def update_gender(item_id: int, body: schemas.GenderUpdate, db: Session = Depends(get_db), _: User = Depends(require_admin)):
+    try:
+        obj = crud.update_gender(db, item_id, body.model_dump(exclude_unset=True))
+    except DuplicateError as e:
+        _handle_duplicate(e)
+    if not obj:
+        raise HTTPException(404, "Topilmadi")
+    return obj
+
+
+@router.delete("/genders/{item_id}", status_code=204, tags=["genders"])
+def delete_gender(item_id: int, db: Session = Depends(get_db), _: User = Depends(require_admin)):
+    try:
+        if not crud.delete_gender(db, item_id):
+            raise HTTPException(404, "Topilmadi")
+    except DuplicateError as e:
+        _handle_duplicate(e)

@@ -130,17 +130,100 @@
 
 @layer utilities {
   .animate-slide-in-right {
-    animation: slideInRight 0.3s ease-out;
+    animation: slideInRight 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+
+  /* Staggered fade-in for detail panel sections */
+  .detail-section {
+    opacity: 0;
+    transform: translateY(12px);
+    animation: detailFadeUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+  .detail-section:nth-child(1) { animation-delay: 0.08s; }
+  .detail-section:nth-child(2) { animation-delay: 0.14s; }
+  .detail-section:nth-child(3) { animation-delay: 0.2s; }
+  .detail-section:nth-child(4) { animation-delay: 0.26s; }
+  .detail-section:nth-child(5) { animation-delay: 0.32s; }
+
+  /* Detail panel wrapper transitions for smooth open/close */
+  .detail-panel-wrapper {
+    transition: width 0.4s cubic-bezier(0.16, 1, 0.3, 1),
+                margin 0.4s cubic-bezier(0.16, 1, 0.3, 1),
+                opacity 0.3s ease;
+  }
+  .detail-panel-wrapper.closed {
+    width: 0;
+    margin-left: 0;
+    opacity: 0;
+    overflow: hidden;
+    pointer-events: none;
+  }
+  .detail-panel-wrapper.open {
+    width: 460px;
+    margin-left: 1.25rem;
+    opacity: 1;
+  }
+
+  /* Header photo scale-in */
+  .detail-photo-animate {
+    animation: photoScaleIn 0.45s cubic-bezier(0.16, 1, 0.3, 1) 0.1s forwards;
+    opacity: 0;
+    transform: scale(0.8);
+  }
+
+  /* Header text slide-in */
+  .detail-header-text {
+    animation: detailFadeUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) 0.15s forwards;
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  /* Snackbar slide up */
+  .animate-slide-up {
+    animation: slideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   }
 }
 
 @keyframes slideInRight {
   from {
     opacity: 0;
-    transform: translateX(24px);
+    transform: translateX(40px) scale(0.97);
   }
   to {
     opacity: 1;
-    transform: translateX(0);
+    transform: translateX(0) scale(1);
+  }
+}
+
+@keyframes detailFadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes photoScaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 20px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
   }
 }

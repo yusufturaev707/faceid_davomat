@@ -26,6 +26,7 @@ import RolesPage from "./pages/RolesPage";
 import ReasonsPage from "./pages/ReasonsPage";
 import ReasonTypesPage from "./pages/ReasonTypesPage";
 import BlacklistPage from "./pages/BlacklistPage";
+import GendersPage from "./pages/GendersPage";
 import VerifyTwoFacePage from "./pages/VerifyTwoFacePage";
 import StudentsPage from "./pages/StudentsPage";
 import StudentLogsPage from "./pages/StudentLogsPage";
@@ -70,6 +71,7 @@ export default function App() {
             <Route path="/manage-reasons" element={<ReasonsPage />} />
             <Route path="/manage-reason-types" element={<ReasonTypesPage />} />
             <Route path="/manage-blacklist" element={<BlacklistPage />} />
+            <Route path="/manage-genders" element={<GendersPage />} />
           </Route>
         </Route>
       </Route>

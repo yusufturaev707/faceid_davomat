@@ -186,3 +186,22 @@ class StudentBlacklistResponse(BaseModel):
     description: str | None
     created_at: datetime
     model_config = {"from_attributes": True}
+
+
+# ---- Gender ----
+class GenderCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=255)
+    key: int
+    is_active: bool = True
+
+class GenderUpdate(BaseModel):
+    name: str | None = Field(default=None, max_length=255)
+    key: int | None = None
+    is_active: bool | None = None
+
+class GenderResponse(BaseModel):
+    id: int
+    name: str
+    key: int
+    is_active: bool
+    model_config = {"from_attributes": True}

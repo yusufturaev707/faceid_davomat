@@ -44,6 +44,17 @@ class Settings(BaseSettings):
     REDIS_URL: str
     TASK_RESULT_TTL: int
 
+    # Backpressure
+    QUEUE_MAX_SIZE: int = 100
+    BACKPRESSURE_RETRY_AFTER: int = 5
+
+    # Celery tuning
+    TASK_TIME_LIMIT: int = 30
+    WORKER_MAX_TASKS_PER_CHILD: int = 500
+
+    # Image decoder
+    MAX_IMAGE_DIMENSION: int = 4096
+
     # Cookie
     COOKIE_SECURE: bool = True
 
@@ -55,6 +66,7 @@ class Settings(BaseSettings):
     API_MS: str = ""
     API_IIV: str = ""
     API_IIV_TOKEN: str = ""
+    API_GTSP: str = ""
 
     class Config:
         env_file = ".env"

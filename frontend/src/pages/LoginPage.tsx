@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
-import ThemeSwitcher from "../components/ThemeSwitcher";
+
 import { extractErrorMessage } from "../utils/errorMessage";
 
 export default function LoginPage() {
@@ -31,10 +31,6 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary-50 via-white to-primary-100 dark:from-slate-900 dark:via-slate-900 dark:to-slate-800 px-4 relative">
-      {/* Theme switcher top-right */}
-      <div className="absolute top-6 right-6">
-        <ThemeSwitcher compact />
-      </div>
 
       <div className="w-full max-w-sm">
         {/* Logo */}

@@ -4,6 +4,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models.cheating_log import CheatingLog
+from app.models.gender import Gender
 from app.models.reason import Reason
 from app.models.region import Region
 from app.models.smena import Smena
@@ -37,6 +38,7 @@ def _student_to_dict(
     smena_name: str | None = None,
     test_session_id: int | None = None,
     test_name: str | None = None,
+    gender_name: str | None = None,
     include_large_fields: bool = False,
 ) -> dict:
     result = {
@@ -74,6 +76,8 @@ def _student_to_dict(
             "ps_ser": ps_data.ps_ser,
             "ps_num": ps_data.ps_num,
             "phone": ps_data.phone,
+            "gender_id": ps_data.gender_id,
+            "gender_name": gender_name,
         }
         if include_large_fields:
             ps_dict["ps_img"] = ps_data.ps_img
@@ -95,8 +99,10 @@ def _build_student_query():
             Smena.name.label("smena_name"),
             TestSessionSmena.test_session_id.label("test_session_id"),
             Test.name.label("test_name"),
+            Gender.name.label("gender_name"),
         )
         .outerjoin(StudentPsData, Student.id == StudentPsData.student_id)
+        .outerjoin(Gender, StudentPsData.gender_id == Gender.id)
         .outerjoin(Zone, Student.zone_id == Zone.id)
         .outerjoin(Region, Zone.region_id == Region.id)
         .outerjoin(
@@ -209,11 +215,38 @@ def get_students_paginated(
         _student_to_dict(
             student, ps_data,
             zone_name=zn, region_name=rn, smena_name=sn,
-            test_session_id=tsid, test_name=tn,
+            test_session_id=tsid, test_name=tn, gender_name=gn,
         )
-        for student, ps_data, zn, rn, sn, tsid, tn in rows
+        for student, ps_data, zn, rn, sn, tsid, tn, gn in rows
     ]
     return items, total
+
+
+def get_students_by_session_and_zone(
+    db: Session,
+    *,
+    test_session_id: int,
+    zone_id: int,
+) -> list[dict]:
+    """Test sessiya va zonaga tegishli barcha studentlarni olish."""
+    stmt = (
+        _build_student_query()
+        .where(
+            TestSessionSmena.test_session_id == test_session_id,
+            Student.zone_id == zone_id,
+        )
+        .order_by(Student.last_name, Student.first_name)
+    )
+    rows = db.execute(stmt).all()
+    return [
+        _student_to_dict(
+            student, ps_data,
+            zone_name=zn, region_name=rn, smena_name=sn,
+            test_session_id=tsid, test_name=tn, gender_name=gn,
+            include_large_fields=True,
+        )
+        for student, ps_data, zn, rn, sn, tsid, tn, gn in rows
+    ]
 
 
 def get_student(db: Session, student_id: int) -> dict | None:
@@ -221,11 +254,11 @@ def get_student(db: Session, student_id: int) -> dict | None:
     row = db.execute(stmt).first()
     if not row:
         return None
-    student, ps_data, zn, rn, sn, tsid, tn = row
+    student, ps_data, zn, rn, sn, tsid, tn, gn = row
     return _student_to_dict(
         student, ps_data,
         zone_name=zn, region_name=rn, smena_name=sn,
-        test_session_id=tsid, test_name=tn,
+        test_session_id=tsid, test_name=tn, gender_name=gn,
         include_large_fields=True,
     )
 
@@ -265,13 +298,52 @@ def delete_student(db: Session, student_id: int) -> bool:
     student = db.get(Student, student_id)
     if not student:
         return False
+
+    session_smena_id = student.session_smena_id
+
     # Delete related records that reference this student
     db.query(CheatingLog).filter(CheatingLog.student_id == student_id).delete()
     db.query(StudentLog).filter(StudentLog.student_id == student_id).delete()
     db.query(StudentPsData).filter(StudentPsData.student_id == student_id).delete()
     db.delete(student)
+    db.flush()
+
+    # TestSession dagi count_total_student ni haqiqiy student soni bilan yangilash
+    _sync_session_student_count(db, session_smena_id)
+
     db.commit()
     return True
+
+
+def _sync_session_student_count(db: Session, session_smena_id: int) -> None:
+    """TestSession.count_total_student ni DB dagi haqiqiy student soniga sinxronlash."""
+    smena = db.get(TestSessionSmena, session_smena_id)
+    if not smena:
+        return
+    test_session = db.get(TestSession, smena.test_session_id)
+    if not test_session:
+        return
+
+    # Shu sessiyaga tegishli barcha smena ID lari
+    smena_ids = [
+        row[0]
+        for row in db.execute(
+            select(TestSessionSmena.id).where(
+                TestSessionSmena.test_session_id == test_session.id
+            )
+        )
+    ]
+    # Haqiqiy student soni
+    actual_count = (
+        db.scalar(
+            select(func.count(Student.id)).where(
+                Student.session_smena_id.in_(smena_ids)
+            )
+        )
+        if smena_ids
+        else 0
+    )
+    test_session.count_total_student = actual_count
 
 
 # ===================== StudentLog =====================

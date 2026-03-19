@@ -23,6 +23,7 @@ async def lifespan(app: FastAPI):
     logger.info("DB ulanishi muvaffaqiyatli!")
 
     # InsightFace modelni background threadda yuklash
+    # (embedding endpoint sinxron ishlatadi, shuning uchun kerak)
     threading.Thread(target=init_face_app, daemon=True).start()
 
     yield

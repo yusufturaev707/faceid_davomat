@@ -42,14 +42,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (!cancelled) setUser(me);
         }
       } catch {
-        setAccessToken(null);
+        if (!cancelled) setAccessToken(null);
       } finally {
         if (!cancelled) setLoading(false);
       }
     };
-    init();
+    // Brauzer cookie ni saqlashiga vaqt berish (Ctrl+Shift+R)
+    const timerId = setTimeout(init, 50);
     return () => {
       cancelled = true;
+      clearTimeout(timerId);
     };
   }, []);
 
