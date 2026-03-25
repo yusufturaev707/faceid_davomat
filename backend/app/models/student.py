@@ -28,8 +28,8 @@ class Student(Base):
     subject_name: Mapped[str | None] = mapped_column(String(100))
 
     # cefr
-    lang_id: Mapped[int] = mapped_column(default=0)
-    level_id: Mapped[int] = mapped_column(default=0)
+    lang_id: Mapped[int] = mapped_column(default=1)
+    level_id: Mapped[int] = mapped_column(default=8)
 
     # state
     is_ready: Mapped[bool] = mapped_column(default=False)

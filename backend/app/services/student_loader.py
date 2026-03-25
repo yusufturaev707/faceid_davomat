@@ -155,8 +155,8 @@ def _parse_cefr(item: dict, zone_map: dict[int, int]) -> tuple[dict, dict] | Non
         "e_date": e_date,
         "subject_id": 1,
         "subject_name": "CEFR",
-        "lang_id": int(item.get("lang_id", 0)),
-        "level_id": int(item.get("level_id", 0)),
+        "lang_id": item.get("lang_id", 1),
+        "level_id": item.get("level_id", 8),
         "_smena_number": int(item.get("smen", 1)),
         "_day": e_date_str,
     }
@@ -321,7 +321,9 @@ def load_students_for_session(db: Session, session: TestSession) -> int:
     # Blacklist IMEI lari to'plami
     blacklist_imeis: set[str] = set(
         row[0]
-        for row in db.execute(select(StudentBlacklist.imei).where(StudentBlacklist.imei.isnot(None)))
+        for row in db.execute(
+            select(StudentBlacklist.imei).where(StudentBlacklist.imei.isnot(None))
+        )
         if row[0]
     )
 
