@@ -3,6 +3,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.core.permissions import ALL_PERMISSIONS, P
 from app.crud.permission import (
     assign_permissions_to_role,
     create_permission,
@@ -10,11 +11,10 @@ from app.crud.permission import (
     get_all_permissions,
     get_all_roles_with_permissions,
     get_permission_by_codename,
-    get_permission_by_id,
     get_role_with_permissions,
     update_permission,
 )
-from app.dependencies import get_db, require_admin
+from app.dependencies import PermissionChecker, get_db
 from app.models.user import User
 from app.schemas.permission import (
     AssignPermissionsRequest,
@@ -27,12 +27,30 @@ from app.schemas.permission import (
 router = APIRouter()
 
 
+@router.get(
+    "/catalog",
+    summary="Kod bazasidagi permission katalogi (frontend constants manbai)",
+)
+def permission_catalog() -> dict:
+    """Backend `P` katalogini qaytaradi — frontend type generation uchun.
+    Autentifikatsiya talab qilinmaydi, chunki maxfiy ma'lumot emas (kod-nomlar).
+    """
+    return {
+        "permissions": [
+            {"code": p.code, "name": p.name, "group": p.group}
+            for p in ALL_PERMISSIONS
+        ],
+        "groups": sorted({p.group for p in ALL_PERMISSIONS}),
+    }
+
+
 # ---- Permission CRUD ----
+
 
 @router.get("", response_model=list[PermissionResponse], summary="Barcha permissionlar")
 def list_permissions(
     db: Session = Depends(get_db),
-    _admin: User = Depends(require_admin),
+    _: User = Depends(PermissionChecker(P.PERMISSION_READ.code, P.ROLE_READ.code)),
 ) -> list[PermissionResponse]:
     return get_all_permissions(db)
 
@@ -41,7 +59,7 @@ def list_permissions(
 def create_new_permission(
     data: PermissionCreate,
     db: Session = Depends(get_db),
-    _admin: User = Depends(require_admin),
+    _: User = Depends(PermissionChecker(P.PERMISSION_CREATE.code)),
 ) -> PermissionResponse:
     existing = get_permission_by_codename(db, data.codename)
     if existing:
@@ -57,7 +75,7 @@ def update_existing_permission(
     perm_id: int,
     data: PermissionUpdate,
     db: Session = Depends(get_db),
-    _admin: User = Depends(require_admin),
+    _: User = Depends(PermissionChecker(P.PERMISSION_UPDATE.code)),
 ) -> PermissionResponse:
     perm = update_permission(db, perm_id, data.model_dump(exclude_unset=True))
     if not perm:
@@ -69,13 +87,14 @@ def update_existing_permission(
 def delete_existing_permission(
     perm_id: int,
     db: Session = Depends(get_db),
-    _admin: User = Depends(require_admin),
+    _: User = Depends(PermissionChecker(P.PERMISSION_DELETE.code)),
 ):
     if not delete_permission(db, perm_id):
         raise HTTPException(status_code=404, detail="Permission topilmadi")
 
 
 # ---- Role-Permission management ----
+
 
 @router.get(
     "/roles",
@@ -84,7 +103,7 @@ def delete_existing_permission(
 )
 def list_roles_with_permissions(
     db: Session = Depends(get_db),
-    _admin: User = Depends(require_admin),
+    _: User = Depends(PermissionChecker(P.ROLE_READ.code)),
 ) -> list[RolePermissionsResponse]:
     return get_all_roles_with_permissions(db)
 
@@ -97,7 +116,7 @@ def list_roles_with_permissions(
 def get_role_permissions(
     role_id: int,
     db: Session = Depends(get_db),
-    _admin: User = Depends(require_admin),
+    _: User = Depends(PermissionChecker(P.ROLE_READ.code)),
 ) -> RolePermissionsResponse:
     role = get_role_with_permissions(db, role_id)
     if not role:
@@ -114,7 +133,7 @@ def set_role_permissions(
     role_id: int,
     data: AssignPermissionsRequest,
     db: Session = Depends(get_db),
-    _admin: User = Depends(require_admin),
+    _: User = Depends(PermissionChecker(P.ROLE_UPDATE.code)),
 ) -> RolePermissionsResponse:
     role = assign_permissions_to_role(db, role_id, data.permission_ids)
     if not role:

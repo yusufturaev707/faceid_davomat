@@ -1,5 +1,6 @@
 import LookupCrudPage from "../components/LookupCrudPage";
 import { getSessionStatesListApi, createSessionStateApi, updateSessionStateApi, deleteSessionStateApi } from "../api";
+import { PERM } from "../permissions";
 
 export default function SessionStatesPage() {
   return (
@@ -19,6 +20,9 @@ export default function SessionStatesPage() {
       createItem={createSessionStateApi}
       updateItem={updateSessionStateApi}
       deleteItem={deleteSessionStateApi}
+      createPermission={PERM.LOOKUP_CREATE}
+      updatePermission={PERM.LOOKUP_UPDATE}
+      deletePermission={PERM.LOOKUP_DELETE}
     />
   );
 }

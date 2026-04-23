@@ -1,5 +1,6 @@
 import LookupCrudPage from "../components/LookupCrudPage";
 import { getRegionsListApi, createRegionApi, updateRegionApi, deleteRegionApi } from "../api";
+import { PERM } from "../permissions";
 
 export default function RegionsPage() {
   return (
@@ -19,6 +20,9 @@ export default function RegionsPage() {
       createItem={createRegionApi}
       updateItem={updateRegionApi}
       deleteItem={deleteRegionApi}
+      createPermission={PERM.LOOKUP_CREATE}
+      updatePermission={PERM.LOOKUP_UPDATE}
+      deletePermission={PERM.LOOKUP_DELETE}
     />
   );
 }

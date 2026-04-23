@@ -33,10 +33,8 @@ class Student(Base):
 
     # state
     is_ready: Mapped[bool] = mapped_column(default=False)
-    is_face: Mapped[bool] = mapped_column(
-        default=False
-    )  # is have face detection in image
-    is_image: Mapped[bool] = mapped_column(default=False)  # is have image
+    is_face: Mapped[bool] = mapped_column(default=False)
+    is_image: Mapped[bool] = mapped_column(default=False)
     is_cheating: Mapped[bool] = mapped_column(default=False)
     is_blacklist: Mapped[bool] = mapped_column(default=False)
     is_entered: Mapped[bool] = mapped_column(default=False)

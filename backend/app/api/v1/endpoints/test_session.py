@@ -28,10 +28,12 @@ from app.crud.test_session import (
     remove_smena_from_session,
     update_test_session,
 )
-from app.dependencies import get_current_active_user, get_db, require_admin
+from app.core.permissions import P
+from app.dependencies import PermissionChecker, get_current_active_user, get_db
 from app.models.session_state import SessionState
 from app.models.test_session import TestSession
 from app.models.user import User
+from app.models.zone import Zone
 from app.schemas.student import StudentResponse
 from app.schemas.test_session import (
     ActiveSmenaResponse,
@@ -53,6 +55,43 @@ from app.tasks.verify_task import process_embeddings, process_retry_embeddings
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _resolve_effective_zone(
+    db: Session, current_user: User, requested_zone_id: int | None
+) -> tuple[int, str]:
+    """Client tomonidan uzatilgan `zone_id`ni tekshirib, effective
+    (zone_id, zone_name) juftligini qaytaradi.
+
+    Xatti-harakat:
+    - `requested_zone_id` None bo'lsa — foydalanuvchining o'z zonasi ishlatiladi
+      (eski xulq-atvor saqlanadi).
+    - Aks holda — berilgan zona user region'iga tegishliligi tekshiriladi.
+      Tegishli emas bo'lsa 403 qaytadi. Shu bilan bir userning boshqa
+      region zonalariga ma'lumot so'rashi bloklanadi.
+    """
+    user_zone_id = current_user.zone_id
+    user_region_id = current_user.region_id
+    user_zone_name = current_user.zone_name or ""
+
+    if requested_zone_id is None or requested_zone_id == user_zone_id:
+        return int(user_zone_id) if user_zone_id else 0, user_zone_name
+
+    if not user_region_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Foydalanuvchiga region biriktirilmagan",
+        )
+
+    zone = db.get(Zone, int(requested_zone_id))
+    if not zone:
+        raise HTTPException(status_code=404, detail="Zone topilmadi")
+    if int(zone.region_id) != int(user_region_id):
+        raise HTTPException(
+            status_code=403,
+            detail="Tanlangan zone foydalanuvchi regioniga tegishli emas",
+        )
+    return int(zone.id), zone.name
 
 
 # --- Справочники (lookups) ---
@@ -90,27 +129,38 @@ def list_session_states(
 
 @router.get("/active", response_model=list[ActiveTestSessionResponse])
 def list_active_sessions(
+    zone_id: int | None = Query(
+        default=None,
+        description=(
+            "Ixtiyoriy: boshqa zonaga (bino) bog'liq statistikani olish uchun. "
+            "Bo'sh bo'lsa — foydalanuvchining o'z zonasi ishlatiladi. "
+            "Berilgan zona user region'iga tegishli bo'lishi shart."
+        ),
+    ),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
     """Barcha aktiv test sessiyalar ro'yxati (is_active=True).
 
-    Har bir sessiya uchun joriy foydalanuvchi zonasidagi student soni va zona nomi qaytariladi.
+    Har bir sessiya uchun `zone_id` (yoki user zonasi) bo'yicha student soni
+    va zona nomi qaytariladi. Desktop tomonidan region ichidagi har qanday
+    zone tanlash uchun ishlatiladi.
     """
     sessions = get_active_test_sessions(db)
-    zone_id = current_user.zone_id
-    zone_name = current_user.zone_name if zone_id else ""
+    effective_zone_id, effective_zone_name = _resolve_effective_zone(
+        db, current_user, zone_id
+    )
 
     result = []
     for session in sessions:
         data = ActiveTestSessionResponse.model_validate(session)
-        data.zone_name = zone_name
-        if zone_id:
+        data.zone_name = effective_zone_name
+        if effective_zone_id:
             data.zone_student_count = count_students_by_session_and_zone(
-                db, test_session_id=session.id, zone_id=zone_id
+                db, test_session_id=session.id, zone_id=effective_zone_id
             )
             smena_counts = count_students_per_smena_by_zone(
-                db, test_session_id=session.id, zone_id=zone_id
+                db, test_session_id=session.id, zone_id=effective_zone_id
             )
             for smena in data.smenas:
                 smena.sm_student_count = smena_counts.get(smena.id, 0)
@@ -125,7 +175,7 @@ def list_sessions(
     is_active: bool | None = None,
     test_id: int | None = None,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_active_user),
+    _: User = Depends(PermissionChecker(P.TEST_SESSION_READ.code)),
 ):
     """Test sessiyalar ro'yxati (pagination bilan)."""
     items, total = get_test_sessions_paginated(
@@ -143,14 +193,24 @@ def list_sessions(
 @router.get("/{session_id}/students", response_model=list[StudentResponse])
 def list_session_students(
     session_id: int,
+    zone_id: int | None = Query(
+        default=None,
+        description=(
+            "Ixtiyoriy: boshqa zonaga (bino) bog'liq studentlarni olish uchun. "
+            "Bo'sh bo'lsa — foydalanuvchining o'z zonasi ishlatiladi. "
+            "Berilgan zona user region'iga tegishli bo'lishi shart."
+        ),
+    ),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
-    """Sessiyaga tegishli studentlar ro'yxati (faqat userni zonasidagi studentlar).
+    """Sessiyaga tegishli studentlar ro'yxati (tanlangan zona bo'yicha).
 
-    Joriy foydalanuvchining zone_id si orqali filtrlaydi.
-    """
-    if not current_user.zone_id:
+    Agar `zone_id` berilgan bo'lsa va u user region'iga tegishli bo'lsa —
+    shu zona studentlarini qaytaradi. Aks holda user o'zining zonasidagi
+    studentlarni oladi."""
+    effective_zone_id, _name = _resolve_effective_zone(db, current_user, zone_id)
+    if not effective_zone_id:
         raise HTTPException(
             status_code=400,
             detail="Foydalanuvchiga zona biriktirilmagan",
@@ -161,7 +221,7 @@ def list_session_students(
         raise HTTPException(status_code=404, detail="Sessiya topilmadi")
 
     return get_students_by_session_and_zone(
-        db, test_session_id=session_id, zone_id=current_user.zone_id
+        db, test_session_id=session_id, zone_id=effective_zone_id
     )
 
 
@@ -169,7 +229,7 @@ def list_session_students(
 def get_session(
     session_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_active_user),
+    _: User = Depends(PermissionChecker(P.TEST_SESSION_READ.code)),
 ):
     """Bitta test sessiyani olish."""
     session = get_test_session(db, session_id)
@@ -182,9 +242,9 @@ def get_session(
 def create_session(
     body: TestSessionCreate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_admin),
+    _: User = Depends(PermissionChecker(P.TEST_SESSION_CREATE.code)),
 ):
-    """Yangi test sessiya yaratish (faqat admin).
+    """Yangi test sessiya yaratish.
 
     - test tanlash
     - kunlar va smenalar belgilash
@@ -217,9 +277,9 @@ def update_session(
     session_id: int,
     body: TestSessionUpdate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_admin),
+    _: User = Depends(PermissionChecker(P.TEST_SESSION_UPDATE.code)),
 ):
-    """Test sessiyani yangilash (faqat admin). Holatni o'zgartirish uchun /state endpointdan foydalaning."""
+    """Test sessiyani yangilash. Holatni o'zgartirish uchun /state endpointdan foydalaning."""
     data = body.model_dump(exclude_unset=True)
     if not data:
         raise HTTPException(status_code=400, detail="O'zgartirish uchun maydon berilmadi")
@@ -242,7 +302,7 @@ def change_state(
     session_id: int,
     body: ChangeStateRequest,
     db: Session = Depends(get_db),
-    _: User = Depends(require_admin),
+    _: User = Depends(PermissionChecker(P.TEST_SESSION_UPDATE.code)),
 ):
     """Sessiya holatini o'zgartirish.
 
@@ -360,7 +420,7 @@ def _rollback_state(db: Session, session_id: int, previous_state_id: int) -> Non
 @router.get("/{session_id}/embedding-progress")
 def embedding_progress(
     session_id: int,
-    _: User = Depends(get_current_active_user),
+    _: User = Depends(PermissionChecker(P.TEST_SESSION_READ.code)),
 ):
     """Embedding jarayoni progressini olish (Redis dan)."""
     progress = get_embedding_progress(session_id)
@@ -377,7 +437,7 @@ def embedding_progress(
 def session_student_stats(
     session_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_active_user),
+    _: User = Depends(PermissionChecker(P.TEST_SESSION_READ.code)),
 ):
     """Sessiya studentlari statistikasi: jami, tayyor, rasmsiz, yuzsiz."""
     from sqlalchemy import func, select as sa_select
@@ -416,11 +476,188 @@ def session_student_stats(
     }
 
 
+@router.get("/smenas/{smena_id}/attendance-stats")
+def smena_attendance_stats(
+    smena_id: int,
+    zone_id: int | None = Query(
+        default=None,
+        description=(
+            "Ixtiyoriy: tanlangan zona bo'yicha davomat statistikasini olish. "
+            "Bo'sh bo'lsa — user o'z zonasi. Zona user region'iga tegishli bo'lishi shart."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Smena + bino (zone) kesimida davomat statistikasi.
+
+    Tanlangan `zone_id` (yoki user o'zining zonasi) va berilgan smena bo'yicha
+    jami, kirgan, kirmagan va chetlatilgan (cheating) sonini qaytaradi.
+    """
+    effective_zone_id, _name = _resolve_effective_zone(db, current_user, zone_id)
+    if not effective_zone_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Foydalanuvchiga zona biriktirilmagan",
+        )
+
+    from sqlalchemy import func, select as sa_select
+    from app.models.student import Student
+
+    base = (
+        (Student.session_smena_id == smena_id)
+        & (Student.zone_id == effective_zone_id)
+    )
+    total = db.scalar(sa_select(func.count(Student.id)).where(base)) or 0
+    entered = db.scalar(
+        sa_select(func.count(Student.id)).where(base, Student.is_entered.is_(True))
+    ) or 0
+    cheating = db.scalar(
+        sa_select(func.count(Student.id)).where(base, Student.is_cheating.is_(True))
+    ) or 0
+
+    return {
+        "total": total,
+        "entered": entered,
+        "not_entered": max(0, total - entered),
+        "cheating": cheating,
+    }
+
+
+@router.get("/smenas/{smena_id}/attendance-by-region")
+def smena_attendance_by_region(
+    smena_id: int,
+    zone_id: int | None = Query(
+        default=None,
+        description=(
+            "Tanlangan/aktiv bino. Berilmasa — user o'zining zonasi. "
+            "Region shu zonadan aniqlanadi va bino bu region ichida bo'lishi shart."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Smena + region kesimida har bir bino bo'yicha davomat statistikasi.
+
+    Qaytaradi:
+      - test_day, smena_number, smena_name (test_session_smena dan);
+      - region_id, region_name (aktiv zonadan kelib chiqib);
+      - active_zone_id (tanlangan bino — chiroyli highlight uchun);
+      - zones: shu region'dagi har bino bo'yicha
+        {zone_id, zone_name, zone_number, total, entered, not_entered, cheating, is_active}.
+
+    Bitta GROUP BY query orqali samarali ravishda olinadi.
+    """
+    from sqlalchemy import case, func, select as sa_select
+    from app.models.region import Region
+    from app.models.smena import Smena
+    from app.models.student import Student
+    from app.models.test_session_smena import TestSessionSmena
+
+    effective_zone_id, _name = _resolve_effective_zone(db, current_user, zone_id)
+    if not effective_zone_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Foydalanuvchiga zona biriktirilmagan",
+        )
+
+    tss_row = db.execute(
+        sa_select(
+            TestSessionSmena.id,
+            TestSessionSmena.day,
+            TestSessionSmena.number,
+            Smena.name,
+        )
+        .join(Smena, Smena.id == TestSessionSmena.test_smena_id)
+        .where(TestSessionSmena.id == smena_id)
+    ).first()
+    if not tss_row:
+        raise HTTPException(status_code=404, detail="Smena topilmadi")
+
+    active_zone = db.execute(
+        sa_select(Zone.id, Zone.name, Zone.number, Zone.region_id).where(
+            Zone.id == effective_zone_id
+        )
+    ).first()
+    if not active_zone:
+        raise HTTPException(status_code=404, detail="Bino topilmadi")
+
+    region_id = active_zone.region_id
+    region_row = db.execute(
+        sa_select(Region.id, Region.name).where(Region.id == region_id)
+    ).first()
+
+    zones_in_region = db.execute(
+        sa_select(Zone.id, Zone.name, Zone.number)
+        .where(Zone.region_id == region_id, Zone.is_active.is_(True))
+        .order_by(Zone.number, Zone.name)
+    ).all()
+
+    zone_ids = [z.id for z in zones_in_region]
+    stats_by_zone: dict[int, dict] = {
+        z.id: {"total": 0, "entered": 0, "cheating": 0} for z in zones_in_region
+    }
+
+    if zone_ids:
+        rows = db.execute(
+            sa_select(
+                Student.zone_id,
+                func.count(Student.id).label("total"),
+                func.sum(case((Student.is_entered.is_(True), 1), else_=0)).label(
+                    "entered"
+                ),
+                func.sum(case((Student.is_cheating.is_(True), 1), else_=0)).label(
+                    "cheating"
+                ),
+            )
+            .where(
+                Student.session_smena_id == smena_id,
+                Student.zone_id.in_(zone_ids),
+            )
+            .group_by(Student.zone_id)
+        ).all()
+        for row in rows:
+            stats_by_zone[row.zone_id] = {
+                "total": int(row.total or 0),
+                "entered": int(row.entered or 0),
+                "cheating": int(row.cheating or 0),
+            }
+
+    zones_payload = []
+    for z in zones_in_region:
+        s = stats_by_zone.get(z.id, {"total": 0, "entered": 0, "cheating": 0})
+        total = s["total"]
+        entered = s["entered"]
+        zones_payload.append(
+            {
+                "zone_id": z.id,
+                "zone_name": z.name,
+                "zone_number": z.number,
+                "total": total,
+                "entered": entered,
+                "not_entered": max(0, total - entered),
+                "cheating": s["cheating"],
+                "is_active": z.id == effective_zone_id,
+            }
+        )
+
+    return {
+        "test_day": tss_row.day.isoformat() if tss_row.day else None,
+        "smena_number": tss_row.number,
+        "smena_name": tss_row.name,
+        "region_id": region_row.id if region_row else region_id,
+        "region_name": region_row.name if region_row else "",
+        "active_zone_id": effective_zone_id,
+        "active_zone_name": active_zone.name,
+        "zones": zones_payload,
+    }
+
+
 @router.post("/{session_id}/retry-embedding")
 def retry_embedding(
     session_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_admin),
+    _: User = Depends(PermissionChecker(P.TEST_SESSION_UPDATE.code)),
 ):
     """Faqat is_ready=False bo'lgan studentlar uchun qayta embedding olish.
 
@@ -466,9 +703,9 @@ def retry_embedding(
 def delete_session(
     session_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_admin),
+    _: User = Depends(PermissionChecker(P.TEST_SESSION_DELETE.code)),
 ):
-    """Test sessiyani o'chirish (faqat admin)."""
+    """Test sessiyani o'chirish."""
     try:
         if not delete_test_session(db, session_id):
             raise HTTPException(status_code=404, detail="Sessiya topilmadi")
@@ -488,7 +725,7 @@ def add_smena(
     session_id: int,
     body: TestSessionSmenaCreate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_admin),
+    _: User = Depends(PermissionChecker(P.TEST_SESSION_UPDATE.code)),
 ):
     """Sessiyaga smena qo'shish."""
     session = get_test_session(db, session_id)
@@ -512,7 +749,7 @@ def remove_smena(
     session_id: int,
     smena_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_admin),
+    _: User = Depends(PermissionChecker(P.TEST_SESSION_UPDATE.code)),
 ):
     """Sessiyadan smena olib tashlash."""
     if not remove_smena_from_session(db, smena_id):

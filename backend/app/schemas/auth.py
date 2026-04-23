@@ -9,6 +9,7 @@ class UserResponse(BaseModel):
     role_key: int
     zone_id: int | None = None
     zone_name: str = ""
+    region_id: int | None = None
     region_name: str = ""
     telegram_id: str | None = None
     is_active: bool

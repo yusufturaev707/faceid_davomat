@@ -1,4 +1,4 @@
-from sqlalchemy import BigInteger, ForeignKey, String, Text
+from sqlalchemy import BigInteger, ForeignKey, LargeBinary, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -12,6 +12,6 @@ class StudentPsData(Base):
     ps_ser: Mapped[str] = mapped_column(String(5))
     ps_num: Mapped[str] = mapped_column(String(10))
     phone: Mapped[str | None] = mapped_column(String(13), nullable=True)
-    ps_img: Mapped[str | None] = mapped_column(Text, nullable=True)
-    embedding: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ps_img: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    embedding: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     gender_id: Mapped[int | None] = mapped_column(ForeignKey("gender.id"), nullable=True)

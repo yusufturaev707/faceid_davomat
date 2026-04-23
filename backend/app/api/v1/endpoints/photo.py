@@ -6,11 +6,12 @@ Backpressure: queue to'lganda HTTP 429 qaytaradi (Retry-After header bilan).
 import logging
 
 import redis
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.celery_app import celery_app
 from app.config import settings
+from app.core.rate_limit import limiter
 from app.dependencies import get_current_active_user, get_db
 from app.models.user import User
 from app.schemas.photo import (
@@ -85,8 +86,10 @@ def _check_queue_backpressure(queue_name: str = "verify") -> None:
     summary="Rasmni tekshirishga yuborish",
     description="Rasmni Celery navbatiga yuboradi va task_id qaytaradi. Natijani /verify-photo/status/{task_id} orqali oling.",
 )
+@limiter.limit("30/minute")
 def submit_verify_photo(
-    request: PhotoVerifyRequest,
+    request: Request,
+    payload: PhotoVerifyRequest,
     current_user: User = Depends(get_current_active_user),
     _db: Session = Depends(get_db),
 ) -> TaskSubmitResponse:
@@ -94,8 +97,8 @@ def submit_verify_photo(
     _check_queue_backpressure("verify")
 
     task = process_verify_photo.delay(
-        img_b64=request.img_b64,
-        age=request.age,
+        img_b64=payload.img_b64,
+        age=payload.age,
         user_id=current_user.id,
     )
     logger.info("Rasm tekshiruvi yuborildi: task_id=%s, user_id=%d", task.id, current_user.id)
@@ -144,16 +147,18 @@ def get_task_status(
     summary="Ikki yuzni solishtirishga yuborish",
     description="Ikki rasmni Celery navbatiga yuboradi va task_id qaytaradi.",
 )
+@limiter.limit("30/minute")
 def submit_verify_two_face(
-    request: TwoFaceVerifyRequest,
+    request: Request,
+    payload: TwoFaceVerifyRequest,
     current_user: User = Depends(get_current_active_user),
 ) -> TaskSubmitResponse:
     """Ikki yuzni solishtirish taskini navbatga qo'shish."""
     _check_queue_backpressure("verify")
 
     task = process_verify_two_faces.delay(
-        ps_img_b64=request.ps_img,
-        lv_img_b64=request.lv_img,
+        ps_img_b64=payload.ps_img,
+        lv_img_b64=payload.lv_img,
         user_id=current_user.id,
     )
     logger.info("Ikki yuz solishtirish yuborildi: task_id=%s, user_id=%d", task.id, current_user.id)

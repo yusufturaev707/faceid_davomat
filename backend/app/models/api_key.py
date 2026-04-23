@@ -11,7 +11,7 @@ class ApiKey(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
-    key_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    key_hash: Mapped[str] = mapped_column(String(128), unique=True, index=True)
     prefix: Mapped[str] = mapped_column(String(12))  # "sk-a1b2c3..." — identifikatsiya uchun
     name: Mapped[str] = mapped_column(String(100))  # "Tashqi tizim nomi"
     is_active: Mapped[bool] = mapped_column(default=True)

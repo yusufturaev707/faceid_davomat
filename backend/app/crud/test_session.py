@@ -11,6 +11,11 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.crud.lookup import (
+    DuplicateError,
+    _check_unique_before_write,
+    _parse_integrity_error,
+)
 from app.models.cheating_log import CheatingLog
 from app.models.session_state import SessionState
 from app.models.smena import Smena
@@ -20,7 +25,6 @@ from app.models.student_ps_data import StudentPsData
 from app.models.test import Test
 from app.models.test_session import TestSession
 from app.models.test_session_smena import TestSessionSmena
-from app.crud.lookup import DuplicateError, _check_unique_before_write, _parse_integrity_error
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +38,7 @@ STATE_KEY_FINISHED = 5
 
 # --- SessionState ---
 
+
 def get_session_states(db: Session, only_active: bool = True) -> list[SessionState]:
     stmt = select(SessionState)
     if only_active:
@@ -42,6 +47,7 @@ def get_session_states(db: Session, only_active: bool = True) -> list[SessionSta
 
 
 # --- Test ---
+
 
 def get_tests(db: Session, only_active: bool = True) -> list[Test]:
     stmt = select(Test)
@@ -52,6 +58,7 @@ def get_tests(db: Session, only_active: bool = True) -> list[Test]:
 
 # --- Smena ---
 
+
 def get_smenas(db: Session, only_active: bool = True) -> list[Smena]:
     stmt = select(Smena)
     if only_active:
@@ -61,22 +68,15 @@ def get_smenas(db: Session, only_active: bool = True) -> list[Smena]:
 
 # --- TestSession ---
 
+
 def _generate_hash_key() -> str:
     return hashlib.sha256(uuid.uuid4().bytes).hexdigest()[:32]
 
 
 def _next_session_number(db: Session) -> int:
-    result = db.execute(
-        select(func.coalesce(func.max(TestSession.number), 0))
-    ).scalar()
+    result = db.execute(select(func.coalesce(func.max(TestSession.number), 0))).scalar()
     return result + 1
 
-
-def _next_smena_number(db: Session) -> int:
-    result = db.execute(
-        select(func.coalesce(func.max(TestSessionSmena.number), 0))
-    ).scalar()
-    return result + 1
 
 
 def get_test_sessions_paginated(
@@ -189,7 +189,6 @@ def create_test_session(
     # Smena larni qo'shish (batch ichida dublikat tekshirish)
     if smenas:
         seen: set[tuple[int, str]] = set()
-        base_number = _next_smena_number(db)
         for i, smena_data in enumerate(smenas):
             key = (smena_data["test_smena_id"], str(smena_data["day"]))
             if key in seen:
@@ -198,10 +197,11 @@ def create_test_session(
                     f"Bir sessiyada {smena_data['day']} sanasida bitta smena ikki marta kiritilgan"
                 )
             seen.add(key)
+            smena_obj = db.get(Smena, smena_data["test_smena_id"])
             smena = TestSessionSmena(
                 test_session_id=session.id,
                 test_smena_id=smena_data["test_smena_id"],
-                number=base_number + i,
+                number=smena_obj.number if smena_obj else 0,
                 day=smena_data["day"],
             )
             db.add(smena)
@@ -295,11 +295,11 @@ def _delete_students_by_smena_ids(db: Session, smena_ids: list[int]) -> None:
         StudentLog.__table__.delete().where(StudentLog.student_id.in_(student_ids))
     )
     db.execute(
-        StudentPsData.__table__.delete().where(StudentPsData.student_id.in_(student_ids))
+        StudentPsData.__table__.delete().where(
+            StudentPsData.student_id.in_(student_ids)
+        )
     )
-    db.execute(
-        Student.__table__.delete().where(Student.id.in_(student_ids))
-    )
+    db.execute(Student.__table__.delete().where(Student.id.in_(student_ids)))
 
 
 def _delete_students_by_session(db: Session, session_id: int) -> None:
@@ -329,9 +329,7 @@ def delete_test_session(db: Session, session_id: int) -> bool:
         )
     )
     # TestSession ni o'chirish (ORM emas, to'g'ridan-to'g'ri SQL)
-    db.execute(
-        TestSession.__table__.delete().where(TestSession.id == session_id)
-    )
+    db.execute(TestSession.__table__.delete().where(TestSession.id == session_id))
     try:
         db.commit()
     except IntegrityError as e:
@@ -342,6 +340,7 @@ def delete_test_session(db: Session, session_id: int) -> bool:
 
 
 # --- TestSessionSmena ---
+
 
 def add_smena_to_session(
     db: Session,
@@ -363,10 +362,11 @@ def add_smena_to_session(
             f"Bu sessiyada {day} sanasida ushbu smena allaqachon mavjud"
         )
 
+    smena_obj = db.get(Smena, test_smena_id)
     smena = TestSessionSmena(
         test_session_id=test_session_id,
         test_smena_id=test_smena_id,
-        number=_next_smena_number(db),
+        number=smena_obj.number if smena_obj else 0,
         day=day,
     )
     db.add(smena)

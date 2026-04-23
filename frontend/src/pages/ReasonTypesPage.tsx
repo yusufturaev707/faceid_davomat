@@ -1,5 +1,6 @@
 import LookupCrudPage from "../components/LookupCrudPage";
 import { getReasonTypesListApi, createReasonTypeApi, updateReasonTypeApi, deleteReasonTypeApi } from "../api";
+import { PERM } from "../permissions";
 
 export default function ReasonTypesPage() {
   return (
@@ -19,6 +20,9 @@ export default function ReasonTypesPage() {
       createItem={createReasonTypeApi}
       updateItem={updateReasonTypeApi}
       deleteItem={deleteReasonTypeApi}
+      createPermission={PERM.LOOKUP_CREATE}
+      updatePermission={PERM.LOOKUP_UPDATE}
+      deletePermission={PERM.LOOKUP_DELETE}
     />
   );
 }

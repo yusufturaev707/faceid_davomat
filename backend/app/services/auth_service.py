@@ -18,8 +18,9 @@ from app.models.refresh_token import RefreshToken
 from app.models.user import User
 from app.schemas.auth import TokenPairResponse, UserResponse
 
-# Eski refresh token rotation dan keyin qancha vaqt yaroqli bo'ladi
-_GRACE_PERIOD_SECONDS = 30
+# Eski refresh token rotation dan keyin qancha vaqt yaroqli bo'ladi.
+# 5s — brauzer cookie sinxronizatsiyasi uchun yetarli, lekin replay hujumi oynasini qisqartiradi.
+_GRACE_PERIOD_SECONDS = 5
 
 
 def authenticate_user(db: Session, username: str, password: str) -> User:

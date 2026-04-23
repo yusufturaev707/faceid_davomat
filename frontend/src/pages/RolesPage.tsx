@@ -1,5 +1,6 @@
 import LookupCrudPage from "../components/LookupCrudPage";
 import { getRolesListApi, createRoleApi, updateRoleApi, deleteRoleApi } from "../api";
+import { PERM } from "../permissions";
 
 export default function RolesPage() {
   return (
@@ -19,6 +20,9 @@ export default function RolesPage() {
       createItem={createRoleApi}
       updateItem={updateRoleApi}
       deleteItem={deleteRoleApi}
+      createPermission={PERM.ROLE_CREATE}
+      updatePermission={PERM.ROLE_UPDATE}
+      deletePermission={PERM.ROLE_DELETE}
     />
   );
 }

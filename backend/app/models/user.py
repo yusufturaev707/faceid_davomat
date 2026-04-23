@@ -55,6 +55,14 @@ class User(Base):
         return ""
 
     @hybrid_property
+    def region_id(self) -> int | None:
+        """Region id from zone → region. None bo'lsa user ma'lum zonaga
+        biriktirilmagan yoki zone.region mavjud emas."""
+        if self.zone:
+            return int(self.zone.region_id)
+        return None
+
+    @hybrid_property
     def region_name(self) -> str:
         """Region name from zone → region."""
         if self.zone and self.zone.region:

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { extractErrorMessage } from "../utils/errorMessage";
+import PermissionGate from "./PermissionGate";
 
 /**
  * Universal CRUD page component for lookup/reference tables.
@@ -48,6 +49,10 @@ interface Props<T extends { id: number }> {
   createItem: (data: any) => Promise<T>;
   updateItem: (id: number, data: any) => Promise<T>;
   deleteItem: (id: number) => Promise<void>;
+  /** Permission codenames — if set, action buttons will be hidden when user lacks permission. */
+  createPermission?: string;
+  updatePermission?: string;
+  deletePermission?: string;
 }
 
 export default function LookupCrudPage<T extends { id: number; is_active?: boolean }>({
@@ -59,6 +64,9 @@ export default function LookupCrudPage<T extends { id: number; is_active?: boole
   createItem,
   updateItem,
   deleteItem,
+  createPermission,
+  updatePermission,
+  deletePermission,
 }: Props<T>) {
   const [items, setItems] = useState<T[]>([]);
   const [loading, setLoading] = useState(true);
@@ -183,12 +191,14 @@ export default function LookupCrudPage<T extends { id: number; is_active?: boole
           <h2 className="section-title">{title}</h2>
           <p className="section-subtitle">{subtitle}</p>
         </div>
-        <button onClick={openCreate} className="btn-primary flex items-center gap-2">
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-          </svg>
-          Qo'shish
-        </button>
+        <PermissionGate permission={createPermission}>
+          <button onClick={openCreate} className="btn-primary flex items-center gap-2">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+            </svg>
+            Qo'shish
+          </button>
+        </PermissionGate>
       </div>
 
       {error && (
@@ -208,7 +218,7 @@ export default function LookupCrudPage<T extends { id: number; is_active?: boole
                   {col.label}
                 </th>
               ))}
-              {"is_active" in (items[0] || {}) && (
+              {items.some((i) => "is_active" in i) && (
                 <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
                   Holat
                 </th>
@@ -228,39 +238,59 @@ export default function LookupCrudPage<T extends { id: number; is_active?: boole
                 ))}
                 {"is_active" in item && (
                   <td className="px-5 py-3.5">
-                    <button
-                      onClick={() => toggleActive(item)}
-                      className={`inline-flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded-full transition-colors ${
-                        (item as any).is_active
-                          ? "bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/30"
-                          : "bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30"
-                      }`}
+                    <PermissionGate
+                      permission={updatePermission}
+                      fallback={
+                        <span
+                          className={`inline-flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded-full ${
+                            (item as any).is_active
+                              ? "bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400"
+                              : "bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400"
+                          }`}
+                        >
+                          <span className={`w-1.5 h-1.5 rounded-full ${(item as any).is_active ? "bg-green-500" : "bg-red-500"}`} />
+                          {(item as any).is_active ? "Faol" : "Nofaol"}
+                        </span>
+                      }
                     >
-                      <span className={`w-1.5 h-1.5 rounded-full ${(item as any).is_active ? "bg-green-500" : "bg-red-500"}`} />
-                      {(item as any).is_active ? "Faol" : "Nofaol"}
-                    </button>
+                      <button
+                        onClick={() => toggleActive(item)}
+                        className={`inline-flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded-full transition-colors ${
+                          (item as any).is_active
+                            ? "bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/30"
+                            : "bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30"
+                        }`}
+                      >
+                        <span className={`w-1.5 h-1.5 rounded-full ${(item as any).is_active ? "bg-green-500" : "bg-red-500"}`} />
+                        {(item as any).is_active ? "Faol" : "Nofaol"}
+                      </button>
+                    </PermissionGate>
                   </td>
                 )}
                 <td className="px-5 py-3.5 text-right">
                   <div className="flex items-center justify-end gap-2">
-                    <button
-                      onClick={() => openEdit(item)}
-                      className="p-1.5 rounded-lg text-gray-400 hover:text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors"
-                      title="Tahrirlash"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                      </svg>
-                    </button>
-                    <button
-                      onClick={() => setDeleteId(item.id)}
-                      className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-                      title="O'chirish"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                      </svg>
-                    </button>
+                    <PermissionGate permission={updatePermission}>
+                      <button
+                        onClick={() => openEdit(item)}
+                        className="p-1.5 rounded-lg text-gray-400 hover:text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors"
+                        title="Tahrirlash"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                        </svg>
+                      </button>
+                    </PermissionGate>
+                    <PermissionGate permission={deletePermission}>
+                      <button
+                        onClick={() => setDeleteId(item.id)}
+                        className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                        title="O'chirish"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                    </PermissionGate>
                   </div>
                 </td>
               </tr>

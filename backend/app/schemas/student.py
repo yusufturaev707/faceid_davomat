@@ -153,12 +153,10 @@ class StudentLogUpdate(BaseModel):
 
 
 class StudentLogResponse(BaseModel):
-    """Talaba log yozuvi."""
+    """Talaba log yozuvi (list uchun — rasmsiz, qo'shimcha filter maydonlar bilan)."""
 
     id: int
     student_id: int
-    first_captured: str | None = None
-    last_captured: str | None = None
     first_enter_time: datetime | None = None
     last_enter_time: datetime | None = None
     score: int
@@ -166,9 +164,35 @@ class StudentLogResponse(BaseModel):
     is_check_hand: bool
     ip_address: str | None = None
     mac_address: str | None = None
+    has_first_captured: bool = False
+    has_last_captured: bool = False
     student_full_name: str | None = None
+    last_name: str | None = None
+    first_name: str | None = None
+    middle_name: str | None = None
+    imei: str | None = None
+    gr_n: int | None = None
+    is_cheating: bool | None = None
+    is_blacklist: bool | None = None
+    e_date: datetime | None = None
+    zone_id: int | None = None
+    zone_name: str | None = None
+    region_id: int | None = None
+    region_name: str | None = None
+    smena_id: int | None = None
+    smena_name: str | None = None
+    test_id: int | None = None
+    test_name: str | None = None
+    test_session_id: int | None = None
 
     model_config = {"from_attributes": True}
+
+
+class StudentLogDetailResponse(StudentLogResponse):
+    """To'liq detail (rasmlar base64)."""
+
+    first_captured: str | None = None
+    last_captured: str | None = None
 
 
 class StudentLogListResponse(BaseModel):
@@ -179,6 +203,50 @@ class StudentLogListResponse(BaseModel):
     page: int
     per_page: int
     pages: int
+
+
+# --- StudentLog Bulk (desktop → server sync) ---
+
+
+class StudentLogBulkItem(BaseModel):
+    """Desktop clientidan keladigan bitta verify yozuv."""
+
+    # Mijoz lokal entry_log.id — javobda qaytariladi, mijoz mark_sent qilish uchun
+    client_entry_id: int | None = None
+    student_id: int
+    first_captured: str | None = None  # base64-encoded JPEG
+    last_captured: str | None = None
+    first_enter_time: datetime | None = None
+    last_enter_time: datetime | None = None
+    score: int = 0
+    max_score: int = 0
+    is_check_hand: bool = False
+    ip_address: str | None = None
+    mac_address: str | None = Field(default=None, max_length=17)
+    # Rejection
+    is_rejected: bool = False
+    reject_reason_id: int | None = None
+    # Blacklist uchun (chetlatilgan bo'lsa)
+    imei: str | None = Field(default=None, max_length=14)
+
+
+class StudentLogBulkRequest(BaseModel):
+    items: list[StudentLogBulkItem] = Field(..., min_length=1, max_length=50)
+
+
+class StudentLogBulkResultItem(BaseModel):
+    client_entry_id: int | None = None
+    student_id: int
+    status: str  # "ok" | "error"
+    log_id: int | None = None
+    error: str | None = None
+
+
+class StudentLogBulkResponse(BaseModel):
+    items: list[StudentLogBulkResultItem]
+    total: int
+    succeeded: int
+    failed: int
 
 
 # --- CheatingLog ---

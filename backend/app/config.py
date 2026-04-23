@@ -11,6 +11,10 @@ class Settings(BaseSettings):
     ALGORITHM: str
     ACCESS_TOKEN_EXPIRE_MINUTES: int
 
+    # API key hashlash uchun server-side pepper (SECRET_KEY'dan alohida).
+    # Majburiy — bo'sh qoldirmang. Rotatsiya uchun: eski kalitlarni bekor qilib qayta yaratish.
+    API_KEY_PEPPER: str
+
     # Refresh token
     REFRESH_TOKEN_EXPIRE_DAYS: int
 

@@ -646,8 +646,6 @@ export interface StudentLogUpdate {
 export interface StudentLogResponse {
   id: number;
   student_id: number;
-  first_captured: string | null;
-  last_captured: string | null;
   first_enter_time: string | null;
   last_enter_time: string | null;
   score: number;
@@ -655,7 +653,31 @@ export interface StudentLogResponse {
   is_check_hand: boolean;
   ip_address: string | null;
   mac_address: string | null;
+  has_first_captured: boolean;
+  has_last_captured: boolean;
   student_full_name: string | null;
+  last_name: string | null;
+  first_name: string | null;
+  middle_name: string | null;
+  imei: string | null;
+  gr_n: number | null;
+  is_cheating: boolean | null;
+  is_blacklist: boolean | null;
+  e_date: string | null;
+  zone_id: number | null;
+  zone_name: string | null;
+  region_id: number | null;
+  region_name: string | null;
+  smena_id: number | null;
+  smena_name: string | null;
+  test_id: number | null;
+  test_name: string | null;
+  test_session_id: number | null;
+}
+
+export interface StudentLogDetailResponse extends StudentLogResponse {
+  first_captured: string | null;
+  last_captured: string | null;
 }
 
 export interface StudentLogListResponse {

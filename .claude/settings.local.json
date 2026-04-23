@@ -2,10 +2,24 @@
   "permissions": {
     "allow": [
       "Bash(dir)",
-      "Bash(cd /c/FastApi/faceid/backend && python -m alembic heads 2>&1)",
-      "Bash(cd C:\\\\\\\\FastApi\\\\\\\\faceid\\\\\\\\backend && python -m alembic heads 2>&1)",
-      "Bash(cd /c/FastApi/faceid/frontend && npx tsc --noEmit 2>&1 | head -30)",
-      "Bash(alembic upgrade:*)"
+      "Bash(ls:*)",
+      "Bash(alembic:*)",
+      "Bash(python -m alembic:*)",
+      "Bash(python -m py_compile:*)",
+      "Bash(python -c:*)",
+      "Bash(py -c:*)",
+      "Bash(python3 -c:*)",
+      "Bash(python scripts/check_alembic_single_head.py)",
+      "Bash(.venv/Scripts/python.exe:*)",
+      "Bash(PYTHONIOENCODING=utf-8 .venv/Scripts/python.exe:*)",
+      "Bash(psql -U postgres:*)",
+      "Bash(curl:*)",
+      "Bash(npx tsc:*)",
+      "Bash(claude:*)",
+      "Read(//tmp/**)",
+      "Read(//c/FastApi/**)",
+      "Read(//c/Applocation/**)",
+      "Bash(python -m pytest tests/unit/test_api_key_hashing.py -q)"
     ]
   }
 }

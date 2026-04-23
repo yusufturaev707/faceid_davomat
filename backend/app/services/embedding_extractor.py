@@ -6,6 +6,7 @@ Celery task orqali ishga tushadi. Progress Redis da saqlanadi.
 import json
 import logging
 
+import numpy as np
 import redis
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -16,7 +17,7 @@ from app.models.student import Student
 from app.models.student_ps_data import StudentPsData
 from app.models.test_session_smena import TestSessionSmena
 from app.services.face_service import detect_faces
-from app.services.image_decoder import decode_base64_image
+from app.services.image_decoder import decode_image_bytes
 
 logger = logging.getLogger("faceid.embedding_extractor")
 
@@ -162,12 +163,13 @@ def extract_embeddings_for_session(session_id: int) -> dict:
             else:
                 student.is_image = True
                 try:
-                    img_bgr, _ = decode_base64_image(ps_data.ps_img)
+                    img_bgr, _ = decode_image_bytes(ps_data.ps_img)
                     faces = detect_faces(img_bgr)
 
                     if faces:
-                        embedding = faces[0].embedding.tolist()
-                        ps_data.embedding = json.dumps(embedding)
+                        ps_data.embedding = np.asarray(
+                            faces[0].embedding, dtype=np.float32
+                        ).tobytes()
                         student.is_face = True
                         student.is_ready = True
                         success_count += 1
@@ -311,12 +313,13 @@ def extract_embeddings_for_not_ready(session_id: int) -> dict:
             else:
                 student.is_image = True
                 try:
-                    img_bgr, _ = decode_base64_image(ps_data.ps_img)
+                    img_bgr, _ = decode_image_bytes(ps_data.ps_img)
                     faces = detect_faces(img_bgr)
 
                     if faces:
-                        embedding = faces[0].embedding.tolist()
-                        ps_data.embedding = json.dumps(embedding)
+                        ps_data.embedding = np.asarray(
+                            faces[0].embedding, dtype=np.float32
+                        ).tobytes()
                         student.is_face = True
                         student.is_ready = True
                         success_count += 1

@@ -282,13 +282,18 @@ def compare_two_faces(
         errors.append("Jonli rasmda yuz aniqlanmadi")
 
     # 4. Cosine similarity hisoblash
+    # Square root normalizatsiya (γ = 0.5) — cosine qiymatlar past diapazonda siqilgan
+    # bo'lib turadi (masalan, 0.2..0.6). γ=0.5 ni qo'llash score'ni tekislashtirib,
+    # oraliqlar orasida farqni yaxshi ko'rsatadi. Decision monoton bo'lgani uchun
+    # threshold ham aynan shunday transformatsiya qilinadi — verify natijasi saqlanadi.
     score = 0.0
-    threshold = settings.SIMILARITY_THRESHOLD
+    threshold = float(settings.SIMILARITY_THRESHOLD) ** 0.5
 
     if ps_detection and lv_detection:
         ps_embedding = ps_faces[0].embedding
         lv_embedding = lv_faces[0].embedding
-        score = cosine_similarity(ps_embedding, lv_embedding)
+        raw_score = cosine_similarity(ps_embedding, lv_embedding)
+        score = raw_score ** 0.5
 
     verified = score >= threshold and ps_detection and lv_detection
 
@@ -297,10 +302,10 @@ def compare_two_faces(
     elif not ps_detection or not lv_detection:
         message = "Yuz aniqlanmadi"
     else:
-        message = f"Yuzlar mos kelmadi (ball: {score:.4f}, chegara: {threshold})"
+        message = f"Yuzlar mos kelmadi (ball: {score:.4f}, chegara: {threshold:.4f})"
 
     logger.info(
-        "Ikki yuz solishtirish: score=%.4f, threshold=%.4f, verified=%s",
+        "Ikki yuz solishtirish: score=%.4f (γ=0.5 norm), threshold=%.4f, verified=%s",
         score, threshold, verified,
     )
 

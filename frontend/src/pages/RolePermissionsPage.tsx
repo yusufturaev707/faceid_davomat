@@ -5,6 +5,8 @@ import {
   getPermissionsApi,
   getRolesWithPermissionsApi,
 } from "../api";
+import { usePermission } from "../hooks/usePermission";
+import { PERM } from "../permissions";
 
 /* ── Material-inspired icon components ── */
 function ShieldIcon({ className = "" }: { className?: string }) {
@@ -33,8 +35,7 @@ function SaveIcon({ className = "" }: { className?: string }) {
   );
 }
 
-/* ── Grouped icon map for permission groups ── */
-const groupIcons: Record<string, string> = {};
+/* ── Grouped color palette for permission groups ── */
 const groupColors: string[] = [
   "from-blue-500 to-blue-600",
   "from-emerald-500 to-emerald-600",
@@ -140,6 +141,9 @@ function Snackbar({ msg, onClose }: { msg: { type: "ok" | "err"; text: string };
 }
 
 export default function RolePermissionsPage() {
+  const { hasPermission } = usePermission();
+  const canEdit = hasPermission(PERM.ROLE_UPDATE);
+
   const [roles, setRoles] = useState<RolePermissionsResponse[]>([]);
   const [permissions, setPermissions] = useState<PermissionResponse[]>([]);
   const [selectedRoleId, setSelectedRoleId] = useState<number | null>(null);
@@ -149,6 +153,8 @@ export default function RolePermissionsPage() {
   const [msg, setMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
   const [hasChanges, setHasChanges] = useState(false);
   const [originalIds, setOriginalIds] = useState<Set<number>>(new Set());
+  const [search, setSearch] = useState("");
+  const [onlySelected, setOnlySelected] = useState(false);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -243,9 +249,19 @@ export default function RolePermissionsPage() {
     }
   };
 
-  // Group permissions
+  // Filter + Group permissions
+  const q = search.trim().toLowerCase();
+  const filteredPerms = permissions.filter((p) => {
+    if (onlySelected && !checkedIds.has(p.id)) return false;
+    if (!q) return true;
+    return (
+      p.name.toLowerCase().includes(q) ||
+      p.codename.toLowerCase().includes(q) ||
+      p.group.toLowerCase().includes(q)
+    );
+  });
   const grouped: Record<string, PermissionResponse[]> = {};
-  permissions.forEach((p) => {
+  filteredPerms.forEach((p) => {
     if (!grouped[p.group]) grouped[p.group] = [];
     grouped[p.group].push(p);
   });
@@ -379,6 +395,55 @@ export default function RolePermissionsPage() {
             </div>
           ) : (
             <div className="space-y-5">
+              {/* Search & filter toolbar */}
+              <div className="glass-card px-4 py-3 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                <div className="relative flex-1">
+                  <svg
+                    className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-slate-500"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M10 18a8 8 0 100-16 8 8 0 000 16z" />
+                  </svg>
+                  <input
+                    type="text"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Huquqni qidirish (nom, codename yoki guruh)..."
+                    className="input-field w-full !pl-9"
+                  />
+                  {search && (
+                    <button
+                      onClick={() => setSearch("")}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-md text-gray-400 hover:text-gray-600 dark:text-slate-500 dark:hover:text-slate-300"
+                      aria-label="Tozalash"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
+                <label className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-gray-50 dark:bg-slate-800/70 border border-gray-100 dark:border-slate-700 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={onlySelected}
+                    onChange={(e) => setOnlySelected(e.target.checked)}
+                    className="rounded text-primary-600 focus:ring-primary-500"
+                  />
+                  <span className="text-xs font-medium text-gray-600 dark:text-slate-300">
+                    Faqat tanlanganlar
+                  </span>
+                </label>
+              </div>
+
+              {groupKeys.length === 0 && (
+                <div className="glass-card py-16 text-center text-sm text-gray-400 dark:text-slate-500">
+                  Qidiruv bo'yicha huquq topilmadi
+                </div>
+              )}
+
               {groupKeys.map((group, gi) => {
                 const perms = grouped[group];
                 const colorIdx = gi % groupColors.length;
@@ -417,18 +482,20 @@ export default function RolePermissionsPage() {
                         <span className="text-xs text-gray-400 dark:text-slate-500 hidden sm:inline">
                           {allChecked ? "Barchasi" : someChecked ? "Qisman" : "Hech biri"}
                         </span>
-                        <button
-                          onClick={() => toggleGroup(perms)}
-                          className={`
-                            px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200
-                            ${allChecked
-                              ? "bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 hover:bg-primary-200 dark:hover:bg-primary-900/40"
-                              : "bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-slate-400 hover:bg-gray-200 dark:hover:bg-slate-600"
-                            }
-                          `}
-                        >
-                          {allChecked ? "Bekor qilish" : "Hammasini"}
-                        </button>
+                        {canEdit && (
+                          <button
+                            onClick={() => toggleGroup(perms)}
+                            className={`
+                              px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200
+                              ${allChecked
+                                ? "bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 hover:bg-primary-200 dark:hover:bg-primary-900/40"
+                                : "bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-slate-400 hover:bg-gray-200 dark:hover:bg-slate-600"
+                              }
+                            `}
+                          >
+                            {allChecked ? "Bekor qilish" : "Hammasini"}
+                          </button>
+                        )}
                       </div>
                     </div>
 
@@ -451,6 +518,7 @@ export default function RolePermissionsPage() {
                             <ToggleSwitch
                               checked={isChecked}
                               onChange={() => togglePermission(perm.id)}
+                              disabled={!canEdit}
                             />
                             <div className="flex-1 min-w-0">
                               <div className={`text-sm font-medium transition-colors ${isChecked ? groupTextColors[colorIdx] : "text-gray-700 dark:text-slate-300"}`}>
@@ -475,7 +543,7 @@ export default function RolePermissionsPage() {
               <div className={`
                 sticky bottom-4 z-10
                 transition-all duration-300 ease-out
-                ${hasChanges ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4 pointer-events-none"}
+                ${hasChanges && canEdit ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4 pointer-events-none"}
               `}>
                 <div className="glass-card !rounded-2xl px-6 py-4 flex items-center justify-between shadow-2xl border-primary-200 dark:border-primary-800/40">
                   <div className="flex items-center gap-3">

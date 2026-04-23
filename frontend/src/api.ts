@@ -33,35 +33,56 @@ apiClient.interceptors.request.use((config) => {
   return config;
 });
 
-// Response interceptor — 401 bo'lganda token yangilash
+// Response interceptor — 401 bo'lganda token yangilash.
+// Race fix: bir vaqtda faqat bitta refresh; muvaffaqiyatsiz bo'lsa, pending
+// so'rovlarning HAMMASI bir marta rad etiladi va keyingi retry bloklanadi.
 let refreshPromise: Promise<string> | null = null;
+let refreshFailedUntil = 0; // unix ms — shu vaqtgacha retry urinmaymiz
+
+// Logout callbackni AuthContext tomonidan o'rnatiladi.
+let onUnauthorized: (() => void) | null = null;
+export function setOnUnauthorized(cb: (() => void) | null) {
+  onUnauthorized = cb;
+}
 
 apiClient.interceptors.response.use(
   (res) => res,
   async (error) => {
     const original = error.config;
-    if (error.response?.status === 401 && !original._retry && !original.url?.includes("/auth/")) {
-      original._retry = true;
-      try {
-        // Bir vaqtda faqat bitta refresh so'rov yuboriladi
-        if (!refreshPromise) {
-          refreshPromise = refreshApi()
-            .then((tokens) => {
-              setAccessToken(tokens.access_token);
-              return tokens.access_token;
-            })
-            .finally(() => {
-              refreshPromise = null;
-            });
-        }
-        const newToken = await refreshPromise;
-        original.headers.Authorization = `Bearer ${newToken}`;
-        return apiClient(original);
-      } catch {
-        setAccessToken(null);
-      }
+    const is401 = error.response?.status === 401;
+    const isAuthUrl = original?.url?.includes("/auth/");
+
+    if (!is401 || original?._retry || isAuthUrl) {
+      return Promise.reject(error);
     }
-    return Promise.reject(error);
+
+    // Oxirgi refresh muvaffaqiyatsiz bo'lgan bo'lsa, darhol rad etamiz
+    if (Date.now() < refreshFailedUntil) {
+      return Promise.reject(error);
+    }
+
+    original._retry = true;
+    try {
+      if (!refreshPromise) {
+        refreshPromise = refreshApi()
+          .then((tokens) => {
+            setAccessToken(tokens.access_token);
+            return tokens.access_token;
+          })
+          .finally(() => {
+            refreshPromise = null;
+          });
+      }
+      const newToken = await refreshPromise;
+      original.headers.Authorization = `Bearer ${newToken}`;
+      return apiClient(original);
+    } catch (refreshErr) {
+      // Hammasiga barrier: keyingi 5 soniya davomida retry qilmaymiz
+      refreshFailedUntil = Date.now() + 5000;
+      setAccessToken(null);
+      if (onUnauthorized) onUnauthorized();
+      return Promise.reject(refreshErr);
+    }
   }
 );
 
@@ -496,8 +517,21 @@ export async function fetchGtspImageApi(studentId: number): Promise<import("./in
 }
 
 // === Student Logs API ===
-export async function getStudentLogsApi(params: Record<string, string | number>): Promise<import("./interfaces").StudentLogListResponse> {
-  const res = await apiClient.get("/students/logs", { params });
+export async function getStudentLogsApi(
+  params: Record<string, string | number | boolean | undefined | null>
+): Promise<import("./interfaces").StudentLogListResponse> {
+  const clean: Record<string, string | number | boolean> = {};
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== null && v !== "") clean[k] = v;
+  }
+  const res = await apiClient.get("/students/logs", { params: clean });
+  return res.data;
+}
+
+export async function getStudentLogDetailApi(
+  id: number
+): Promise<import("./interfaces").StudentLogDetailResponse> {
+  const res = await apiClient.get(`/students/logs/${id}`);
   return res.data;
 }
 

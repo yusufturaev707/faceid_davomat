@@ -1,5 +1,6 @@
 import LookupCrudPage from "../components/LookupCrudPage";
 import { getGendersListApi, createGenderApi, updateGenderApi, deleteGenderApi } from "../api";
+import { PERM } from "../permissions";
 
 export default function GendersPage() {
   return (
@@ -19,6 +20,9 @@ export default function GendersPage() {
       createItem={createGenderApi}
       updateItem={updateGenderApi}
       deleteItem={deleteGenderApi}
+      createPermission={PERM.LOOKUP_CREATE}
+      updatePermission={PERM.LOOKUP_UPDATE}
+      deletePermission={PERM.LOOKUP_DELETE}
     />
   );
 }

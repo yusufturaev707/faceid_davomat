@@ -13,6 +13,8 @@ import {
 } from "../api";
 import PageLoader from "../components/PageLoader";
 import Pagination from "../components/Pagination";
+import PermissionGate from "../components/PermissionGate";
+import { PERM } from "../permissions";
 import { extractErrorMessage } from "../utils/errorMessage";
 
 export default function TestSessionsPage() {
@@ -149,9 +151,11 @@ export default function TestSessionsPage() {
           <h2 className="section-title">Test Sessiyalar</h2>
           <p className="section-subtitle">Test sessiyalarni boshqarish</p>
         </div>
-        <button onClick={openCreateModal} className="btn-primary">
-          + Yangi sessiya
-        </button>
+        <PermissionGate permission={PERM.TEST_SESSION_CREATE}>
+          <button onClick={openCreateModal} className="btn-primary">
+            + Yangi sessiya
+          </button>
+        </PermissionGate>
       </div>
 
       {/* Table */}

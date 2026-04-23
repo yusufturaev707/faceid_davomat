@@ -25,6 +25,8 @@ import {
   fileToBase64,
 } from "../api";
 import PageLoader from "../components/PageLoader";
+import PermissionGate from "../components/PermissionGate";
+import { PERM } from "../permissions";
 import { extractErrorMessage } from "../utils/errorMessage";
 
 export default function TestSessionDetailPage() {
@@ -565,18 +567,22 @@ export default function TestSessionDetailPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={openEditModal} className="btn-secondary text-sm">
-            Tahrirlash
-          </button>
-          <button
-            onClick={() => {
-              setDeleteError("");
-              setShowDeleteConfirm(true);
-            }}
-            className="px-4 py-2 text-sm font-medium text-red-600 dark:text-red-400 border border-red-300 dark:border-red-700 rounded-xl hover:bg-red-50 dark:hover:bg-red-900/20 transition"
-          >
-            O'chirish
-          </button>
+          <PermissionGate permission={PERM.TEST_SESSION_UPDATE}>
+            <button onClick={openEditModal} className="btn-secondary text-sm">
+              Tahrirlash
+            </button>
+          </PermissionGate>
+          <PermissionGate permission={PERM.TEST_SESSION_DELETE}>
+            <button
+              onClick={() => {
+                setDeleteError("");
+                setShowDeleteConfirm(true);
+              }}
+              className="px-4 py-2 text-sm font-medium text-red-600 dark:text-red-400 border border-red-300 dark:border-red-700 rounded-xl hover:bg-red-50 dark:hover:bg-red-900/20 transition"
+            >
+              O'chirish
+            </button>
+          </PermissionGate>
         </div>
       </div>
 
@@ -734,41 +740,45 @@ export default function TestSessionDetailPage() {
           <div className="flex items-center gap-2">
             {/* Faqat state 5 dan state 4 ga qaytish tugmasi */}
             {currentStateKey === 5 && (
-              <button
-                onClick={handlePrevStep}
-                disabled={changingState}
-                className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-gray-700 dark:text-slate-300 bg-gray-100 dark:bg-slate-700 hover:bg-gray-200 dark:hover:bg-slate-600 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                </svg>
-                Faollashtirish
-              </button>
+              <PermissionGate permission={PERM.TEST_SESSION_UPDATE}>
+                <button
+                  onClick={handlePrevStep}
+                  disabled={changingState}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-gray-700 dark:text-slate-300 bg-gray-100 dark:bg-slate-700 hover:bg-gray-200 dark:hover:bg-slate-600 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                  Faollashtirish
+                </button>
+              </PermissionGate>
             )}
             {/* Keyingi holatga o'tish tugmasi */}
             {currentStepIndex < sortedStates.length - 1 && (
-              <button
-                onClick={handleNextStep}
-                disabled={changingState}
-                className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white bg-primary-600 hover:bg-primary-700 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow-md"
-              >
-                {changingState ? (
-                  <>
-                    <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                    </svg>
-                    Jarayon davom etmoqda...
-                  </>
-                ) : (
-                  <>
-                    Keyingi: {sortedStates[currentStepIndex + 1]?.name}
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
-                  </>
-                )}
-              </button>
+              <PermissionGate permission={PERM.TEST_SESSION_UPDATE}>
+                <button
+                  onClick={handleNextStep}
+                  disabled={changingState}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white bg-primary-600 hover:bg-primary-700 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow-md"
+                >
+                  {changingState ? (
+                    <>
+                      <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                      Jarayon davom etmoqda...
+                    </>
+                  ) : (
+                    <>
+                      Keyingi: {sortedStates[currentStepIndex + 1]?.name}
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </>
+                  )}
+                </button>
+              </PermissionGate>
             )}
             {currentStepIndex === sortedStates.length - 1 && (
               <span className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 rounded-xl">
@@ -817,13 +827,15 @@ export default function TestSessionDetailPage() {
             </h3>
             <div className="flex items-center gap-2">
               {!changingState && studentStats.not_ready > 0 && (
-                <button
-                  onClick={handleRetryEmbedding}
-                  disabled={retryingEmbedding}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-amber-600 hover:bg-amber-700 rounded-lg transition disabled:opacity-50"
-                >
-                  {retryingEmbedding ? "Boshlanmoqda..." : "Qayta embedding"}
-                </button>
+                <PermissionGate permission={PERM.TEST_SESSION_UPDATE}>
+                  <button
+                    onClick={handleRetryEmbedding}
+                    disabled={retryingEmbedding}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-amber-600 hover:bg-amber-700 rounded-lg transition disabled:opacity-50"
+                  >
+                    {retryingEmbedding ? "Boshlanmoqda..." : "Qayta embedding"}
+                  </button>
+                </PermissionGate>
               )}
               <button
                 onClick={() => {
@@ -941,12 +953,14 @@ export default function TestSessionDetailPage() {
           <h3 className="text-sm font-semibold text-gray-800 dark:text-slate-200">
             Smenalar ({session.smenas.length})
           </h3>
-          <button
-            onClick={openAddSmena}
-            className="text-xs text-primary-600 dark:text-primary-400 hover:underline font-medium"
-          >
-            + Smena qo'shish
-          </button>
+          <PermissionGate permission={PERM.TEST_SESSION_UPDATE}>
+            <button
+              onClick={openAddSmena}
+              className="text-xs text-primary-600 dark:text-primary-400 hover:underline font-medium"
+            >
+              + Smena qo'shish
+            </button>
+          </PermissionGate>
         </div>
         {session.smenas.length === 0 ? (
           <div className="text-center py-10 text-gray-400 dark:text-slate-500 text-sm">
@@ -995,17 +1009,19 @@ export default function TestSessionDetailPage() {
                       />
                     </td>
                     <td className="px-4 py-3 text-center">
-                      <button
-                        onClick={() =>
-                          setRemoveSmenaTarget({
-                            id: sm.id,
-                            name: sm.smena?.name || `#${sm.id}`,
-                          })
-                        }
-                        className="text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 text-xs font-medium"
-                      >
-                        O'chirish
-                      </button>
+                      <PermissionGate permission={PERM.TEST_SESSION_UPDATE}>
+                        <button
+                          onClick={() =>
+                            setRemoveSmenaTarget({
+                              id: sm.id,
+                              name: sm.smena?.name || `#${sm.id}`,
+                            })
+                          }
+                          className="text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 text-xs font-medium"
+                        >
+                          O'chirish
+                        </button>
+                      </PermissionGate>
                     </td>
                   </tr>
                 ))}

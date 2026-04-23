@@ -1,5 +1,6 @@
 """Load students from external APIs (CEFR, MS, IIV) into DB."""
 
+import base64
 import logging
 from datetime import date, datetime
 
@@ -36,6 +37,22 @@ class StudentLoadError(Exception):
     def __init__(self, message: str):
         self.message = message
         super().__init__(message)
+
+
+def _b64_to_bytes(val) -> bytes | None:
+    """base64 string (yoki data URI) → bytes. Xato bo'lsa None."""
+    if not val:
+        return None
+    if isinstance(val, (bytes, bytearray)):
+        return bytes(val)
+    if not isinstance(val, str):
+        return None
+    try:
+        if "," in val and val.index(",") < 80:
+            val = val.split(",", 1)[1]
+        return base64.b64decode(val)
+    except Exception:
+        return None
 
 
 # ── region → zone mapping cache ──────────────────────────────────────
@@ -164,7 +181,7 @@ def _parse_cefr(item: dict, zone_map: dict[int, int]) -> tuple[dict, dict] | Non
         "ps_ser": str(item.get("psser", "")).strip().upper(),
         "ps_num": str(item.get("psnum", "")).strip(),
         "phone": str(item.get("phone", ""))[:13] or None,
-        "ps_img": item.get("data") or None,
+        "ps_img": _b64_to_bytes(item.get("data")),
     }
     return student, ps_data
 
@@ -202,7 +219,7 @@ def _parse_ms(item: dict, zone_map: dict[int, int]) -> tuple[dict, dict] | None:
         "ps_ser": str(item.get("psser", "")).strip().upper(),
         "ps_num": str(item.get("psnum", "")).strip(),
         "phone": None,
-        "ps_img": item.get("image_base64") or None,
+        "ps_img": _b64_to_bytes(item.get("image_base64")),
     }
     return student, ps_data
 
@@ -240,7 +257,7 @@ def _parse_iiv(item: dict, zone_map: dict[int, int]) -> tuple[dict, dict] | None
         "ps_ser": str(item.get("passport_series", "")).strip().upper(),
         "ps_num": str(item.get("passport_number", "")).strip(),
         "phone": None,
-        "ps_img": item.get("person_image") or None,
+        "ps_img": _b64_to_bytes(item.get("person_image")),
     }
     return student, ps_data
 

@@ -6,7 +6,7 @@ import {
   useState,
 } from "react";
 import type { UserResponse } from "../interfaces";
-import { getMeApi, loginApi, logoutApi, refreshApi } from "../api";
+import { getMeApi, loginApi, logoutApi, refreshApi, setOnUnauthorized } from "../api";
 import { setAccessToken } from "../tokenStore";
 
 interface AuthContextType {
@@ -74,6 +74,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     setAccessToken(null);
     setUser(null);
+  }, []);
+
+  // Refresh muvaffaqiyatsiz bo'lsa, foydalanuvchini darhol logout qilamiz
+  useEffect(() => {
+    setOnUnauthorized(() => {
+      setAccessToken(null);
+      setUser(null);
+    });
+    return () => setOnUnauthorized(null);
   }, []);
 
   return (

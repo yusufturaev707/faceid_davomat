@@ -1,11 +1,11 @@
 """Generic CRUD for lookup/reference tables."""
 
 import re
+from functools import lru_cache
 from typing import Any
 
-from functools import lru_cache
-
-from sqlalchemy import func, inspect as sa_inspect, or_, select
+from sqlalchemy import func, or_, select
+from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -19,7 +19,6 @@ from app.models.smena import Smena
 from app.models.student_blacklist import StudentBlacklist
 from app.models.test import Test
 from app.models.zone import Zone
-
 
 # ---- Unique field → Uzbek label mapping ----
 
@@ -43,14 +42,17 @@ def _parse_integrity_error(exc: IntegrityError) -> str:
     msg = str(exc.orig) if exc.orig else str(exc)
 
     # PostgreSQL unique violation (EN): Key (column)=(value) already exists
-    match = re.search(r'Key \((\w+)\)=\((.+?)\) already exists', msg)
+    match = re.search(r"Key \((\w+)\)=\((.+?)\) already exists", msg)
     if not match:
         # PostgreSQL unique violation (RU): Ключ (column)=(value) уже существует
-        match = re.search(r'[\u041a\u043a]\u043b\u044e\u0447 \((\w+)\)=\((.+?)\) \u0443\u0436\u0435 \u0441\u0443\u0449\u0435\u0441\u0442\u0432\u0443\u0435\u0442', msg)
+        match = re.search(
+            r"[\u041a\u043a]\u043b\u044e\u0447 \((\w+)\)=\((.+?)\) \u0443\u0436\u0435 \u0441\u0443\u0449\u0435\u0441\u0442\u0432\u0443\u0435\u0442",
+            msg,
+        )
     if match:
         col, val = match.group(1), match.group(2)
         label = _UNIQUE_FIELD_LABELS.get(col, col)
-        return f"{label} \"{val}\" allaqachon mavjud. Iltimos, boshqa qiymat kiriting"
+        return f'{label} "{val}" allaqachon mavjud. Iltimos, boshqa qiymat kiriting'
 
     # PostgreSQL unique constraint name (EN or RU)
     match = re.search(r'(?:unique constraint|уникальности) "(\w+)"', msg, re.IGNORECASE)
@@ -65,8 +67,11 @@ def _parse_integrity_error(exc: IntegrityError) -> str:
         return "Bu qiymat allaqachon mavjud (takroriy ma'lumot kiritildi)"
 
     # ForeignKey violation (EN + RU)
-    is_fk = ("foreign key" in msg.lower() or "ForeignKeyViolation" in msg
-             or "внешнего ключа" in msg.lower())
+    is_fk = (
+        "foreign key" in msg.lower()
+        or "ForeignKeyViolation" in msg
+        or "внешнего ключа" in msg.lower()
+    )
     if is_fk:
         # Referenced from another table
         match_fk = re.search(r'is still referenced from table "(\w+)"', msg)
@@ -82,12 +87,18 @@ def _parse_integrity_error(exc: IntegrityError) -> str:
             match_fk2 = re.search(r'отсутствует в таблице "(\w+)"', msg)
         if match_fk2:
             table = match_fk2.group(1)
-            return f"Tanlangan qiymat topilmadi ({table}). Iltimos, to'g'ri qiymat tanlang"
+            return (
+                f"Tanlangan qiymat topilmadi ({table}). Iltimos, to'g'ri qiymat tanlang"
+            )
         return "Bog'liq ma'lumotlar bilan ziddiyat yuz berdi"
 
     # Not null violation (EN + RU)
-    is_not_null = ("not-null" in msg.lower() or "NotNullViolation" in msg
-                   or "not_null" in msg.lower() or "не может быть NULL" in msg)
+    is_not_null = (
+        "not-null" in msg.lower()
+        or "NotNullViolation" in msg
+        or "not_null" in msg.lower()
+        or "не может быть NULL" in msg
+    )
     if is_not_null:
         match_nn = re.search(r'column "(\w+)"', msg)
         if not match_nn:
@@ -103,6 +114,7 @@ def _parse_integrity_error(exc: IntegrityError) -> str:
 
 class DuplicateError(Exception):
     """Raised when a unique constraint is violated."""
+
     def __init__(self, message: str):
         self.message = message
         super().__init__(message)
@@ -110,13 +122,13 @@ class DuplicateError(Exception):
 
 # ---- Pre-check uniqueness (prevents sequence increment on failure) ----
 
+
 @lru_cache(maxsize=None)
 def _get_unique_columns(model: type) -> tuple[str, ...]:
     """Return unique column names (excluding PK). Cached per model — O(1) after first call."""
     mapper = sa_inspect(model)
     return tuple(
-        col.key for col in mapper.columns
-        if col.unique and not col.primary_key
+        col.key for col in mapper.columns if col.unique and not col.primary_key
     )
 
 
@@ -158,12 +170,12 @@ def _check_unique_before_write(
         if getattr(existing, col_name) == val:
             label = _UNIQUE_FIELD_LABELS.get(col_name, col_name)
             raise DuplicateError(
-                f'{label} "{val}" allaqachon mavjud. '
-                f"Iltimos, boshqa qiymat kiriting"
+                f'{label} "{val}" allaqachon mavjud. Iltimos, boshqa qiymat kiriting'
             )
 
 
 # ---- Generic helpers ----
+
 
 def _get_all(db: Session, model: type, only_active: bool = False) -> list:
     stmt = select(model).order_by(model.id)
@@ -225,14 +237,18 @@ def _delete(db: Session, model: type, item_id: int) -> bool:
 def get_tests(db: Session, only_active: bool = False):
     return _get_all(db, Test, only_active)
 
+
 def get_test(db: Session, item_id: int):
     return _get_by_id(db, Test, item_id)
+
 
 def create_test(db: Session, data: dict):
     return _create(db, Test, data)
 
+
 def update_test(db: Session, item_id: int, data: dict):
     return _update(db, Test, item_id, data)
+
 
 def delete_test(db: Session, item_id: int):
     return _delete(db, Test, item_id)
@@ -242,14 +258,18 @@ def delete_test(db: Session, item_id: int):
 def get_smenas(db: Session, only_active: bool = False):
     return _get_all(db, Smena, only_active)
 
+
 def get_smena(db: Session, item_id: int):
     return _get_by_id(db, Smena, item_id)
+
 
 def create_smena(db: Session, data: dict):
     return _create(db, Smena, data)
 
+
 def update_smena(db: Session, item_id: int, data: dict):
     return _update(db, Smena, item_id, data)
+
 
 def delete_smena(db: Session, item_id: int):
     return _delete(db, Smena, item_id)
@@ -259,14 +279,18 @@ def delete_smena(db: Session, item_id: int):
 def get_session_states(db: Session, only_active: bool = False):
     return _get_all(db, SessionState, only_active)
 
+
 def get_session_state(db: Session, item_id: int):
     return _get_by_id(db, SessionState, item_id)
+
 
 def create_session_state(db: Session, data: dict):
     return _create(db, SessionState, data)
 
+
 def update_session_state(db: Session, item_id: int, data: dict):
     return _update(db, SessionState, item_id, data)
+
 
 def delete_session_state(db: Session, item_id: int):
     return _delete(db, SessionState, item_id)
@@ -276,14 +300,18 @@ def delete_session_state(db: Session, item_id: int):
 def get_regions(db: Session, only_active: bool = False):
     return _get_all(db, Region, only_active)
 
+
 def get_region(db: Session, item_id: int):
     return _get_by_id(db, Region, item_id)
+
 
 def create_region(db: Session, data: dict):
     return _create(db, Region, data)
 
+
 def update_region(db: Session, item_id: int, data: dict):
     return _update(db, Region, item_id, data)
+
 
 def delete_region(db: Session, item_id: int):
     return _delete(db, Region, item_id)
@@ -291,21 +319,25 @@ def delete_region(db: Session, item_id: int):
 
 # ---- Zone ----
 def get_zones(db: Session, only_active: bool = False, region_id: int | None = None):
-    stmt = select(Zone).order_by(Zone.id)
+    stmt = select(Zone).order_by(Zone.number)
     if only_active:
         stmt = stmt.where(Zone.is_active.is_(True))
     if region_id is not None:
         stmt = stmt.where(Zone.region_id == region_id)
     return list(db.execute(stmt).unique().scalars().all())
 
+
 def get_zone(db: Session, item_id: int):
     return _get_by_id(db, Zone, item_id)
+
 
 def create_zone(db: Session, data: dict):
     return _create(db, Zone, data)
 
+
 def update_zone(db: Session, item_id: int, data: dict):
     return _update(db, Zone, item_id, data)
+
 
 def delete_zone(db: Session, item_id: int):
     return _delete(db, Zone, item_id)
@@ -315,14 +347,18 @@ def delete_zone(db: Session, item_id: int):
 def get_roles(db: Session, only_active: bool = False):
     return _get_all(db, Role, only_active)
 
+
 def get_role(db: Session, item_id: int):
     return _get_by_id(db, Role, item_id)
+
 
 def create_role(db: Session, data: dict):
     return _create(db, Role, data)
 
+
 def update_role(db: Session, item_id: int, data: dict):
     return _update(db, Role, item_id, data)
+
 
 def delete_role(db: Session, item_id: int):
     return _delete(db, Role, item_id)
@@ -332,14 +368,18 @@ def delete_role(db: Session, item_id: int):
 def get_reasons(db: Session, only_active: bool = False):
     return _get_all(db, Reason, only_active)
 
+
 def get_reason(db: Session, item_id: int):
     return _get_by_id(db, Reason, item_id)
+
 
 def create_reason(db: Session, data: dict):
     return _create(db, Reason, data)
 
+
 def update_reason(db: Session, item_id: int, data: dict):
     return _update(db, Reason, item_id, data)
+
 
 def delete_reason(db: Session, item_id: int):
     return _delete(db, Reason, item_id)
@@ -349,14 +389,18 @@ def delete_reason(db: Session, item_id: int):
 def get_reason_types(db: Session, only_active: bool = False):
     return _get_all(db, ReasonType, only_active)
 
+
 def get_reason_type(db: Session, item_id: int):
     return _get_by_id(db, ReasonType, item_id)
+
 
 def create_reason_type(db: Session, data: dict):
     return _create(db, ReasonType, data)
 
+
 def update_reason_type(db: Session, item_id: int, data: dict):
     return _update(db, ReasonType, item_id, data)
+
 
 def delete_reason_type(db: Session, item_id: int):
     return _delete(db, ReasonType, item_id)
@@ -364,16 +408,24 @@ def delete_reason_type(db: Session, item_id: int):
 
 # ---- StudentBlacklist ----
 def get_blacklist(db: Session):
-    return list(db.execute(select(StudentBlacklist).order_by(StudentBlacklist.id)).scalars().all())
+    return list(
+        db.execute(select(StudentBlacklist).order_by(StudentBlacklist.id))
+        .scalars()
+        .all()
+    )
+
 
 def get_blacklist_item(db: Session, item_id: int):
     return _get_by_id(db, StudentBlacklist, item_id)
 
+
 def create_blacklist_item(db: Session, data: dict):
     return _create(db, StudentBlacklist, data)
 
+
 def update_blacklist_item(db: Session, item_id: int, data: dict):
     return _update(db, StudentBlacklist, item_id, data)
+
 
 def delete_blacklist_item(db: Session, item_id: int):
     return _delete(db, StudentBlacklist, item_id)
@@ -383,14 +435,18 @@ def delete_blacklist_item(db: Session, item_id: int):
 def get_genders(db: Session, only_active: bool = False):
     return _get_all(db, Gender, only_active)
 
+
 def get_gender(db: Session, item_id: int):
     return _get_by_id(db, Gender, item_id)
+
 
 def create_gender(db: Session, data: dict):
     return _create(db, Gender, data)
 
+
 def update_gender(db: Session, item_id: int, data: dict):
     return _update(db, Gender, item_id, data)
+
 
 def delete_gender(db: Session, item_id: int):
     return _delete(db, Gender, item_id)

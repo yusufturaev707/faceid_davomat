@@ -52,16 +52,69 @@ def _validate_magic_bytes(img_bytes: bytes) -> str:
     )
 
 
+def decode_image_bytes(img_bytes: bytes) -> tuple[np.ndarray, int]:
+    """Xom rasm baytlarini validatsiya qilib BGR numpy arrayga aylantirish.
+
+    Args:
+        img_bytes: Xom (binary) rasm baytlari.
+
+    Returns:
+        (img_bgr, file_size_bytes) — BGR numpy array va fayl hajmi.
+
+    Raises:
+        HTTPException 400: Validatsiya xatoliklari.
+    """
+    if not img_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Rasm bo'sh",
+        )
+
+    file_size = len(img_bytes)
+
+    # Magic bytes validatsiya
+    if file_size < 12:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Rasm juda kichik yoki buzilgan",
+        )
+    detected_format = _validate_magic_bytes(img_bytes)
+    logger.debug("Rasm formati aniqlandi: %s, hajmi: %d bytes", detected_format, file_size)
+
+    # cv2.imdecode — BGR formatda
+    np_arr = np.frombuffer(img_bytes, np.uint8)
+    img_bgr = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+
+    if img_bgr is None:
+        logger.warning("cv2.imdecode None qaytardi — buzilgan rasm")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Rasmni ochishda xatolik: buzilgan yoki yaroqsiz rasm",
+        )
+
+    # Dekompressiya bomba himoyasi — kichik base64 katta pixel arrayga aylanishi mumkin (PNG flat-color).
+    # 64MP chegarasi: smartphone fotolariga yetadi, lekin 20k×20k bomba'ni rad etadi.
+    h, w = img_bgr.shape[:2]
+    MAX_PIXELS = 64 * 1024 * 1024
+    if h * w > MAX_PIXELS:
+        logger.warning("Pixel chegarasidan oshgan rasm: %dx%d = %d pixel", w, h, h * w)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Rasm o'lchami juda katta: {w}x{h}",
+        )
+
+    # Katta rasmni resize
+    max_dim = settings.MAX_IMAGE_DIMENSION
+    if max(h, w) > max_dim:
+        scale = max_dim / max(h, w)
+        img_bgr = cv2.resize(img_bgr, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
+        logger.debug("Rasm o'lchami o'zgartirildi: %dx%d -> %dx%d", w, h, img_bgr.shape[1], img_bgr.shape[0])
+
+    return img_bgr, file_size
+
+
 def decode_base64_image(img_b64: str) -> tuple[np.ndarray, int]:
     """Base64 rasmni dekodlash, validatsiya qilish va BGR numpy arrayga aylantirish.
-
-    Bajariladi:
-    1. Data URL prefiksini olib tashlash
-    2. Base64 hajm tekshiruvi
-    3. Base64 dekodlash
-    4. Magic bytes validatsiya (format tekshiruvi)
-    5. cv2.imdecode — BGR formatda
-    6. Dimension tekshiruvi + auto-resize
 
     Args:
         img_b64: Base64 kodlangan rasm (data URL yoki sof base64).
@@ -96,34 +149,4 @@ def decode_base64_image(img_b64: str) -> tuple[np.ndarray, int]:
             detail="Base64 dekodlash xatosi: yaroqsiz format",
         )
 
-    file_size = len(img_bytes)
-
-    # 4. Magic bytes validatsiya
-    if file_size < 12:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Rasm juda kichik yoki buzilgan",
-        )
-    detected_format = _validate_magic_bytes(img_bytes)
-    logger.debug("Rasm formati aniqlandi: %s, hajmi: %d bytes", detected_format, file_size)
-
-    # 5. cv2.imdecode — BGR formatda
-    np_arr = np.frombuffer(img_bytes, np.uint8)
-    img_bgr = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
-
-    if img_bgr is None:
-        logger.warning("cv2.imdecode None qaytardi — buzilgan rasm")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Rasmni ochishda xatolik: buzilgan yoki yaroqsiz rasm",
-        )
-
-    # 6. Katta rasmni resize
-    h, w = img_bgr.shape[:2]
-    max_dim = settings.MAX_IMAGE_DIMENSION
-    if max(h, w) > max_dim:
-        scale = max_dim / max(h, w)
-        img_bgr = cv2.resize(img_bgr, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
-        logger.debug("Rasm o'lchami o'zgartirildi: %dx%d -> %dx%d", w, h, img_bgr.shape[1], img_bgr.shape[0])
-
-    return img_bgr, file_size
+    return decode_image_bytes(img_bytes)

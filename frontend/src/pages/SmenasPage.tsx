@@ -1,5 +1,6 @@
 import LookupCrudPage from "../components/LookupCrudPage";
 import { getSmenasListApi, createSmenaApi, updateSmenaApi, deleteSmenaApi } from "../api";
+import { PERM } from "../permissions";
 
 export default function SmenasPage() {
   return (
@@ -19,6 +20,9 @@ export default function SmenasPage() {
       createItem={createSmenaApi}
       updateItem={updateSmenaApi}
       deleteItem={deleteSmenaApi}
+      createPermission={PERM.LOOKUP_CREATE}
+      updatePermission={PERM.LOOKUP_UPDATE}
+      deletePermission={PERM.LOOKUP_DELETE}
     />
   );
 }

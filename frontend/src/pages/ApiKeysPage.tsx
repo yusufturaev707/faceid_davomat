@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import type { ApiKeyCreateResponse, ApiKeyResponse } from "../interfaces";
 import { createApiKeyApi, getApiKeysApi, revokeApiKeyApi } from "../api";
 import PageLoader from "../components/PageLoader";
+import PermissionGate from "../components/PermissionGate";
+import { PERM } from "../permissions";
 import { extractErrorMessage } from "../utils/errorMessage";
 
 export default function ApiKeysPage() {
@@ -77,36 +79,38 @@ export default function ApiKeysPage() {
       )}
 
       {/* Yangi kalit yaratish */}
-      <div className="glass-card p-6">
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-          Yangi kalit yaratish
-        </h2>
-        <div className="flex gap-3">
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleCreate()}
-            placeholder="Kalit nomi (masalan: Tashqi tizim)"
-            className="input-field flex-1"
-            maxLength={100}
-          />
-          <button
-            onClick={handleCreate}
-            disabled={creating || !name.trim()}
-            className="btn-primary whitespace-nowrap"
-          >
-            {creating ? (
-              <span className="flex items-center gap-2">
-                <span className="w-4 h-4 spinner" />
-                Yaratilmoqda...
-              </span>
-            ) : (
-              "Yaratish"
-            )}
-          </button>
+      <PermissionGate permission={PERM.API_KEY_CREATE}>
+        <div className="glass-card p-6">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+            Yangi kalit yaratish
+          </h2>
+          <div className="flex gap-3">
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleCreate()}
+              placeholder="Kalit nomi (masalan: Tashqi tizim)"
+              className="input-field flex-1"
+              maxLength={100}
+            />
+            <button
+              onClick={handleCreate}
+              disabled={creating || !name.trim()}
+              className="btn-primary whitespace-nowrap"
+            >
+              {creating ? (
+                <span className="flex items-center gap-2">
+                  <span className="w-4 h-4 spinner" />
+                  Yaratilmoqda...
+                </span>
+              ) : (
+                "Yaratish"
+              )}
+            </button>
+          </div>
         </div>
-      </div>
+      </PermissionGate>
 
       {/* Yangi yaratilgan kalit — faqat bir marta ko'rsatiladi */}
       {newKey && (
@@ -211,12 +215,14 @@ export default function ApiKeysPage() {
                     </td>
                     <td className="px-5 py-3.5 text-right">
                       {key.is_active && (
-                        <button
-                          onClick={() => handleRevoke(key.id)}
-                          className="text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 text-sm font-medium transition-colors"
-                        >
-                          Bekor qilish
-                        </button>
+                        <PermissionGate permission={PERM.API_KEY_DELETE}>
+                          <button
+                            onClick={() => handleRevoke(key.id)}
+                            className="text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 text-sm font-medium transition-colors"
+                          >
+                            Bekor qilish
+                          </button>
+                        </PermissionGate>
                       )}
                     </td>
                   </tr>

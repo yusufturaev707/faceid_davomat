@@ -25,6 +25,8 @@ import {
 } from "../api";
 import PageLoader from "../components/PageLoader";
 import Pagination from "../components/Pagination";
+import PermissionGate from "../components/PermissionGate";
+import { PERM } from "../permissions";
 import { extractErrorMessage } from "../utils/errorMessage";
 
 const emptyForm: Record<string, any> = {
@@ -357,12 +359,14 @@ export default function StudentsPage() {
             <h2 className="section-title">Studentlar</h2>
             <p className="section-subtitle">Studentlar ro'yxati va pasport ma'lumotlari</p>
           </div>
-          <button onClick={openCreate} className="btn-primary flex items-center gap-2">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-            </svg>
-            Yangi student
-          </button>
+          <PermissionGate permission={PERM.STUDENT_CREATE}>
+            <button onClick={openCreate} className="btn-primary flex items-center gap-2">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+              </svg>
+              Yangi student
+            </button>
+          </PermissionGate>
         </div>
 
         {error && (
@@ -675,24 +679,28 @@ export default function StudentsPage() {
                     </svg>
                     {fetchingGtsp ? "Yuklanmoqda..." : "GTSP rasm"}
                   </button>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); openEdit(selected); }}
-                    className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2.5 text-sm font-medium text-primary-700 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/20 hover:bg-primary-100 dark:hover:bg-primary-900/30 rounded-lg transition-colors"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                    </svg>
-                    Tahrirlash
-                  </button>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); confirmDelete(selected.id, `${selected.last_name} ${selected.first_name}`); }}
-                    className="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 text-sm font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
-                    O'chirish
-                  </button>
+                  <PermissionGate permission={PERM.STUDENT_UPDATE}>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); openEdit(selected); }}
+                      className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2.5 text-sm font-medium text-primary-700 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/20 hover:bg-primary-100 dark:hover:bg-primary-900/30 rounded-lg transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                      </svg>
+                      Tahrirlash
+                    </button>
+                  </PermissionGate>
+                  <PermissionGate permission={PERM.STUDENT_DELETE}>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); confirmDelete(selected.id, `${selected.last_name} ${selected.first_name}`); }}
+                      className="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 text-sm font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                      O'chirish
+                    </button>
+                  </PermissionGate>
                 </div>
               </div>
             </div>

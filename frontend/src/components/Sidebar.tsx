@@ -1,6 +1,7 @@
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { usePermission } from "../hooks/usePermission";
+import { PERM } from "../permissions";
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
   `flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${
@@ -10,39 +11,35 @@ const navLinkClass = ({ isActive }: { isActive: boolean }) =>
   }`;
 
 export default function Sidebar() {
-  const { user, isAdmin, logout } = useAuth();
+  const { user, logout } = useAuth();
   const { hasPermission, hasAnyPermission } = usePermission();
   const navigate = useNavigate();
 
   // Bo'lim ko'rinishi: admin yoki shu bo'limdagi kamida bitta permissioni bor
-  const showBoshqaruv =
-    isAdmin ||
-    hasAnyPermission(
-      "dashboard:read",
-      "dashboard:stats",
-      "log:read",
-      "face_log:read",
-      "api_key:read",
-      "api_key:create",
-    );
+  const showBoshqaruv = hasAnyPermission(
+    PERM.DASHBOARD_READ,
+    PERM.DASHBOARD_STATS,
+    PERM.LOG_READ,
+    PERM.FACE_LOG_READ,
+    PERM.API_KEY_READ,
+    PERM.API_KEY_CREATE,
+  );
 
-  const showTestMarkazi =
-    isAdmin ||
-    hasAnyPermission(
-      "test_session:read",
-      "student:read",
-      "student_log:read",
-      "cheating_log:read",
-    );
+  const showTestMarkazi = hasAnyPermission(
+    PERM.TEST_SESSION_READ,
+    PERM.STUDENT_READ,
+    PERM.STUDENT_LOG_READ,
+    PERM.CHEATING_LOG_READ,
+  );
 
-  const showSozlamalar =
-    isAdmin || hasAnyPermission("lookup:read");
+  const showSozlamalar = hasPermission(PERM.LOOKUP_READ);
 
-  const showTizimSozlamalari =
-    isAdmin ||
-    hasAnyPermission("user:read", "role:read", "role:update");
-
-  const showAnyAdmin = showBoshqaruv || showTestMarkazi || showSozlamalar || showTizimSozlamalari;
+  const showTizimSozlamalari = hasAnyPermission(
+    PERM.USER_READ,
+    PERM.ROLE_READ,
+    PERM.ROLE_UPDATE,
+    PERM.PERMISSION_READ,
+  );
 
   return (
     <aside className="w-[272px] bg-surface dark:bg-slate-800 border-r border-gray-200 dark:border-slate-700 flex flex-col h-screen sticky top-0">
@@ -108,7 +105,7 @@ export default function Sidebar() {
               <p className="label-text px-4 mb-2">Boshqaruv</p>
             </div>
 
-            {hasAnyPermission("dashboard:read", "dashboard:stats") && (
+            {hasAnyPermission(PERM.DASHBOARD_READ, PERM.DASHBOARD_STATS) && (
               <NavLink to="/dashboard" className={navLinkClass}>
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
@@ -117,7 +114,7 @@ export default function Sidebar() {
               </NavLink>
             )}
 
-            {hasPermission("log:read") && (
+            {hasPermission(PERM.LOG_READ) && (
               <NavLink to="/logs" className={navLinkClass}>
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
@@ -126,7 +123,7 @@ export default function Sidebar() {
               </NavLink>
             )}
 
-            {hasPermission("face_log:read") && (
+            {hasPermission(PERM.FACE_LOG_READ) && (
               <NavLink to="/face-logs" className={navLinkClass}>
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -135,7 +132,7 @@ export default function Sidebar() {
               </NavLink>
             )}
 
-            {hasAnyPermission("api_key:read", "api_key:create") && (
+            {hasAnyPermission(PERM.API_KEY_READ, PERM.API_KEY_CREATE) && (
               <NavLink to="/api-keys" className={navLinkClass}>
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
@@ -159,7 +156,7 @@ export default function Sidebar() {
               </p>
             </div>
 
-            {hasAnyPermission("dashboard:read", "test_session:read") && (
+            {hasAnyPermission(PERM.DASHBOARD_READ, PERM.TEST_SESSION_READ) && (
               <NavLink to="/test-dashboard" className={navLinkClass}>
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
@@ -168,7 +165,7 @@ export default function Sidebar() {
               </NavLink>
             )}
 
-            {hasPermission("test_session:read") && (
+            {hasPermission(PERM.TEST_SESSION_READ) && (
               <NavLink to="/test-sessions" className={navLinkClass}>
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -177,7 +174,7 @@ export default function Sidebar() {
               </NavLink>
             )}
 
-            {hasPermission("student:read") && (
+            {hasPermission(PERM.STUDENT_READ) && (
               <NavLink to="/students" className={navLinkClass}>
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 14l9-5-9-5-9 5 9 5z" />
@@ -187,7 +184,7 @@ export default function Sidebar() {
               </NavLink>
             )}
 
-            {hasPermission("student_log:read") && (
+            {hasPermission(PERM.STUDENT_LOG_READ) && (
               <NavLink to="/student-logs" className={navLinkClass}>
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
@@ -196,7 +193,7 @@ export default function Sidebar() {
               </NavLink>
             )}
 
-            {hasPermission("cheating_log:read") && (
+            {hasPermission(PERM.CHEATING_LOG_READ) && (
               <NavLink to="/cheating-logs" className={navLinkClass}>
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
@@ -220,7 +217,7 @@ export default function Sidebar() {
               </p>
             </div>
 
-            {hasPermission("lookup:read") && (
+            {hasPermission(PERM.LOOKUP_READ) && (
               <>
                 <NavLink to="/manage-tests" className={navLinkClass}>
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -288,7 +285,7 @@ export default function Sidebar() {
               </p>
             </div>
 
-            {hasPermission("user:read") && (
+            {hasPermission(PERM.USER_READ) && (
               <NavLink to="/users" className={navLinkClass}>
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
@@ -297,7 +294,7 @@ export default function Sidebar() {
               </NavLink>
             )}
 
-            {hasPermission("role:read") && (
+            {hasPermission(PERM.ROLE_READ) && (
               <NavLink to="/manage-roles" className={navLinkClass}>
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
@@ -306,7 +303,7 @@ export default function Sidebar() {
               </NavLink>
             )}
 
-            {hasPermission("role:update") && (
+            {hasAnyPermission(PERM.ROLE_UPDATE, PERM.PERMISSION_READ) && (
               <NavLink to="/manage-permissions" className={navLinkClass}>
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
@@ -315,7 +312,7 @@ export default function Sidebar() {
               </NavLink>
             )}
 
-            {hasAnyPermission("lookup:read") && (
+            {hasPermission(PERM.LOOKUP_READ) && (
               <>
                 <NavLink to="/manage-regions" className={navLinkClass}>
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

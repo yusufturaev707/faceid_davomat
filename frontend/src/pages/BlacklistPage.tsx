@@ -1,5 +1,6 @@
 import LookupCrudPage from "../components/LookupCrudPage";
 import { getBlacklistApi, createBlacklistApi, updateBlacklistApi, deleteBlacklistApi } from "../api";
+import { PERM } from "../permissions";
 
 export default function BlacklistPage() {
   return (
@@ -19,6 +20,9 @@ export default function BlacklistPage() {
       createItem={createBlacklistApi}
       updateItem={updateBlacklistApi}
       deleteItem={deleteBlacklistApi}
+      createPermission={PERM.LOOKUP_CREATE}
+      updatePermission={PERM.LOOKUP_UPDATE}
+      deletePermission={PERM.LOOKUP_DELETE}
     />
   );
 }

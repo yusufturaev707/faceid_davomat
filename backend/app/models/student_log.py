@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import BigInteger, ForeignKey, String, Text
+from sqlalchemy import BigInteger, ForeignKey, LargeBinary, String, Text
 from sqlalchemy.dialects.postgresql import INET
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -11,9 +11,11 @@ class StudentLog(Base):
     __tablename__ = "student_logs"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, index=True)
-    student_id: Mapped[int] = mapped_column(ForeignKey("students.id"))
-    first_captured: Mapped[str | None] = mapped_column(Text, nullable=True)
-    last_captured: Mapped[str | None] = mapped_column(Text, nullable=True)
+    student_id: Mapped[int] = mapped_column(
+        ForeignKey("students.id"), unique=True, index=True
+    )
+    first_captured: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    last_captured: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     first_enter_time: Mapped[datetime | None] = mapped_column(nullable=True)
     last_enter_time: Mapped[datetime | None] = mapped_column(nullable=True)
     score: Mapped[int] = mapped_column(default=0)

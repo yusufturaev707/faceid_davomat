@@ -3,6 +3,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.core.rate_limit import limiter
 from app.dependencies import get_current_active_user, get_db
 from app.models.user import User
 from app.schemas.auth import TokenPairResponse, UserResponse
@@ -42,7 +43,9 @@ def _delete_refresh_cookie(response: Response) -> None:
 
 
 @router.post("/login", response_model=TokenPairResponse, summary="Tizimga kirish")
+@limiter.limit("10/minute")
 def login(
+    request: Request,
     response: Response,
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db),
@@ -59,6 +62,7 @@ def login(
 
 
 @router.post("/refresh", response_model=TokenPairResponse, summary="Tokenni yangilash")
+@limiter.limit("30/minute")
 def refresh(
     request: Request,
     response: Response,

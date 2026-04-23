@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import LookupCrudPage, { type Column, type FormField } from "../components/LookupCrudPage";
 import { getReasonsListApi, createReasonApi, updateReasonApi, deleteReasonApi, getReasonTypesListApi } from "../api";
 import type { LookupReasonTypeResponse } from "../interfaces";
+import { PERM } from "../permissions";
 
 export default function ReasonsPage() {
   const [reasonTypes, setReasonTypes] = useState<LookupReasonTypeResponse[]>([]);
@@ -45,6 +46,9 @@ export default function ReasonsPage() {
       createItem={createReasonApi}
       updateItem={updateReasonApi}
       deleteItem={deleteReasonApi}
+      createPermission={PERM.LOOKUP_CREATE}
+      updatePermission={PERM.LOOKUP_UPDATE}
+      deletePermission={PERM.LOOKUP_DELETE}
     />
   );
 }

@@ -2,12 +2,15 @@ import { useEffect, useState } from "react";
 import LookupCrudPage, { type Column, type FormField } from "../components/LookupCrudPage";
 import { getZonesListApi, createZoneApi, updateZoneApi, deleteZoneApi, getRegionsListApi } from "../api";
 import type { LookupRegionResponse } from "../interfaces";
+import { PERM } from "../permissions";
 
 export default function ZonesPage() {
   const [regions, setRegions] = useState<LookupRegionResponse[]>([]);
 
   useEffect(() => {
-    getRegionsListApi().then(setRegions);
+    getRegionsListApi()
+      .then(setRegions)
+      .catch((err) => console.error("Hududlar ro'yxatini yuklashda xatolik", err));
   }, []);
 
   const regionMap = Object.fromEntries(regions.map((r) => [r.id, r.name]));
@@ -45,6 +48,9 @@ export default function ZonesPage() {
       createItem={createZoneApi}
       updateItem={updateZoneApi}
       deleteItem={deleteZoneApi}
+      createPermission={PERM.LOOKUP_CREATE}
+      updatePermission={PERM.LOOKUP_UPDATE}
+      deletePermission={PERM.LOOKUP_DELETE}
     />
   );
 }
