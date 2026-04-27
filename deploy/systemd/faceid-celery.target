@@ -1,0 +1,7 @@
+[Unit]
+Description=FaceID Celery workers (verify + storage)
+After=network-online.target redis-server.service
+Wants=faceid-celery-verify.service faceid-celery-storage.service
+
+[Install]
+WantedBy=multi-user.target

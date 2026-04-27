@@ -1,0 +1,51 @@
+[Unit]
+Description=FaceID Celery Worker (storage queue — I/O-intensive)
+Documentation=https://docs.celeryq.dev/
+After=network-online.target redis-server.service
+Wants=network-online.target
+Requires=redis-server.service
+PartOf=faceid-celery.target
+
+[Service]
+Type=simple
+User=root
+Group=www-data
+
+WorkingDirectory=/var/www/faceid_davomat/backend
+EnvironmentFile=-/var/www/faceid_davomat/backend/.env
+Environment="PYTHONUNBUFFERED=1"
+Environment="PYTHONDONTWRITEBYTECODE=1"
+
+ExecStart=/var/www/faceid_davomat/backend/venv/bin/celery \
+    -A app.celery_app worker \
+    -Q storage \
+    --hostname=storage@%%h \
+    --pool=threads \
+    --concurrency=8 \
+    --max-tasks-per-child=200 \
+    --loglevel=info
+
+Restart=always
+RestartSec=10
+#StartLimitBurst=5
+#StartLimitIntervalSec=120
+
+KillSignal=SIGTERM
+TimeoutStopSec=300
+KillMode=mixed
+
+LimitNOFILE=65536
+LimitNPROC=4096
+
+StandardOutput=append:/var/www/faceid_davomat/backend/logs/celery-storage.log
+StandardError=append:/var/www/faceid_davomat/backend/logs/celery-storage.error.log
+SyslogIdentifier=faceid-celery-storage
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/var/www/faceid_davomat/backend
+
+[Install]
+WantedBy=multi-user.target
