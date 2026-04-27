@@ -6,7 +6,7 @@ set -euo pipefail
 
 PROJECT_DIR="/var/www/faceid_davomat/backend"
 LOG_DIR="${PROJECT_DIR}/logs"
-SERVICE_USER="www-data"
+SERVICE_USER="root"
 SERVICE_GROUP="www-data"
 SYSTEMD_DIR="/etc/systemd/system"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
