@@ -17,6 +17,7 @@ import type {
   TokenPairResponse,
   TwoFaceTaskStatusResponse,
   TwoFaceVerifyRequest,
+  UpdateUserRequest,
   UserResponse,
   VerificationLogResponse,
 } from "./interfaces";
@@ -189,7 +190,7 @@ export async function createUserApi(data: CreateUserRequest): Promise<UserRespon
   return res.data;
 }
 
-export async function updateUserApi(userId: number, data: Record<string, unknown>): Promise<UserResponse> {
+export async function updateUserApi(userId: number, data: UpdateUserRequest): Promise<UserResponse> {
   const res = await apiClient.patch<UserResponse>(`/admin/users/${userId}`, data);
   return res.data;
 }
