@@ -293,7 +293,7 @@ def compare_two_faces(
         ps_embedding = ps_faces[0].embedding
         lv_embedding = lv_faces[0].embedding
         raw_score = cosine_similarity(ps_embedding, lv_embedding)
-        score = raw_score ** 0.5
+        score = raw_score**0.5
 
     verified = score >= threshold and ps_detection and lv_detection
 
@@ -306,7 +306,9 @@ def compare_two_faces(
 
     logger.info(
         "Ikki yuz solishtirish: score=%.4f (γ=0.5 norm), threshold=%.4f, verified=%s",
-        score, threshold, verified,
+        score,
+        threshold,
+        verified,
     )
 
     response = TwoFaceVerifyResponse(
@@ -429,7 +431,11 @@ def verify_photo(img_b64: str, age: int) -> tuple[PhotoVerifyResponse, np.ndarra
 
     logger.info(
         "Rasm tekshiruvi: success=%s, detection=%s, age_match=%s, size=%dx%d",
-        success, detection, age_match, w, h,
+        success,
+        detection,
+        age_match,
+        w,
+        h,
     )
 
     response = PhotoVerifyResponse(
