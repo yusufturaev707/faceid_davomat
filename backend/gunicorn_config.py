@@ -39,4 +39,4 @@ umask = 0o007
 
 # Preload app — workerlar fork qilishdan oldin app yuklanadi
 # Memory tejaydi, lekin DB connectionlar bilan ehtiyot bo'ling
-preload_app = True
+preload_app = False
