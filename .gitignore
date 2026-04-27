@@ -1,4 +1,8 @@
 backend/uploads/
+backend/alembic.ini
+backend/Pipfile
+backend/Pipfile.lock
+
 node_modules/
 frontend/dist/
 
