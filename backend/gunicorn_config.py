@@ -6,7 +6,7 @@ backlog = 2048
 # Formula: (2 x CPU cores) + 1 — bu CPU-bound uchun
 # I/O-bound (FastAPI odatda shunday) uchun ko'proq mumkin
 # workers = multiprocessing.cpu_count() * 2 + 1
-workers = 4
+workers = 8
 worker_class = "uvicorn.workers.UvicornWorker"
 worker_connections = 1000
 timeout = 120
