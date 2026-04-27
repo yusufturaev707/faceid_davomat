@@ -1,23 +1,41 @@
 from logging.config import fileConfig
 
 from alembic import context
-from sqlalchemy import engine_from_config, pool
-
 from app.config import settings
 from app.db.base import Base
+
 # Barcha modellarni import qilish (Alembic autogenerate uchun)
 from app.models import (  # noqa: F401
-    User, VerificationLog, RefreshToken, VerifyFaces, ApiKey,
-    Role, Region, Zone, Smena, SessionState,
-    Test, TestSession, TestSessionSmena,
-    Student, StudentLog, StudentPsData, StudentBlacklist,
-    Reason, ReasonType, CheatingLog, Permission,
+    ApiKey,
+    CheatingLog,
+    Permission,
+    Reason,
+    ReasonType,
+    RefreshToken,
+    Region,
+    Role,
+    SessionState,
+    Smena,
+    Student,
+    StudentBlacklist,
+    StudentLog,
+    StudentPsData,
+    Test,
+    TestSession,
+    TestSessionSmena,
+    User,
+    VerificationLog,
+    VerifyFaces,
+    Zone,
 )
+from sqlalchemy import engine_from_config, pool
 
 config = context.config
 
 # alembic.ini dan sqlalchemy.url ni override qilish
-config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+# config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+db_url = settings.DATABASE_URL.replace("%", "%%")
+config.set_main_option("sqlalchemy.url", db_url)
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
