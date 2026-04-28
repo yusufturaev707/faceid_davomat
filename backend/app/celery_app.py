@@ -7,7 +7,7 @@ InsightFace modeli har worker process uchun 1 marta yuklanadi.
 import logging
 
 from celery import Celery
-from celery.signals import worker_init, worker_process_init
+from celery.signals import setup_logging, worker_init, worker_process_init
 from kombu import Queue
 
 from app.config import settings
@@ -50,6 +50,13 @@ celery_app.conf.task_queues = [
 celery_app.conf.task_default_queue = "verify"
 
 
+@setup_logging.connect
+def configure_logging(**kwargs):
+    """Celery'ning default logging hijack'ini almashtirib, app loggerini ulash."""
+    from app.core.logging import setup_logging as app_setup_logging
+    app_setup_logging()
+
+
 def _load_model() -> None:
     """InsightFace modelini yuklash."""
     from app.services.face_service import init_face_app
@@ -59,6 +66,8 @@ def _load_model() -> None:
 @worker_init.connect
 def on_worker_init(sender, **kwargs):
     """Worker ishga tushganda modelni yuklash (solo/threads pool uchun)."""
+    from app.core.logging import setup_logging as app_setup_logging
+    app_setup_logging()
     logger.info("Worker init — model yuklanmoqda")
     _load_model()
 
@@ -66,5 +75,7 @@ def on_worker_init(sender, **kwargs):
 @worker_process_init.connect
 def on_worker_process_init(sender, **kwargs):
     """Har bir prefork subprocess ishga tushganda modelni yuklash."""
+    from app.core.logging import setup_logging as app_setup_logging
+    app_setup_logging()
     logger.info("Worker process init — model yuklanmoqda")
     _load_model()

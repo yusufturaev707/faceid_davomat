@@ -19,7 +19,9 @@
       "Read(//tmp/**)",
       "Read(//c/FastApi/**)",
       "Read(//c/Applocation/**)",
-      "Bash(python -m pytest tests/unit/test_api_key_hashing.py -q)"
+      "Bash(python -m pytest tests/unit/test_api_key_hashing.py -q)",
+      "Bash(timeout 30 ./venv/Scripts/celery.exe -A app.celery_app worker -Q verify --loglevel=info --pool=threads --concurrency=4)",
+      "Bash(timeout 25 ./venv/Scripts/celery.exe -A app.celery_app worker -Q verify --loglevel=info --pool=threads --concurrency=4)"
     ]
   }
 }
