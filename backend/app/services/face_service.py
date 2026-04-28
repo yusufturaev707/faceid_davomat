@@ -53,17 +53,27 @@ def init_face_app() -> None:
     logger.info("InsightFace model tayyor!")
 
 
+_FACE_APP_WAIT_TIMEOUT = 300
+
+
 def get_face_app() -> FaceAnalysis:
-    """Tayyor modelni olish. Agar hali yuklanmagan bo'lsa, kutadi (max 30s).
+    """Tayyor modelni olish. Agar hali yuklanmagan bo'lsa, kutadi.
+
+    Birinchi marta InsightFace modelini CDN dan yuklab olish 1-5 daqiqa
+    olishi mumkin (~340 MB). Shuning uchun timeout uzun.
 
     Returns:
         FaceAnalysis instansiyasi.
 
     Raises:
-        RuntimeError: Model 30 sekund ichida yuklanmasa.
+        RuntimeError: Model timeout ichida yuklanmasa.
     """
-    if not _face_app_ready.wait(timeout=30):
-        raise RuntimeError("FaceAnalysis model 30s ichida yuklanmadi")
+    if _face_app is not None:
+        return _face_app
+    if not _face_app_ready.wait(timeout=_FACE_APP_WAIT_TIMEOUT):
+        raise RuntimeError(
+            f"FaceAnalysis model {_FACE_APP_WAIT_TIMEOUT}s ichida yuklanmadi"
+        )
     return _face_app
 
 

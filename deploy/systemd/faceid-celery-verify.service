@@ -13,6 +13,8 @@ Group=www-data
 
 WorkingDirectory=/var/www/faceid_davomat/backend
 EnvironmentFile=-/var/www/faceid_davomat/backend/.env
+Environment="HOME=/var/www"
+Environment="INSIGHTFACE_HOME=/var/www/.insightface"
 Environment="PYTHONUNBUFFERED=1"
 Environment="PYTHONDONTWRITEBYTECODE=1"
 
