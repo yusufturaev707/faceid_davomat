@@ -64,13 +64,17 @@ def _check_queue_backpressure(queue_name: str = "verify") -> None:
         r = _get_redis()
         queue_length = r.llen(queue_name)
     except redis.ConnectionError:
-        logger.warning("Redis ulanish xatosi — backpressure tekshiruvi o'tkazib yuborildi")
+        logger.warning(
+            "Redis ulanish xatosi — backpressure tekshiruvi o'tkazib yuborildi"
+        )
         return
 
     if queue_length >= settings.QUEUE_MAX_SIZE:
         logger.warning(
             "Backpressure: queue=%s, length=%d, max=%d",
-            queue_name, queue_length, settings.QUEUE_MAX_SIZE,
+            queue_name,
+            queue_length,
+            settings.QUEUE_MAX_SIZE,
         )
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
@@ -86,7 +90,7 @@ def _check_queue_backpressure(queue_name: str = "verify") -> None:
     summary="Rasmni tekshirishga yuborish",
     description="Rasmni Celery navbatiga yuboradi va task_id qaytaradi. Natijani /verify-photo/status/{task_id} orqali oling.",
 )
-@limiter.limit("30/minute")
+@limiter.limit("300/minute")
 def submit_verify_photo(
     request: Request,
     payload: PhotoVerifyRequest,
@@ -101,7 +105,9 @@ def submit_verify_photo(
         age=payload.age,
         user_id=current_user.id,
     )
-    logger.info("Rasm tekshiruvi yuborildi: task_id=%s, user_id=%d", task.id, current_user.id)
+    logger.info(
+        "Rasm tekshiruvi yuborildi: task_id=%s, user_id=%d", task.id, current_user.id
+    )
     return TaskSubmitResponse(task_id=task.id)
 
 
@@ -147,7 +153,7 @@ def get_task_status(
     summary="Ikki yuzni solishtirishga yuborish",
     description="Ikki rasmni Celery navbatiga yuboradi va task_id qaytaradi.",
 )
-@limiter.limit("30/minute")
+@limiter.limit("300/minute")
 def submit_verify_two_face(
     request: Request,
     payload: TwoFaceVerifyRequest,
@@ -161,7 +167,11 @@ def submit_verify_two_face(
         lv_img_b64=payload.lv_img,
         user_id=current_user.id,
     )
-    logger.info("Ikki yuz solishtirish yuborildi: task_id=%s, user_id=%d", task.id, current_user.id)
+    logger.info(
+        "Ikki yuz solishtirish yuborildi: task_id=%s, user_id=%d",
+        task.id,
+        current_user.id,
+    )
     return TaskSubmitResponse(task_id=task.id)
 
 

@@ -11,13 +11,37 @@ from app.config import settings
 from app.core.permissions import P
 from app.core.rate_limit import limiter
 from app.crud.api_key import create_api_key, get_all_api_keys, revoke_api_key
-from app.crud.user import create_user, delete_user, get_all_users, get_user_by_username, update_user
-from app.crud.verification_log import get_dashboard_stats, get_log_by_id, get_logs_paginated
-from app.crud.verify_faces import get_face_dashboard_stats, get_face_log_by_id, get_face_logs_paginated
+from app.crud.user import (
+    create_user,
+    delete_user,
+    get_all_users,
+    get_user_by_username,
+    update_user,
+)
+from app.crud.verification_log import (
+    get_dashboard_stats,
+    get_log_by_id,
+    get_logs_paginated,
+)
+from app.crud.verify_faces import (
+    get_face_dashboard_stats,
+    get_face_log_by_id,
+    get_face_logs_paginated,
+)
 from app.dependencies import PermissionChecker, get_current_active_user, get_db
 from app.models.user import User
-from app.schemas.admin import DashboardStats, FaceLogResponse, PaginatedFaceLogs, PaginatedLogs, VerificationLogResponse
-from app.schemas.api_key import ApiKeyCreateRequest, ApiKeyCreateResponse, ApiKeyResponse
+from app.schemas.admin import (
+    DashboardStats,
+    FaceLogResponse,
+    PaginatedFaceLogs,
+    PaginatedLogs,
+    VerificationLogResponse,
+)
+from app.schemas.api_key import (
+    ApiKeyCreateRequest,
+    ApiKeyCreateResponse,
+    ApiKeyResponse,
+)
 from app.schemas.auth import CreateUserRequest, UpdateUserRequest, UserResponse
 
 router = APIRouter()
@@ -62,7 +86,9 @@ def get_logs(
     )
 
 
-@router.get("/logs/{log_id}", response_model=VerificationLogResponse, summary="Bitta log")
+@router.get(
+    "/logs/{log_id}", response_model=VerificationLogResponse, summary="Bitta log"
+)
 def get_single_log(
     log_id: int,
     db: Session = Depends(get_db),
@@ -76,7 +102,9 @@ def get_single_log(
             detail="Log topilmadi",
         )
     if current_user.role_key != 1 and log.get("user_id") != current_user.id:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Log topilmadi")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Log topilmadi"
+        )
     return log
 
 
@@ -110,7 +138,9 @@ def get_stats(
     return get_dashboard_stats(db)
 
 
-@router.get("/users", response_model=list[UserResponse], summary="Foydalanuvchilar ro'yxati")
+@router.get(
+    "/users", response_model=list[UserResponse], summary="Foydalanuvchilar ro'yxati"
+)
 def list_users(
     db: Session = Depends(get_db),
     _: User = Depends(PermissionChecker(P.USER_READ.code)),
@@ -119,7 +149,12 @@ def list_users(
     return get_all_users(db)
 
 
-@router.post("/users", response_model=UserResponse, status_code=201, summary="Yangi foydalanuvchi")
+@router.post(
+    "/users",
+    response_model=UserResponse,
+    status_code=201,
+    summary="Yangi foydalanuvchi",
+)
 @limiter.limit("10/minute")
 def create_new_user(
     request: Request,
@@ -137,8 +172,12 @@ def create_new_user(
     return create_user(db, data)
 
 
-@router.patch("/users/{user_id}", response_model=UserResponse, summary="Foydalanuvchini tahrirlash")
-@limiter.limit("20/minute")
+@router.patch(
+    "/users/{user_id}",
+    response_model=UserResponse,
+    summary="Foydalanuvchini tahrirlash",
+)
+@limiter.limit("200/minute")
 def update_existing_user(
     request: Request,
     user_id: int,
@@ -164,7 +203,7 @@ def update_existing_user(
 
 
 @router.delete("/users/{user_id}", status_code=204, summary="Foydalanuvchini o'chirish")
-@limiter.limit("10/minute")
+@limiter.limit("1000/minute")
 def delete_existing_user(
     request: Request,
     user_id: int,
@@ -182,7 +221,9 @@ def delete_existing_user(
 # === Yuz solishtirish loglari ===
 
 
-@router.get("/face-logs", response_model=PaginatedFaceLogs, summary="Yuz solishtirish loglari")
+@router.get(
+    "/face-logs", response_model=PaginatedFaceLogs, summary="Yuz solishtirish loglari"
+)
 def get_face_logs(
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=100),
@@ -195,7 +236,9 @@ def get_face_logs(
     """Yuz solishtirish loglarini sahifalab ko'rish. Admin bo'lmaganlar faqat o'z loglarini ko'radi."""
     if current_user.role_key != 1:
         user_id = current_user.id
-    items, total = get_face_logs_paginated(db, page, per_page, user_id, date_from, date_to)
+    items, total = get_face_logs_paginated(
+        db, page, per_page, user_id, date_from, date_to
+    )
     pages = math.ceil(total / per_page) if total > 0 else 1
     return PaginatedFaceLogs(
         items=items,
@@ -206,7 +249,11 @@ def get_face_logs(
     )
 
 
-@router.get("/face-logs/{log_id}", response_model=FaceLogResponse, summary="Bitta yuz solishtirish logi")
+@router.get(
+    "/face-logs/{log_id}",
+    response_model=FaceLogResponse,
+    summary="Bitta yuz solishtirish logi",
+)
 def get_single_face_log(
     log_id: int,
     db: Session = Depends(get_db),
@@ -220,7 +267,9 @@ def get_single_face_log(
             detail="Log topilmadi",
         )
     if current_user.role_key != 1 and log.get("user_id") != current_user.id:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Log topilmadi")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Log topilmadi"
+        )
     return log
 
 
@@ -234,7 +283,9 @@ def get_face_log_image(
 ):
     """Yuz solishtirish logidagi rasmni olish. img_type: ps yoki lv."""
     if img_type not in ("ps", "lv"):
-        raise HTTPException(status_code=400, detail="img_type 'ps' yoki 'lv' bo'lishi kerak")
+        raise HTTPException(
+            status_code=400, detail="img_type 'ps' yoki 'lv' bo'lishi kerak"
+        )
     log = get_face_log_by_id(db, log_id)
     if not log:
         raise HTTPException(status_code=404, detail="Log topilmadi")
@@ -250,7 +301,11 @@ def get_face_log_image(
     return FileResponse(file_path, media_type="image/webp")
 
 
-@router.get("/face-stats", response_model=DashboardStats, summary="Yuz solishtirish statistikasi")
+@router.get(
+    "/face-stats",
+    response_model=DashboardStats,
+    summary="Yuz solishtirish statistikasi",
+)
 def get_face_stats(
     db: Session = Depends(get_db),
     _: User = Depends(PermissionChecker(P.DASHBOARD_STATS.code, P.DASHBOARD_READ.code)),
@@ -286,7 +341,9 @@ def create_new_api_key(
     )
 
 
-@router.get("/api-keys", response_model=list[ApiKeyResponse], summary="API kalitlar ro'yxati")
+@router.get(
+    "/api-keys", response_model=list[ApiKeyResponse], summary="API kalitlar ro'yxati"
+)
 def list_api_keys(
     db: Session = Depends(get_db),
     _: User = Depends(PermissionChecker(P.API_KEY_READ.code)),

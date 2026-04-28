@@ -26,7 +26,7 @@ def _set_refresh_cookie(response: Response, token: str) -> None:
         value=token,
         httponly=True,
         secure=settings.COOKIE_SECURE,
-        samesite="strict",
+        samesite="lax",
         max_age=REFRESH_MAX_AGE,
         path=f"{settings.API_V1_PREFIX}/auth",
     )
@@ -37,13 +37,13 @@ def _delete_refresh_cookie(response: Response) -> None:
         key=REFRESH_COOKIE_KEY,
         httponly=True,
         secure=settings.COOKIE_SECURE,
-        samesite="strict",
+        samesite="lax",
         path=f"{settings.API_V1_PREFIX}/auth",
     )
 
 
 @router.post("/login", response_model=TokenPairResponse, summary="Tizimga kirish")
-@limiter.limit("10/minute")
+@limiter.limit("50/minute")
 def login(
     request: Request,
     response: Response,

@@ -26,6 +26,7 @@ def _b64_to_bytes(val: str | None) -> bytes | None:
         raise HTTPException(status_code=400, detail=f"Base64 dekodlash xatosi: {exc}")
 
 
+from app.core.permissions import P
 from app.crud.student import (
     bulk_create_student_logs,
     create_cheating_log,
@@ -43,7 +44,6 @@ from app.crud.student import (
     update_student,
     update_student_log,
 )
-from app.core.permissions import P
 from app.dependencies import (
     PermissionChecker,
     get_current_active_user,
@@ -164,9 +164,7 @@ def bulk_create_student_logs_endpoint(
     Student.is_cheating/is_blacklist yangilanadi, StudentBlacklist ga imei +
     description insert qilinadi (insert-only).
     """
-    results = bulk_create_student_logs(
-        db, payload.items, user_id=current_user.id
-    )
+    results = bulk_create_student_logs(db, payload.items, user_id=current_user.id)
     succeeded = sum(1 for r in results if r.status == "ok")
     return StudentLogBulkResponse(
         items=results,
@@ -606,13 +604,15 @@ def check_faceid_gtsp(
     from sqlalchemy import select
 
     from app.models.region import Region
+    from app.models.smena import Smena
     from app.models.student import Student as StudentModel
     from app.models.test_session_smena import TestSessionSmena
     from app.models.zone import Zone
-    from app.models.smena import Smena
     from app.services.face_service import compare_two_faces
 
-    def _slot_from_row(stu_row, tss_row, zone_row, smena_row, region_row) -> MatchedSlot:
+    def _slot_from_row(
+        stu_row, tss_row, zone_row, smena_row, region_row
+    ) -> MatchedSlot:
         return MatchedSlot(
             session_smena_id=tss_row.id if tss_row else None,
             zone_id=zone_row.id if zone_row else None,
@@ -626,8 +626,10 @@ def check_faceid_gtsp(
         )
 
     def _lookup_student_row(
-        imei: str, session_smena_id: int | None = None,
-        zone_id: int | None = None, test_session_id: int | None = None,
+        imei: str,
+        session_smena_id: int | None = None,
+        zone_id: int | None = None,
+        test_session_id: int | None = None,
     ):
         """Student + to'liq slot kontekstini bitta queryda oladi.
 
@@ -637,8 +639,9 @@ def check_faceid_gtsp(
         """
         q = (
             select(StudentModel, TestSessionSmena, Zone, Smena, Region)
-            .join(TestSessionSmena,
-                  TestSessionSmena.id == StudentModel.session_smena_id)
+            .join(
+                TestSessionSmena, TestSessionSmena.id == StudentModel.session_smena_id
+            )
             .join(Zone, Zone.id == StudentModel.zone_id)
             .join(Smena, Smena.id == TestSessionSmena.test_smena_id)
             .join(Region, Region.id == Zone.region_id)
@@ -680,7 +683,8 @@ def check_faceid_gtsp(
                 )
 
             other = _lookup_student_row(
-                imei_value, test_session_id=current_tss.test_session_id,
+                imei_value,
+                test_session_id=current_tss.test_session_id,
             )
 
             if other is None:
@@ -693,30 +697,36 @@ def check_faceid_gtsp(
             return CheckFaceidGtspResponse(
                 status="wrong_slot",
                 can_attend=False,
-                message=(
-                    "Talabgor shu testda bor, lekin boshqa "
-                    "kun / smena / binoda."
-                ),
+                message=("Talabgor shu testda bor, lekin boshqa kun / smena / binoda."),
                 sname=stu_row.last_name,
                 fname=stu_row.first_name,
                 mname=stu_row.middle_name,
                 imei=imei_value,
                 matched_slot=_slot_from_row(
-                    stu_row, tss_row, zone_row, smena_row, region_row,
+                    stu_row,
+                    tss_row,
+                    zone_row,
+                    smena_row,
+                    region_row,
                 ),
             )
 
         # slot mos — student ma'lumotini saqlab, GTSP chaqiruviga o'tamiz
         stu_row, tss_row, zone_row, smena_row, region_row = matched
         current_slot = _slot_from_row(
-            stu_row, tss_row, zone_row, smena_row, region_row,
+            stu_row,
+            tss_row,
+            zone_row,
+            smena_row,
+            region_row,
         )
         current_fio = (stu_row.last_name, stu_row.first_name, stu_row.middle_name)
 
     # ── 2) GTSP chaqiruvi ─────────────────────────────────────────────
     logger.info(
         "GTSP API chaqirilmoqda (check-faceid): ps=%s, imei=%s",
-        ps_value, imei_value,
+        ps_value,
+        imei_value,
     )
     data, err = _call_gtsp(ps_value, imei_value)
     if err is not None or not data:
@@ -728,8 +738,7 @@ def check_faceid_gtsp(
             status="wrong_passport",
             can_attend=False,
             message=(
-                "Pasport ma'lumotlari xato kiritildi. "
-                "Iltimos to'g'ri ma'lumot kiriting"
+                "Pasport ma'lumotlari xato kiritildi. Iltimos to'g'ri ma'lumot kiriting"
             ),
             sname=current_fio[0],
             fname=current_fio[1],
