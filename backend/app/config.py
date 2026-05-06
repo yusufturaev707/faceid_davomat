@@ -104,9 +104,6 @@ class Settings(BaseSettings):
     API_IIV_TOKEN: str = ""
     API_GTSP: str = ""
 
-    class Config:
-        env_file = ".env"
-
     @field_validator("SECRET_KEY", "API_KEY_PEPPER")
     @classmethod
     def _reject_insecure_secrets(cls, v: str, info) -> str:
