@@ -3,6 +3,11 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.docs import (
+    get_redoc_html,
+    get_swagger_ui_html,
+    get_swagger_ui_oauth2_redirect_html,
+)
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from sqlalchemy import text
@@ -47,7 +52,12 @@ app = FastAPI(
     version="1.0.0",
     description="Yuz aniqlash va rasm tekshiruv API",
     lifespan=lifespan,
+    docs_url=None,  # Default /docs ni o'chirish
+    redoc_url=None,  # Default /redoc ni o'chirish
 )
+
+# Static fayllarni mount qilish
+app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 # Security headers (eng tashqi — har javobga ulaniadi)
 app.add_middleware(SecurityHeadersMiddleware)
@@ -107,6 +117,32 @@ def metrics(request: Request):
     ):
         raise HTTPException(status_code=401, detail="Unauthorized")
 
-    return PlainTextResponse(
-        get_metrics_text(), media_type="text/plain; version=0.0.4"
+    return PlainTextResponse(get_metrics_text(), media_type="text/plain; version=0.0.4")
+
+
+# Custom Swagger UI
+@app.get("/docs", include_in_schema=False)
+async def custom_swagger_ui_html():
+    return get_swagger_ui_html(
+        openapi_url=app.openapi_url,
+        title=app.title + " - Swagger UI",
+        oauth2_redirect_url=app.swagger_ui_oauth2_redirect_url,
+        swagger_js_url="/static/swagger/swagger-ui-bundle.js",
+        swagger_css_url="/static/swagger/swagger-ui.css",
+        swagger_favicon_url="/static/swagger/favicon-32x32.png",
+    )
+
+
+@app.get(app.swagger_ui_oauth2_redirect_url, include_in_schema=False)
+async def swagger_ui_redirect():
+    return get_swagger_ui_oauth2_redirect_html()
+
+
+# Custom ReDoc
+@app.get("/redoc", include_in_schema=False)
+async def redoc_html():
+    return get_redoc_html(
+        openapi_url=app.openapi_url,
+        title=app.title + " - ReDoc",
+        redoc_js_url="/static/swagger/redoc.standalone.js",  # ReDoc kerak bo'lsa
     )
