@@ -10,10 +10,14 @@ _INSECURE_SECRETS: set[str] = {
 
 
 class Settings(BaseSettings):
+    # === Pydantic config — MUHIM, comment qilinmasin! ===
     model_config = SettingsConfigDict(
         env_file=".env",
-        # extra="ignore",  # noma'lum fieldlarni e'tiborsiz qoldirish
+        env_file_encoding="utf-8",
+        case_sensitive=False,  # JWT_ISSUER == jwt_issuer
+        extra="ignore",  # Noma'lum fieldlarni e'tiborsiz qoldirish
     )
+
     # Ilova nomi
     APP_NAME: str
     API_V1_PREFIX: str
@@ -92,7 +96,17 @@ class Settings(BaseSettings):
 
     # CORS — Production'da .env orqali aniq domain ro'yxati berilishi shart.
     # Default faqat localhost dev uchun.
-    CORS_ORIGINS: list[str] = []
+    # CORS_ORIGINS: list[str] = []
+    CORS_ORIGINS: str = ""
+
+    @property
+    def cors_origins_list(self) -> list[str]:
+        """CORS origins ro'yxat ko'rinishida."""
+        if not self.CORS_ORIGINS:
+            return []
+        return [
+            origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()
+        ]
 
     # Tashqi API
     API_CEFR: str = ""
