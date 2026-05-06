@@ -92,11 +92,11 @@ class Settings(BaseSettings):
 
     # CORS — Production'da .env orqali aniq domain ro'yxati berilishi shart.
     # Default faqat localhost dev uchun.
-    CORS_ORIGINS: list[str] = [
-        "http://localhost:5173",
-        "http://localhost:3000",
-        "http://faceid.local",
-    ]
+    # CORS_ORIGINS: list[str] = [
+    #     "http://localhost:5173",
+    #     "http://localhost:3000",
+    #     "http://faceid.local",
+    # ]
 
     # Tashqi API
     API_CEFR: str = ""
