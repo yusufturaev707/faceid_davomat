@@ -84,6 +84,13 @@ class P:
     LOOKUP_UPDATE = _Perm("lookup:update", "Ma'lumotnoma yozuvini tahrirlash", "lookup")
     LOOKUP_DELETE = _Perm("lookup:delete", "Ma'lumotnoma yozuvini o'chirish", "lookup")
 
+    # === Security audit ===
+    FAILED_LOGIN_READ = _Perm(
+        "failed_login:read",
+        "Failed login audit yozuvlarini ko'rish",
+        "security",
+    )
+
 
 ALL_PERMISSIONS: list[_Perm] = [
     value

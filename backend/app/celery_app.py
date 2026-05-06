@@ -18,7 +18,7 @@ celery_app = Celery(
     "faceid",
     broker=settings.REDIS_URL,
     backend=settings.REDIS_URL,
-    include=["app.tasks.verify_task"],
+    include=["app.tasks.verify_task", "app.tasks.cleanup_task"],
 )
 
 celery_app.conf.update(
@@ -48,6 +48,18 @@ celery_app.conf.task_queues = [
     Queue("storage", routing_key="storage.#"),
 ]
 celery_app.conf.task_default_queue = "verify"
+
+# Beat schedule — periodik tasklar
+celery_app.conf.beat_schedule = {
+    "cleanup-refresh-tokens-hourly": {
+        "task": "tasks.cleanup_refresh_tokens",
+        "schedule": 3600.0,  # har 1 soatda
+    },
+    "cleanup-failed-logins-daily": {
+        "task": "tasks.cleanup_failed_logins",
+        "schedule": 86400.0,  # har kunda (90 kundan eskilarni o'chiradi)
+    },
+}
 
 
 @setup_logging.connect

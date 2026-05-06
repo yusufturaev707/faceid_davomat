@@ -1,4 +1,12 @@
-"""Global dependencies: DB session, authentication, permission checking."""
+"""Global dependencies: DB session, authentication, permission checking.
+
+Auth tartibi:
+1. `X-API-Key` header bo'lsa — faqat API key auth ishlaydi (mashina-mashina).
+2. Aks holda `Authorization: Bearer <jwt>` — interaktiv UI auth.
+3. Ikkala usul bir vaqtda berilsa — 400 (ambiguity, header injection himoyasi).
+
+JWT'ning `jti` claim'i Redis blacklist'da tekshiriladi (logout darhol kuchda).
+"""
 
 from collections.abc import Generator
 
@@ -7,6 +15,7 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.core.redis_client import is_jti_blacklisted
 from app.core.security import verify_jwt_token
 from app.crud.api_key import get_api_key_by_raw, update_last_used
 from app.db.session import SessionLocal
@@ -21,7 +30,6 @@ API_KEY_HEADER = "X-API-Key"
 
 
 def get_db() -> Generator[Session]:
-    """DB session dependency."""
     db = SessionLocal()
     try:
         yield db
@@ -30,8 +38,15 @@ def get_db() -> Generator[Session]:
 
 
 def _get_user_from_jwt(token: str, db: Session) -> User:
-    """JWT tokendan foydalanuvchini aniqlash."""
     payload = verify_jwt_token(token)
+
+    jti = payload.get("jti")
+    if jti and is_jti_blacklisted(jti):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token bekor qilingan",
+        )
+
     sub = payload.get("sub")
     if sub is None:
         raise HTTPException(
@@ -55,7 +70,6 @@ def _get_user_from_jwt(token: str, db: Session) -> User:
 
 
 def _get_user_from_api_key(raw_key: str, db: Session) -> User:
-    """API Key orqali foydalanuvchini aniqlash."""
     api_key = get_api_key_by_raw(db, raw_key)
     if api_key is None:
         raise HTTPException(
@@ -72,13 +86,19 @@ def get_current_user(
     token: str | None = Depends(oauth2_scheme),
     db: Session = Depends(get_db),
 ) -> User:
-    """JWT yoki API Key orqali foydalanuvchini aniqlash."""
-    # 1. API Key tekshirish
+    """JWT YOKI API Key — bir vaqtda ikkalasi yuborilishi taqiqlanadi."""
     api_key = request.headers.get(API_KEY_HEADER)
+
+    if api_key and token:
+        # Header injection / ambiguity himoyasi (#25)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Bir vaqtda Bearer va API kalit yuborilmasin",
+        )
+
     if api_key:
         return _get_user_from_api_key(api_key, db)
 
-    # 2. JWT tekshirish
     if token:
         return _get_user_from_jwt(token, db)
 
@@ -89,7 +109,6 @@ def get_current_user(
 
 
 def get_current_active_user(current_user: User = Depends(get_current_user)) -> User:
-    """Foydalanuvchi faol ekanligini tekshirish."""
     if not current_user.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -99,7 +118,6 @@ def get_current_active_user(current_user: User = Depends(get_current_user)) -> U
 
 
 def require_admin(current_user: User = Depends(get_current_active_user)) -> User:
-    """Faqat admin roli uchun (role key=1)."""
     if current_user.role_key != 1:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -113,17 +131,12 @@ class PermissionChecker:
 
     Ishlatish:
         @router.get("/users", dependencies=[Depends(PermissionChecker("user:read"))])
-        @router.post("/users", dependencies=[Depends(PermissionChecker("user:create"))])
-
-    Bir nechta permission (kamida bittasi bo'lsa yetarli):
-        @router.get("/reports", dependencies=[Depends(PermissionChecker("report:read", "report:export"))])
     """
 
     def __init__(self, *required_permissions: str):
         self.required_permissions = required_permissions
 
     def __call__(self, current_user: User = Depends(get_current_active_user)) -> User:
-        # Admin (role_key=1) har doim ruxsat oladi
         if current_user.role_key == 1:
             return current_user
 

@@ -27,10 +27,25 @@ const API_BASE = "/api/v1";
 
 const apiClient = axios.create({ baseURL: API_BASE, withCredentials: true });
 
-// Request interceptor — access tokenni headerga qo'shish
+/** `csrf_token` cookiesini o'qish (HttpOnly emas, JS o'qiy oladi). */
+function readCsrfTokenCookie(): string | null {
+  if (typeof document === "undefined") return null;
+  const match = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]+)/);
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+const CSRF_METHODS = new Set(["post", "put", "patch", "delete"]);
+
+// Request interceptor — access token + CSRF header (state-changing methods uchun)
 apiClient.interceptors.request.use((config) => {
   const token = getAccessToken();
   if (token) config.headers.Authorization = `Bearer ${token}`;
+
+  const method = (config.method || "get").toLowerCase();
+  if (CSRF_METHODS.has(method)) {
+    const csrf = readCsrfTokenCookie();
+    if (csrf) config.headers["X-CSRF-Token"] = csrf;
+  }
   return config;
 });
 
@@ -41,9 +56,18 @@ let refreshPromise: Promise<string> | null = null;
 let refreshFailedUntil = 0; // unix ms — shu vaqtgacha retry urinmaymiz
 
 // Logout callbackni AuthContext tomonidan o'rnatiladi.
+// Race fix: `unauthorizedFiredUntil` window davomida faqat bir marta chaqirilishini ta'minlaydi.
 let onUnauthorized: (() => void) | null = null;
+let unauthorizedFiredUntil = 0;
 export function setOnUnauthorized(cb: (() => void) | null) {
   onUnauthorized = cb;
+}
+
+function fireUnauthorizedOnce() {
+  const now = Date.now();
+  if (now < unauthorizedFiredUntil) return;
+  unauthorizedFiredUntil = now + 1000; // 1s debounce
+  if (onUnauthorized) onUnauthorized();
 }
 
 apiClient.interceptors.response.use(
@@ -81,7 +105,7 @@ apiClient.interceptors.response.use(
       // Hammasiga barrier: keyingi 5 soniya davomida retry qilmaymiz
       refreshFailedUntil = Date.now() + 5000;
       setAccessToken(null);
-      if (onUnauthorized) onUnauthorized();
+      fireUnauthorizedOnce();
       return Promise.reject(refreshErr);
     }
   }
@@ -212,6 +236,37 @@ export async function getApiKeysApi(): Promise<ApiKeyResponse[]> {
 
 export async function revokeApiKeyApi(keyId: number): Promise<void> {
   await apiClient.delete(`/admin/api-keys/${keyId}`);
+}
+
+// === Failed Login Audit ===
+export async function getFailedLoginsApi(params?: {
+  username?: string;
+  since?: string;
+  limit?: number;
+}): Promise<import("./interfaces").FailedLoginAttemptResponse[]> {
+  const clean: Record<string, string | number> = {};
+  if (params?.username) clean.username = params.username;
+  if (params?.since) clean.since = params.since;
+  if (params?.limit) clean.limit = params.limit;
+  const res = await apiClient.get<import("./interfaces").FailedLoginAttemptResponse[]>(
+    "/admin/failed-logins",
+    { params: clean }
+  );
+  return res.data;
+}
+
+export async function getFailedLoginsCountApi(params?: {
+  username?: string;
+  since?: string;
+}): Promise<import("./interfaces").FailedLoginCount> {
+  const clean: Record<string, string> = {};
+  if (params?.username) clean.username = params.username;
+  if (params?.since) clean.since = params.since;
+  const res = await apiClient.get<import("./interfaces").FailedLoginCount>(
+    "/admin/failed-logins/count",
+    { params: clean }
+  );
+  return res.data;
 }
 
 // === Auth Image ===

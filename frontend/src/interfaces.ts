@@ -50,6 +50,20 @@ export interface UserResponse {
   permissions: string[];
 }
 
+// === Failed login audit ===
+export interface FailedLoginAttemptResponse {
+  id: number;
+  username: string;
+  ip_address: string;
+  user_agent: string | null;
+  reason: "no_user" | "wrong_password" | "inactive" | "locked" | string;
+  attempted_at: string;
+}
+
+export interface FailedLoginCount {
+  count: number;
+}
+
 // === Permissions (RBAC) ===
 export interface PermissionResponse {
   id: number;

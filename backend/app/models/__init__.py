@@ -1,6 +1,7 @@
 from app.models.user import User
 from app.models.verification_log import VerificationLog
 from app.models.refresh_token import RefreshToken
+from app.models.failed_login_attempt import FailedLoginAttempt
 from app.models.verify_faces import VerifyFaces
 from app.models.api_key import ApiKey
 from app.models.role import Role
@@ -22,7 +23,7 @@ from app.models.permission import Permission
 from app.models.gender import Gender
 
 __all__ = [
-    "User", "VerificationLog", "RefreshToken", "VerifyFaces", "ApiKey",
+    "User", "VerificationLog", "RefreshToken", "FailedLoginAttempt", "VerifyFaces", "ApiKey",
     "Role", "Region", "Zone", "Smena", "SessionState",
     "Test", "TestSession", "TestSessionSmena",
     "Student", "StudentLog", "StudentPsData", "StudentBlacklist",

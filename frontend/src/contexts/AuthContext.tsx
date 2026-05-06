@@ -7,7 +7,7 @@ import {
 } from "react";
 import type { UserResponse } from "../interfaces";
 import { getMeApi, loginApi, logoutApi, refreshApi, setOnUnauthorized } from "../api";
-import { setAccessToken } from "../tokenStore";
+import { getAccessToken, setAccessToken } from "../tokenStore";
 
 interface AuthContextType {
   user: UserResponse | null;
@@ -27,19 +27,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const isAuthenticated = user !== null;
   const isAdmin = user?.role_key === 1;
 
-  // Ilovani ochganda cookie dagi refresh token orqali sessiyani tiklash
+  // Ilovani ochganda sessiyani tiklash:
+  //   1) sessionStorage'da access token bor bo'lsa — to'g'ridan-to'g'ri /me chaqiramiz.
+  //      Token muddati tugagan bo'lsa, axios interceptor avtomatik refresh qiladi.
+  //   2) Token yo'q bo'lsa (yangi tab/sessiya) — refresh chaqiramiz.
+  // Bu F5 da refresh_tokens jadvaliga ortiqcha row qo'shilishini oldini oladi.
   useEffect(() => {
     let cancelled = false;
     const init = async () => {
       try {
-        const tokens = await refreshApi();
-        if (cancelled) return;
-        setAccessToken(tokens.access_token);
-        if (tokens.user) {
-          setUser(tokens.user);
-        } else {
+        const existingToken = getAccessToken();
+        if (existingToken) {
+          // Token bor — /me orqali tekshirib ko'ramiz (401 bo'lsa interceptor refresh qiladi)
           const me = await getMeApi();
           if (!cancelled) setUser(me);
+        } else {
+          // Token yo'q — refresh chaqiramiz
+          const tokens = await refreshApi();
+          if (cancelled) return;
+          setAccessToken(tokens.access_token);
+          if (tokens.user) {
+            setUser(tokens.user);
+          } else {
+            const me = await getMeApi();
+            if (!cancelled) setUser(me);
+          }
         }
       } catch {
         if (!cancelled) setAccessToken(null);
@@ -47,11 +59,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (!cancelled) setLoading(false);
       }
     };
-    // Brauzer cookie ni saqlashiga vaqt berish (Ctrl+Shift+R)
-    const timerId = setTimeout(init, 50);
+    init();
     return () => {
       cancelled = true;
-      clearTimeout(timerId);
     };
   }, []);
 

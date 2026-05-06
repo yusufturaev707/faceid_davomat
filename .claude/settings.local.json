@@ -21,7 +21,11 @@
       "Read(//c/Applocation/**)",
       "Bash(python -m pytest tests/unit/test_api_key_hashing.py -q)",
       "Bash(timeout 30 ./venv/Scripts/celery.exe -A app.celery_app worker -Q verify --loglevel=info --pool=threads --concurrency=4)",
-      "Bash(timeout 25 ./venv/Scripts/celery.exe -A app.celery_app worker -Q verify --loglevel=info --pool=threads --concurrency=4)"
+      "Bash(timeout 25 ./venv/Scripts/celery.exe -A app.celery_app worker -Q verify --loglevel=info --pool=threads --concurrency=4)",
+      "Bash(./venv/Scripts/python.exe *)",
+      "Bash(grep -E \"\\\\.env$|\\\\.env\\\\..+$\")",
+      "Bash(python -m pip list)",
+      "Bash(python -m pip install slowapi==0.1.9)"
     ]
   }
 }

@@ -1,25 +1,38 @@
-"""Admin foydalanuvchi + RBAC (rollar va permissionlar) seed script.
+"""Admin foydalanuvchi + rollar seed script.
 
 Ishlatish: cd backend && python -m app.db.seed
 
 Idempotent: qayta-qayta ishga tushirsa ham dublikat yaratmaydi.
-Har safar `app.core.permissions.ALL_PERMISSIONS` ichida yangi permission
-paydo bo'lsa — DB ga qo'shib qo'yadi va admin roliga biriktiradi.
+
+Eslatma: Permission catalog (ALL_PERMISSIONS → permissions jadvali) auto-sync
+har FastAPI startupda chaqiriladi (`app.core.permission_sync`). Shuning uchun
+yangi permission qo'shilganda seed'ni qayta ishga tushirish shart emas —
+serverni restart qilish kifoya.
+
+Xavfsizlik:
+- Admin paroli env'dan olinadi (`ADMIN_INITIAL_PASSWORD`).
+- Env yo'q bo'lsa — random parol generatsiya qilinadi va STDOUT ga chiqariladi
+  (faqat seed paytida, log fayllarda saqlanmaydi). Birinchi loginda darhol
+  o'zgartiring.
+- Hardcoded "123" yoki shunga o'xshash zaif parol qabul qilinmaydi.
 """
+
+import os
+import secrets
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.permissions import ALL_PERMISSIONS, P
-from app.core.security import hash_password
+from app.core.permission_sync import sync_permission_catalog
+from app.core.security import hash_password, validate_password_strength
 from app.db.session import SessionLocal
-from app.models.permission import Permission
 from app.models.role import Role
 from app.models.user import User
 
 
 ADMIN_ROLE_KEY = 1
 OPERATOR_ROLE_KEY = 2
+ADMIN_USERNAME = "admin"
 
 DEFAULT_ROLES = [
     {"key": ADMIN_ROLE_KEY, "name": "admin"},
@@ -27,22 +40,24 @@ DEFAULT_ROLES = [
 ]
 
 
-def _sync_permissions(db: Session) -> dict[str, Permission]:
-    """`ALL_PERMISSIONS` ro'yxatini DB bilan sinxronlash. Mavjudini update qiladi."""
-    existing = {p.codename: p for p in db.execute(select(Permission)).scalars().all()}
-    for perm in ALL_PERMISSIONS:
-        current = existing.get(perm.code)
-        if current is None:
-            current = Permission(codename=perm.code, name=perm.name, group=perm.group)
-            db.add(current)
-            existing[perm.code] = current
-        else:
-            # name/group o'zgargan bo'lsa yangilaymiz (codename o'zgarmaydi)
-            if current.name != perm.name or current.group != perm.group:
-                current.name = perm.name
-                current.group = perm.group
-    db.flush()
-    return existing
+def _generate_admin_password() -> str:
+    """Env'dan olish, bo'lmasa kuchli random parol."""
+    env_value = os.environ.get("ADMIN_INITIAL_PASSWORD", "").strip()
+    if env_value:
+        try:
+            validate_password_strength(env_value)
+        except ValueError as exc:
+            raise SystemExit(
+                f"ADMIN_INITIAL_PASSWORD policy talabiga javob bermaydi: {exc}"
+            )
+        return env_value
+
+    while True:
+        candidate = secrets.token_urlsafe(16)
+        try:
+            return validate_password_strength(candidate)
+        except ValueError:
+            continue
 
 
 def _sync_roles(db: Session) -> dict[int, Role]:
@@ -56,54 +71,57 @@ def _sync_roles(db: Session) -> dict[int, Role]:
     return existing
 
 
-def _grant_all_permissions_to_admin(
-    admin_role: Role, perm_map: dict[str, Permission]
-) -> None:
-    """Admin roliga barcha permission'larni biriktirish (always in sync)."""
-    admin_role.permissions = list(perm_map.values())
-
-
 def _ensure_admin_user(db: Session, admin_role: Role) -> None:
     existing = db.execute(
-        select(User).where(User.username == "admin")
+        select(User).where(User.username == ADMIN_USERNAME)
     ).scalar_one_or_none()
     if existing:
-        # Role biriktirilmagan bo'lsa tuzatib qo'yamiz
         if existing.role_id != admin_role.id:
             existing.role_id = admin_role.id
-        print("Admin foydalanuvchi allaqachon mavjud.")
+        print(f"Admin foydalanuvchi mavjud: {ADMIN_USERNAME} (parol o'zgartirilmadi)")
         return
 
+    raw_password = _generate_admin_password()
     admin = User(
-        username="admin",
-        hashed_password=hash_password("123"),
+        username=ADMIN_USERNAME,
+        hashed_password=hash_password(raw_password),
         full_name="Administrator",
         role_id=admin_role.id,
         is_active=True,
     )
     db.add(admin)
-    print("Admin foydalanuvchi yaratildi: admin / 123")
+    print("=" * 60)
+    print(f"  ADMIN FOYDALANUVCHI YARATILDI: {ADMIN_USERNAME}")
+    print(f"  Boshlang'ich parol: {raw_password}")
+    print("  ⚠ Birinchi loginda darhol o'zgartiring!")
+    print("=" * 60)
 
 
 def seed() -> None:
+    """Rollar va admin user seed qilish.
+
+    Permissionlar `sync_permission_catalog` orqali alohida sinxronlashtiriladi,
+    bu funksiya har FastAPI startupda ham chaqiriladi.
+    """
+    # 1) Avval rollar seed
     db: Session = SessionLocal()
     try:
-        perm_map = _sync_permissions(db)
         role_map = _sync_roles(db)
         admin_role = role_map[ADMIN_ROLE_KEY]
-        _grant_all_permissions_to_admin(admin_role, perm_map)
-        db.flush()
         _ensure_admin_user(db, admin_role)
         db.commit()
-        print(
-            f"Seed tugadi: {len(perm_map)} permission, {len(role_map)} rol, "
-            f"admin rolida {len(admin_role.permissions)} permission."
-        )
     except Exception:
         db.rollback()
         raise
     finally:
         db.close()
+
+    # 2) Permission catalog sync (admin'ga ham biriktiradi)
+    result = sync_permission_catalog()
+    print(
+        f"Seed tugadi: rollar OK, permissionlar +{result['added']} added, "
+        f"{result['updated']} updated, admin_synced={result['admin_synced']}"
+    )
 
 
 # Backward compatibility

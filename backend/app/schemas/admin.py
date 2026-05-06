@@ -70,3 +70,17 @@ class PaginatedFaceLogs(BaseModel):
     page: int
     per_page: int
     pages: int
+
+
+# === Failed login audit ===
+
+
+class FailedLoginAttemptResponse(BaseModel):
+    id: int
+    username: str
+    ip_address: str
+    user_agent: str | None
+    reason: str
+    attempted_at: str
+
+    model_config = {"from_attributes": True}

@@ -1,7 +1,7 @@
 import threading
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -12,7 +12,9 @@ from app.config import settings
 from app.core.exceptions import register_exception_handlers
 from app.core.logging import logger, setup_logging
 from app.core.middleware import RequestIdMiddleware, get_metrics_text
+from app.core.permission_sync import sync_permission_catalog
 from app.core.rate_limit import limiter
+from app.core.security_headers import SecurityHeadersMiddleware
 from app.db.session import engine
 from app.services.face_service import init_face_app
 
@@ -25,6 +27,13 @@ async def lifespan(app: FastAPI):
     with engine.connect() as conn:
         conn.execute(text("SELECT 1"))
     logger.info("DB ulanishi muvaffaqiyatli!")
+
+    # Permission catalog avto-sinxronlash (yangi permissionlar DB ga tushadi,
+    # admin roliga to'liq biriktiriladi). Idempotent.
+    try:
+        sync_permission_catalog()
+    except Exception:
+        logger.exception("Permission catalog sync startup'da xato — davom etilmoqda")
 
     # InsightFace modelni background threadda yuklash
     # (embedding endpoint sinxron ishlatadi, shuning uchun kerak)
@@ -39,6 +48,9 @@ app = FastAPI(
     description="Yuz aniqlash va rasm tekshiruv API",
     lifespan=lifespan,
 )
+
+# Security headers (eng tashqi — har javobga ulaniadi)
+app.add_middleware(SecurityHeadersMiddleware)
 
 # Request ID + access log + metrics
 app.add_middleware(RequestIdMiddleware)
@@ -56,7 +68,14 @@ app.add_middleware(
     allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "X-API-Key", "X-Request-ID"],
+    allow_headers=[
+        "Authorization",
+        "Content-Type",
+        "X-API-Key",
+        "X-Request-ID",
+        "X-CSRF-Token",
+    ],
+    expose_headers=["X-Request-ID"],
 )
 
 # API routerlarini ulash
@@ -70,8 +89,24 @@ def health_check():
 
 
 @app.get("/metrics", tags=["ops"], include_in_schema=False)
-def metrics():
-    """Prometheus-compatible text format. Oddiy HTTP counter + latency."""
+def metrics(request: Request):
+    """Prometheus-compatible text format. METRICS_AUTH_TOKEN o'rnatilgan bo'lsa,
+    so'rovda `Authorization: Bearer <token>` bo'lishi shart. Bo'sh bo'lsa endpoint o'chiriladi."""
+    import secrets as _secrets
+
+    from fastapi import HTTPException
     from fastapi.responses import PlainTextResponse
 
-    return PlainTextResponse(get_metrics_text(), media_type="text/plain; version=0.0.4")
+    expected = settings.METRICS_AUTH_TOKEN
+    if not expected:
+        raise HTTPException(status_code=404, detail="Not found")
+
+    auth = request.headers.get("authorization", "")
+    if not auth.startswith("Bearer ") or not _secrets.compare_digest(
+        auth[7:], expected
+    ):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    return PlainTextResponse(
+        get_metrics_text(), media_type="text/plain; version=0.0.4"
+    )

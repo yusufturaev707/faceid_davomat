@@ -11,11 +11,14 @@ from app.config import settings
 from app.core.permissions import P
 from app.core.rate_limit import limiter
 from app.crud.api_key import create_api_key, get_all_api_keys, revoke_api_key
+from app.crud.failed_login_attempt import (
+    count_failed_attempts,
+    get_failed_attempts,
+)
 from app.crud.user import (
     create_user,
     delete_user,
     get_all_users,
-    get_user_by_username,
     update_user,
 )
 from app.crud.verification_log import (
@@ -33,6 +36,7 @@ from app.models.user import User
 from app.schemas.admin import (
     DashboardStats,
     FaceLogResponse,
+    FailedLoginAttemptResponse,
     PaginatedFaceLogs,
     PaginatedLogs,
     VerificationLogResponse,
@@ -155,7 +159,7 @@ def list_users(
     status_code=201,
     summary="Yangi foydalanuvchi",
 )
-@limiter.limit("10/minute")
+@limiter.limit("5/minute")
 def create_new_user(
     request: Request,
     data: CreateUserRequest,
@@ -163,12 +167,6 @@ def create_new_user(
     _: User = Depends(PermissionChecker(P.USER_CREATE.code)),
 ) -> UserResponse:
     """Yangi foydalanuvchi yaratish."""
-    existing = get_user_by_username(db, data.username)
-    if existing:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Bu username allaqachon band",
-        )
     return create_user(db, data)
 
 
@@ -177,7 +175,7 @@ def create_new_user(
     response_model=UserResponse,
     summary="Foydalanuvchini tahrirlash",
 )
-@limiter.limit("200/minute")
+@limiter.limit("20/minute")
 def update_existing_user(
     request: Request,
     user_id: int,
@@ -203,7 +201,7 @@ def update_existing_user(
 
 
 @router.delete("/users/{user_id}", status_code=204, summary="Foydalanuvchini o'chirish")
-@limiter.limit("1000/minute")
+@limiter.limit("10/minute")
 def delete_existing_user(
     request: Request,
     user_id: int,
@@ -368,3 +366,50 @@ def delete_api_key(
             detail="API kalit topilmadi",
         )
     return {"detail": "API kalit bekor qilindi"}
+
+
+# === Failed login audit (admin only) ===
+
+
+@router.get(
+    "/failed-logins",
+    response_model=list[FailedLoginAttemptResponse],
+    summary="Failed login urinishlari (audit)",
+)
+def list_failed_logins(
+    username: str | None = Query(None),
+    since: datetime | None = Query(None),
+    limit: int = Query(100, ge=1, le=500),
+    db: Session = Depends(get_db),
+    _: User = Depends(PermissionChecker(P.FAILED_LOGIN_READ.code)),
+) -> list[FailedLoginAttemptResponse]:
+    """Failed login audit yozuvlarini ko'rish.
+
+    Filtrlar: username (aniq), since (vaqtdan keyin). Default 100 yozuv.
+    """
+    rows = get_failed_attempts(db, username=username, since=since, limit=limit)
+    return [
+        FailedLoginAttemptResponse(
+            id=r.id,
+            username=r.username,
+            ip_address=r.ip_address,
+            user_agent=r.user_agent,
+            reason=r.reason,
+            attempted_at=r.attempted_at.isoformat(),
+        )
+        for r in rows
+    ]
+
+
+@router.get(
+    "/failed-logins/count",
+    summary="Failed login soni (audit)",
+)
+def count_failed_logins(
+    username: str | None = Query(None),
+    since: datetime | None = Query(None),
+    db: Session = Depends(get_db),
+    _: User = Depends(PermissionChecker(P.FAILED_LOGIN_READ.code)),
+) -> dict:
+    """Filtrga mos failed login yozuvlari soni."""
+    return {"count": count_failed_attempts(db, username=username, since=since)}

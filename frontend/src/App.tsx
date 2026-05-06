@@ -33,6 +33,7 @@ import StudentsPage from "./pages/StudentsPage";
 import StudentLogsPage from "./pages/StudentLogsPage";
 import CheatingLogsPage from "./pages/CheatingLogsPage";
 import RolePermissionsPage from "./pages/RolePermissionsPage";
+import FailedLoginsPage from "./pages/FailedLoginsPage";
 
 export default function App() {
   return (
@@ -134,6 +135,12 @@ export default function App() {
               path="/manage-permissions"
               element={<RolePermissionsPage />}
             />
+          </Route>
+
+          <Route
+            element={<PermissionRoute permission={PERM.FAILED_LOGIN_READ} />}
+          >
+            <Route path="/failed-logins" element={<FailedLoginsPage />} />
           </Route>
 
           {/* Ma'lumotnomalar */}

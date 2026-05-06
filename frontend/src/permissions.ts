@@ -67,6 +67,9 @@ export const PERM = {
   LOOKUP_CREATE: "lookup:create",
   LOOKUP_UPDATE: "lookup:update",
   LOOKUP_DELETE: "lookup:delete",
+
+  // Xavfsizlik auditi
+  FAILED_LOGIN_READ: "failed_login:read",
 } as const;
 
 export type PermCode = (typeof PERM)[keyof typeof PERM];

@@ -3,6 +3,16 @@ backend/alembic.ini
 backend/Pipfile
 backend/Pipfile.lock
 
+# Maxfiy konfiguratsiya — sirlar va prod tokenlari
+.env
+.env.local
+.env.production
+.env.*.local
+backend/.env
+backend/.env.local
+backend/.env.production
+backend/celerybeat-schedule*
+
 node_modules/
 frontend/dist/
 
