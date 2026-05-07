@@ -52,8 +52,30 @@ apiClient.interceptors.request.use((config) => {
 // Response interceptor — 401 bo'lganda token yangilash.
 // Race fix: bir vaqtda faqat bitta refresh; muvaffaqiyatsiz bo'lsa, pending
 // so'rovlarning HAMMASI bir marta rad etiladi va keyingi retry bloklanadi.
-let refreshPromise: Promise<string> | null = null;
+let refreshPromise: Promise<TokenPairResponse> | null = null;
 let refreshFailedUntil = 0; // unix ms — shu vaqtgacha retry urinmaymiz
+
+/** Singleton refresh — interceptor va AuthContext init bir xil promise'dan foydalanadi. */
+export function refreshTokensOnce(): Promise<TokenPairResponse> {
+  if (Date.now() < refreshFailedUntil) {
+    return Promise.reject(new Error("refresh_recently_failed"));
+  }
+  if (!refreshPromise) {
+    refreshPromise = refreshApi()
+      .then((tokens) => {
+        setAccessToken(tokens.access_token);
+        return tokens;
+      })
+      .catch((err) => {
+        refreshFailedUntil = Date.now() + 5000;
+        throw err;
+      })
+      .finally(() => {
+        refreshPromise = null;
+      });
+  }
+  return refreshPromise;
+}
 
 // Logout callbackni AuthContext tomonidan o'rnatiladi.
 // Race fix: `unauthorizedFiredUntil` window davomida faqat bir marta chaqirilishini ta'minlaydi.
@@ -88,22 +110,10 @@ apiClient.interceptors.response.use(
 
     original._retry = true;
     try {
-      if (!refreshPromise) {
-        refreshPromise = refreshApi()
-          .then((tokens) => {
-            setAccessToken(tokens.access_token);
-            return tokens.access_token;
-          })
-          .finally(() => {
-            refreshPromise = null;
-          });
-      }
-      const newToken = await refreshPromise;
-      original.headers.Authorization = `Bearer ${newToken}`;
+      const tokens = await refreshTokensOnce();
+      original.headers.Authorization = `Bearer ${tokens.access_token}`;
       return apiClient(original);
     } catch (refreshErr) {
-      // Hammasiga barrier: keyingi 5 soniya davomida retry qilmaymiz
-      refreshFailedUntil = Date.now() + 5000;
       setAccessToken(null);
       fireUnauthorizedOnce();
       return Promise.reject(refreshErr);

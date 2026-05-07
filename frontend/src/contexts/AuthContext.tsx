@@ -6,7 +6,7 @@ import {
   useState,
 } from "react";
 import type { UserResponse } from "../interfaces";
-import { getMeApi, loginApi, logoutApi, refreshApi, setOnUnauthorized } from "../api";
+import { getMeApi, loginApi, logoutApi, refreshTokensOnce, setOnUnauthorized } from "../api";
 import { getAccessToken, setAccessToken } from "../tokenStore";
 
 interface AuthContextType {
@@ -42,10 +42,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const me = await getMeApi();
           if (!cancelled) setUser(me);
         } else {
-          // Token yo'q — refresh chaqiramiz
-          const tokens = await refreshApi();
+          // Token yo'q — singleton refresh (interceptor bilan bir xil promise)
+          const tokens = await refreshTokensOnce();
           if (cancelled) return;
-          setAccessToken(tokens.access_token);
           if (tokens.user) {
             setUser(tokens.user);
           } else {

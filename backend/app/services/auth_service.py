@@ -9,7 +9,7 @@ Xavfsizlik xususiyatlari:
 """
 
 import logging
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
@@ -28,12 +28,17 @@ from app.core.security import (
 from app.crud.failed_login_attempt import record_failed_login
 from app.crud.refresh_token import (
     create_refresh_token,
+    get_record_by_hash,
     get_refresh_token_record,
     get_valid_refresh_token,
-    mark_replaced,
+    mark_replaced_by_hash,
     revoke_refresh_token,
     revoke_token_family,
 )
+
+# Concurrent refresh / network abort scenariylari uchun grace window.
+# Auth0 ~30s, IdentityServer ~60s. 30s — xavfsizlik bilan UX o'rtasida balans.
+REFRESH_ROTATION_GRACE_SECONDS = 30
 from app.crud.user import get_user_by_username
 from app.models.user import User
 from app.schemas.auth import TokenPairResponse, UserResponse
@@ -124,26 +129,57 @@ def rotate_refresh_token(
 ) -> tuple[TokenPairResponse, str]:
     """Eski refresh tokenni rotate qilib, yangi token juftligi qaytarish.
 
-    Reuse detection (RFC 6819):
-    - Agar revoke qilingan token kelsa va u allaqachon `replaced_by_hash`
-      bilan zanjirlangan bo'lsa — bu token theft signali. Butun oilani
-      bekor qilamiz va 401 qaytaramiz.
+    Reuse detection (RFC 6819) + grace window:
+    - Yaroqli token kelsa — odatdagi rotatsiya, row-level lock ostida.
+    - Eskirgan tokenning `replaced_by_hash` mavjud bo'lsa:
+        * agar replacement faol va grace window ichida bo'lsa — bu legitim
+          parallel/abort retry. Replacement ustida qayta rotate qilamiz va
+          yangi tokenni clientga beramiz. Oila yashaydi.
+        * aks holda — haqiqiy reuse, butun oila bekor qilinadi (token theft).
+    - `with_for_update` — bir vaqtda ikki request bir xil rowni rotate
+      qilishini oldini oladi (Postgres row-level lock).
     """
-    record = get_valid_refresh_token(db, token_str)
+    record = get_valid_refresh_token(db, token_str, for_update=True)
 
     if record is None:
-        stale = get_refresh_token_record(db, token_str)
+        stale = get_refresh_token_record(db, token_str, for_update=True)
         if stale is not None and stale.replaced_by_hash is not None:
-            revoke_token_family(db, stale.family_id, reason="reuse")
-            logger.warning(
-                "Refresh token reuse: user_id=%d, family=%s",
-                stale.user_id,
-                stale.family_id,
+            replacement = get_record_by_hash(db, stale.replaced_by_hash)
+            now = datetime.now(timezone.utc)
+
+            in_grace = (
+                replacement is not None
+                and not replacement.revoked
+                and replacement.expires_at > now
+                and replacement.replaced_by_hash is None
+                and (now - replacement.created_at).total_seconds()
+                < REFRESH_ROTATION_GRACE_SECONDS
             )
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Refresh token yaroqsiz yoki muddati tugagan",
-        )
+
+            if in_grace:
+                # Legitim concurrent/abort retry — replacementni rotate qilamiz.
+                logger.info(
+                    "Refresh grace-window retry: user_id=%d, family=%s",
+                    stale.user_id,
+                    stale.family_id,
+                )
+                record = replacement
+            else:
+                revoke_token_family(db, stale.family_id, reason="reuse")
+                logger.warning(
+                    "Refresh token reuse: user_id=%d, family=%s",
+                    stale.user_id,
+                    stale.family_id,
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Refresh token yaroqsiz yoki muddati tugagan",
+                )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Refresh token yaroqsiz yoki muddati tugagan",
+            )
 
     user = record.user
     if not user.is_active:
@@ -158,7 +194,9 @@ def rotate_refresh_token(
         db, user, family_id=family_id
     )
 
-    mark_replaced(db, token_str, new_refresh_token)
+    # Grace branch'da `record` allaqachon replacement, uni mark_replaced
+    # qilish kerak (uning hash'i orqali — token_str eski tokenniki).
+    mark_replaced_by_hash(db, record.token_hash, new_refresh_token)
 
     response = TokenPairResponse(
         access_token=access_token,

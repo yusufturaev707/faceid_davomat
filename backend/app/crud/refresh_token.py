@@ -57,25 +57,38 @@ def create_refresh_token(
 
 
 def get_refresh_token_record(
-    db: Session, token_str: str
+    db: Session, token_str: str, *, for_update: bool = False
 ) -> RefreshToken | None:
     """Raw tokenni hashlab DB dan topish (revoked/expired ham qaytarilishi mumkin)."""
+    stmt = select(RefreshToken).where(
+        RefreshToken.token_hash == _hash_token(token_str)
+    )
+    if for_update:
+        stmt = stmt.with_for_update()
+    return db.execute(stmt).scalar_one_or_none()
+
+
+def get_record_by_hash(
+    db: Session, token_hash: str
+) -> RefreshToken | None:
+    """Hash bo'yicha to'g'ridan-to'g'ri topish (replaced_by_hash uchun)."""
     return db.execute(
-        select(RefreshToken).where(RefreshToken.token_hash == _hash_token(token_str))
+        select(RefreshToken).where(RefreshToken.token_hash == token_hash)
     ).scalar_one_or_none()
 
 
 def get_valid_refresh_token(
-    db: Session, token_str: str
+    db: Session, token_str: str, *, for_update: bool = False
 ) -> RefreshToken | None:
     """Yaroqli (revoke qilinmagan, muddati tugamagan) refresh token."""
-    return db.execute(
-        select(RefreshToken).where(
-            RefreshToken.token_hash == _hash_token(token_str),
-            RefreshToken.revoked == False,  # noqa: E712
-            RefreshToken.expires_at > datetime.now(timezone.utc),
-        )
-    ).scalar_one_or_none()
+    stmt = select(RefreshToken).where(
+        RefreshToken.token_hash == _hash_token(token_str),
+        RefreshToken.revoked == False,  # noqa: E712
+        RefreshToken.expires_at > datetime.now(timezone.utc),
+    )
+    if for_update:
+        stmt = stmt.with_for_update()
+    return db.execute(stmt).scalar_one_or_none()
 
 
 def revoke_refresh_token(db: Session, token_str: str) -> None:
@@ -118,9 +131,16 @@ def revoke_token_family(db: Session, family_id: str, reason: str = "rotation") -
 
 def mark_replaced(db: Session, old_token_str: str, new_token_str: str) -> None:
     """Eski tokenni revoked deb belgilab, yangi tokenning hash'ini saqlash."""
+    mark_replaced_by_hash(db, _hash_token(old_token_str), new_token_str)
+
+
+def mark_replaced_by_hash(
+    db: Session, old_token_hash: str, new_token_str: str
+) -> None:
+    """Hash bo'yicha eski tokenni revoked deb belgilash (grace window uchun)."""
     db.execute(
         update(RefreshToken)
-        .where(RefreshToken.token_hash == _hash_token(old_token_str))
+        .where(RefreshToken.token_hash == old_token_hash)
         .values(
             replaced_by_hash=_hash_token(new_token_str),
             revoked=True,
