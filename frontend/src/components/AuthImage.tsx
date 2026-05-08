@@ -11,16 +11,27 @@ export default function AuthImage({ src, alt = "", className }: AuthImageProps) 
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
 
   useEffect(() => {
-    let revoke = "";
+    let cancelled = false;
+    let createdUrl = "";
+
+    setBlobUrl(null);
     getAuthImageUrl(src)
       .then((url) => {
-        revoke = url;
+        if (cancelled) {
+          // src o'zgarib ulgurgan — yangi blobni darhol bo'shatamiz
+          URL.revokeObjectURL(url);
+          return;
+        }
+        createdUrl = url;
         setBlobUrl(url);
       })
-      .catch(() => setBlobUrl(null));
+      .catch(() => {
+        if (!cancelled) setBlobUrl(null);
+      });
 
     return () => {
-      if (revoke) URL.revokeObjectURL(revoke);
+      cancelled = true;
+      if (createdUrl) URL.revokeObjectURL(createdUrl);
     };
   }, [src]);
 

@@ -4,11 +4,13 @@ import uuid
 from collections import defaultdict
 from threading import Lock
 
+from sqlalchemy.pool import QueuePool
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 
 from app.core.logging import logger, request_id_ctx
+from app.db.session import engine
 
 
 class RequestIdMiddleware(BaseHTTPMiddleware):
@@ -72,6 +74,20 @@ class _Metrics:
                 lines.append(
                     f'http_request_latency_ms_avg{{method="{method}",path="{path}"}} {avg:.2f}'
                 )
+
+        # SQLAlchemy connection pool stats — pool tugab qolish holatini
+        # diagnostika qilish uchun. checkedout = ushbu daqiqada band ulanishlar.
+        pool = engine.pool
+        if isinstance(pool, QueuePool):
+            lines.append("# HELP db_pool_size Configured pool size")
+            lines.append("# TYPE db_pool_size gauge")
+            lines.append(f"db_pool_size {pool.size()}")
+            lines.append("# HELP db_pool_checked_out Connections currently in use")
+            lines.append("# TYPE db_pool_checked_out gauge")
+            lines.append(f"db_pool_checked_out {pool.checkedout()}")
+            lines.append("# HELP db_pool_overflow Overflow connections beyond pool_size")
+            lines.append("# TYPE db_pool_overflow gauge")
+            lines.append(f"db_pool_overflow {pool.overflow()}")
         return "\n".join(lines) + "\n"
 
 

@@ -5,6 +5,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import FileResponse
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -33,6 +34,8 @@ from app.crud.verify_faces import (
 )
 from app.dependencies import PermissionChecker, get_current_active_user, get_db
 from app.models.user import User
+from app.models.verification_log import VerificationLog
+from app.models.verify_faces import VerifyFaces
 from app.schemas.admin import (
     DashboardStats,
     FaceLogResponse,
@@ -119,15 +122,22 @@ def get_log_image(
     db: Session = Depends(get_db),
     current_user: User = Depends(PermissionChecker(P.LOG_READ.code)),
 ):
-    """Tekshiruv logidagi rasmni olish. thumb=true bo'lsa thumbnail qaytaradi."""
-    log = get_log_by_id(db, log_id)
-    if not log or not log.get("image_path"):
+    """Tekshiruv logidagi rasmni olish. thumb=true bo'lsa thumbnail qaytaradi.
+
+    Performance: faqat (user_id, image_path) tanlanadi — User bilan JOIN qilinmaydi
+    (har bir thumbnail uchun ortiqcha ish edi).
+    """
+    row = db.execute(
+        select(VerificationLog.user_id, VerificationLog.image_path).where(
+            VerificationLog.id == log_id
+        )
+    ).first()
+    if not row or not row.image_path:
         raise HTTPException(status_code=404, detail="Rasm topilmadi")
-    if current_user.role_key != 1 and log.get("user_id") != current_user.id:
+    if current_user.role_key != 1 and row.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Rasm topilmadi")
-    filename = log["image_path"]
     suffix = "_thumb" if thumb else ""
-    file_path = _safe_image_path(settings.UPLOADS_PHOTO_DIR, filename, suffix)
+    file_path = _safe_image_path(settings.UPLOADS_PHOTO_DIR, row.image_path, suffix)
     if not os.path.isfile(file_path):
         raise HTTPException(status_code=404, detail="Rasm fayli topilmadi")
     return FileResponse(file_path, media_type="image/webp")
@@ -279,21 +289,29 @@ def get_face_log_image(
     db: Session = Depends(get_db),
     current_user: User = Depends(PermissionChecker(P.FACE_LOG_READ.code)),
 ):
-    """Yuz solishtirish logidagi rasmni olish. img_type: ps yoki lv."""
+    """Yuz solishtirish logidagi rasmni olish. img_type: ps yoki lv.
+
+    Performance: User bilan JOIN qilinmaydi — har bir thumbnail uchun ortiqcha
+    ish edi (ro'yxatda 20 qator x 2 image = 40 keraksiz JOIN).
+    """
     if img_type not in ("ps", "lv"):
         raise HTTPException(
             status_code=400, detail="img_type 'ps' yoki 'lv' bo'lishi kerak"
         )
-    log = get_face_log_by_id(db, log_id)
-    if not log:
+    img_col = VerifyFaces.ps_img if img_type == "ps" else VerifyFaces.lv_img
+    row = db.execute(
+        select(VerifyFaces.user_id, img_col.label("filename")).where(
+            VerifyFaces.id == log_id
+        )
+    ).first()
+    if not row:
         raise HTTPException(status_code=404, detail="Log topilmadi")
-    if current_user.role_key != 1 and log.get("user_id") != current_user.id:
+    if current_user.role_key != 1 and row.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Log topilmadi")
-    filename = log.get("ps_img") if img_type == "ps" else log.get("lv_img")
-    if not filename:
+    if not row.filename:
         raise HTTPException(status_code=404, detail="Rasm topilmadi")
     suffix = "_thumb" if thumb else ""
-    file_path = _safe_image_path(settings.UPLOADS_FACE_DIR, filename, suffix)
+    file_path = _safe_image_path(settings.UPLOADS_FACE_DIR, row.filename, suffix)
     if not os.path.isfile(file_path):
         raise HTTPException(status_code=404, detail="Rasm fayli topilmadi")
     return FileResponse(file_path, media_type="image/webp")

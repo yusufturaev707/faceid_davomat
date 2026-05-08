@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
 from app.models.user import User
@@ -16,20 +16,25 @@ def get_face_logs_paginated(
     date_to: datetime | None = None,
 ) -> tuple[list[dict], int]:
     """Yuz solishtirish loglarini sahifalab olish."""
+    base_filters = []
+    if user_id is not None:
+        base_filters.append(VerifyFaces.user_id == user_id)
+    if date_from is not None:
+        base_filters.append(VerifyFaces.timestamp >= date_from)
+    if date_to is not None:
+        base_filters.append(VerifyFaces.timestamp <= date_to)
+
     query = (
         select(VerifyFaces, User.username)
         .join(User, VerifyFaces.user_id == User.id)
-        .order_by(VerifyFaces.timestamp.desc())
     )
+    for f in base_filters:
+        query = query.where(f)
+    query = query.order_by(VerifyFaces.timestamp.desc())
 
-    if user_id is not None:
-        query = query.where(VerifyFaces.user_id == user_id)
-    if date_from is not None:
-        query = query.where(VerifyFaces.timestamp >= date_from)
-    if date_to is not None:
-        query = query.where(VerifyFaces.timestamp <= date_to)
-
-    count_query = select(func.count()).select_from(query.subquery())
+    count_query = select(func.count()).select_from(VerifyFaces)
+    for f in base_filters:
+        count_query = count_query.where(f)
     total = db.execute(count_query).scalar() or 0
 
     offset = (page - 1) * per_page
@@ -98,48 +103,49 @@ def get_face_log_by_id(db: Session, log_id: int) -> dict | None:
 
 
 def get_face_dashboard_stats(db: Session) -> dict:
-    """Yuz solishtirish statistikasi."""
+    """Yuz solishtirish statistikasi.
+
+    Performance: ilgari 30 kunlik chart har kun uchun alohida COUNT query
+    chaqirardi (30 roundtrip). Endi total/today/week/verified/unique 1 ta
+    conditional aggregate query, daily chart 1 ta GROUP BY query — jami 2 ta.
+    """
     now = datetime.now(timezone.utc)
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     week_start = today_start - timedelta(days=7)
+    chart_start = today_start - timedelta(days=29)
 
-    total = db.execute(
-        select(func.count()).select_from(VerifyFaces)
-    ).scalar() or 0
+    aggregate = db.execute(
+        select(
+            func.count().label("total"),
+            func.count(case((VerifyFaces.timestamp >= today_start, 1))).label("today"),
+            func.count(case((VerifyFaces.timestamp >= week_start, 1))).label("week"),
+            func.count(case((VerifyFaces.verified == True, 1))).label("verified"),  # noqa: E712
+            func.count(func.distinct(VerifyFaces.user_id)).label("unique_users"),
+        )
+    ).one()
 
-    today_count = db.execute(
-        select(func.count()).select_from(VerifyFaces)
-        .where(VerifyFaces.timestamp >= today_start)
-    ).scalar() or 0
-
-    week_count = db.execute(
-        select(func.count()).select_from(VerifyFaces)
-        .where(VerifyFaces.timestamp >= week_start)
-    ).scalar() or 0
-
-    verified_count = db.execute(
-        select(func.count()).select_from(VerifyFaces)
-        .where(VerifyFaces.verified == True)  # noqa: E712
-    ).scalar() or 0
+    total = aggregate.total or 0
+    today_count = aggregate.today or 0
+    week_count = aggregate.week or 0
+    verified_count = aggregate.verified or 0
+    unique_users = aggregate.unique_users or 0
 
     success_rate = (verified_count / total * 100) if total > 0 else 0.0
 
-    unique_users = db.execute(
-        select(func.count(func.distinct(VerifyFaces.user_id)))
-    ).scalar() or 0
+    day_col = func.date_trunc("day", VerifyFaces.timestamp).label("day")
+    grouped = db.execute(
+        select(day_col, func.count().label("cnt"))
+        .where(VerifyFaces.timestamp >= chart_start)
+        .group_by(day_col)
+    ).all()
+    counts_by_date = {row.day.date(): row.cnt for row in grouped}
 
     daily_data = []
     for i in range(29, -1, -1):
-        day = today_start - timedelta(days=i)
-        next_day = day + timedelta(days=1)
-        count = db.execute(
-            select(func.count()).select_from(VerifyFaces)
-            .where(
-                VerifyFaces.timestamp >= day,
-                VerifyFaces.timestamp < next_day,
-            )
-        ).scalar() or 0
-        daily_data.append({"date": day.strftime("%Y-%m-%d"), "count": count})
+        day = (today_start - timedelta(days=i)).date()
+        daily_data.append(
+            {"date": day.strftime("%Y-%m-%d"), "count": counts_by_date.get(day, 0)}
+        )
 
     return {
         "total_verifications": total,

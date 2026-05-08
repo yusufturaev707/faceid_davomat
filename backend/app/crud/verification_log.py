@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
 from app.models.user import User
@@ -16,21 +16,26 @@ def get_logs_paginated(
     date_to: datetime | None = None,
 ) -> tuple[list[dict], int]:
     """Loglarni sahifalab olish. (items, total) qaytaradi."""
+    base_filters = []
+    if user_id is not None:
+        base_filters.append(VerificationLog.user_id == user_id)
+    if date_from is not None:
+        base_filters.append(VerificationLog.timestamp >= date_from)
+    if date_to is not None:
+        base_filters.append(VerificationLog.timestamp <= date_to)
+
     query = (
         select(VerificationLog, User.username)
         .join(User, VerificationLog.user_id == User.id)
-        .order_by(VerificationLog.timestamp.desc())
     )
+    for f in base_filters:
+        query = query.where(f)
+    query = query.order_by(VerificationLog.timestamp.desc())
 
-    if user_id is not None:
-        query = query.where(VerificationLog.user_id == user_id)
-    if date_from is not None:
-        query = query.where(VerificationLog.timestamp >= date_from)
-    if date_to is not None:
-        query = query.where(VerificationLog.timestamp <= date_to)
-
-    # Umumiy son
-    count_query = select(func.count()).select_from(query.subquery())
+    # Umumiy son — order_by'siz, JOIN'siz, faqat asosiy jadvalda WHERE.
+    count_query = select(func.count()).select_from(VerificationLog)
+    for f in base_filters:
+        count_query = count_query.where(f)
     total = db.execute(count_query).scalar() or 0
 
     # Sahifalash
@@ -86,49 +91,50 @@ def get_log_by_id(db: Session, log_id: int) -> dict | None:
 
 
 def get_dashboard_stats(db: Session) -> dict:
-    """Dashboard uchun statistika."""
+    """Dashboard uchun statistika.
+
+    Performance: ilgari 30 kunlik chart har kun uchun alohida COUNT query
+    chaqirardi (30 roundtrip). Endi total/today/week/success/unique 1 ta
+    conditional aggregate query, daily chart 1 ta GROUP BY query — jami 2 ta.
+    """
     now = datetime.now(timezone.utc)
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     week_start = today_start - timedelta(days=7)
+    chart_start = today_start - timedelta(days=29)
 
-    total = db.execute(
-        select(func.count()).select_from(VerificationLog)
-    ).scalar() or 0
+    aggregate = db.execute(
+        select(
+            func.count().label("total"),
+            func.count(case((VerificationLog.timestamp >= today_start, 1))).label("today"),
+            func.count(case((VerificationLog.timestamp >= week_start, 1))).label("week"),
+            func.count(case((VerificationLog.success == True, 1))).label("success"),  # noqa: E712
+            func.count(func.distinct(VerificationLog.user_id)).label("unique_users"),
+        )
+    ).one()
 
-    today_count = db.execute(
-        select(func.count()).select_from(VerificationLog)
-        .where(VerificationLog.timestamp >= today_start)
-    ).scalar() or 0
-
-    week_count = db.execute(
-        select(func.count()).select_from(VerificationLog)
-        .where(VerificationLog.timestamp >= week_start)
-    ).scalar() or 0
-
-    success_count = db.execute(
-        select(func.count()).select_from(VerificationLog)
-        .where(VerificationLog.success == True)  # noqa: E712
-    ).scalar() or 0
+    total = aggregate.total or 0
+    today_count = aggregate.today or 0
+    week_count = aggregate.week or 0
+    success_count = aggregate.success or 0
+    unique_users = aggregate.unique_users or 0
 
     success_rate = (success_count / total * 100) if total > 0 else 0.0
 
-    unique_users = db.execute(
-        select(func.count(func.distinct(VerificationLog.user_id)))
-    ).scalar() or 0
+    # 30 kunlik chart — bitta GROUP BY query, default 0 bilan kunlar to'ldiriladi
+    day_col = func.date_trunc("day", VerificationLog.timestamp).label("day")
+    grouped = db.execute(
+        select(day_col, func.count().label("cnt"))
+        .where(VerificationLog.timestamp >= chart_start)
+        .group_by(day_col)
+    ).all()
+    counts_by_date = {row.day.date(): row.cnt for row in grouped}
 
-    # Oxirgi 30 kunlik chart data
     daily_data = []
     for i in range(29, -1, -1):
-        day = today_start - timedelta(days=i)
-        next_day = day + timedelta(days=1)
-        count = db.execute(
-            select(func.count()).select_from(VerificationLog)
-            .where(
-                VerificationLog.timestamp >= day,
-                VerificationLog.timestamp < next_day,
-            )
-        ).scalar() or 0
-        daily_data.append({"date": day.strftime("%Y-%m-%d"), "count": count})
+        day = (today_start - timedelta(days=i)).date()
+        daily_data.append(
+            {"date": day.strftime("%Y-%m-%d"), "count": counts_by_date.get(day, 0)}
+        )
 
     return {
         "total_verifications": total,

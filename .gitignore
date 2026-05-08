@@ -10,7 +10,7 @@ backend/Pipfile.lock
 .env.*.local
 backend/.env
 backend/.env.local
-backend/.env.production
+backend/.env.prod
 backend/celerybeat-schedule*
 
 node_modules/
@@ -225,3 +225,6 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+
+app/db/migrations/versions/
