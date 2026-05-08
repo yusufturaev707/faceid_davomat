@@ -37,7 +37,9 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 
 # Username enumeration timing fix uchun. Real bcrypt qiymati shaklida.
-_DUMMY_HASH = bcrypt.hashpw(b"dummy_password_for_timing_safety", bcrypt.gensalt(rounds=12)).decode()
+_DUMMY_HASH = bcrypt.hashpw(
+    b"dummy_password_for_timing_safety", bcrypt.gensalt(rounds=12)
+).decode()
 
 
 def dummy_verify_password() -> None:
@@ -56,7 +58,9 @@ def create_access_token(
     """
     to_encode = data.copy()
     now = datetime.now(timezone.utc)
-    expire = now + (expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES))
+    expire = now + (
+        expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    )
     jti = uuid.uuid4().hex
     to_encode.update(
         {
@@ -95,7 +99,7 @@ def verify_jwt_token(token: str) -> dict:
 
 # === Password policy ===
 
-_PASSWORD_MIN_LEN = 8
+_PASSWORD_MIN_LEN = 3  # 8
 _PASSWORD_MAX_LEN = 128
 _LOWER_RE = re.compile(r"[a-z]")
 _UPPER_RE = re.compile(r"[A-Z]")
@@ -113,10 +117,10 @@ def validate_password_strength(password: str) -> str:
         raise ValueError(f"Parol kamida {_PASSWORD_MIN_LEN} belgidan iborat bo'lsin")
     if len(password) > _PASSWORD_MAX_LEN:
         raise ValueError(f"Parol {_PASSWORD_MAX_LEN} belgidan oshmasin")
-    if not _LOWER_RE.search(password):
-        raise ValueError("Parolda kamida bitta kichik harf bo'lsin")
-    if not _UPPER_RE.search(password):
-        raise ValueError("Parolda kamida bitta katta harf bo'lsin")
+    # if not _LOWER_RE.search(password):
+    #     raise ValueError("Parolda kamida bitta kichik harf bo'lsin")
+    # if not _UPPER_RE.search(password):
+    #     raise ValueError("Parolda kamida bitta katta harf bo'lsin")
     if not _DIGIT_RE.search(password):
         raise ValueError("Parolda kamida bitta raqam bo'lsin")
     return password
