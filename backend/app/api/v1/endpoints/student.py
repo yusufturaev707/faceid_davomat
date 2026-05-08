@@ -773,3 +773,81 @@ def check_faceid_gtsp(
         photo=photo_b64,
         matched_slot=current_slot,
     )
+
+
+# ===================== Check FaceID via GTSP — Self-only =====================
+
+
+class CheckFaceidGtspSelfRequest(BaseModel):
+    """Faqat o'zini tekshirish — DB validatsiyasiz, sof face identification.
+
+    GTSP dan ps_ser+ps_num+imei bo'yicha rasm olinadi va cameradan kelgan
+    yuz bilan solishtiriladi. Studentning testda bor-yo'qligi tekshirilmaydi.
+    """
+
+    ps_ser: str = Field(..., min_length=1, max_length=5)
+    ps_num: str = Field(..., min_length=1, max_length=10)
+    imei: str | None = Field(default=None, max_length=14)
+    lv_img: str  # base64 — kameradan kelgan frame
+
+
+@router.post("/check-faceid-gtsp-self", response_model=CheckFaceidGtspResponse)
+def check_faceid_gtsp_self(
+    body: CheckFaceidGtspSelfRequest,
+    db: Session = Depends(get_db),
+    _user: User = Depends(get_current_active_user),
+):
+    """GTSP dan rasm olib, cameradan kelgan yuz bilan to'g'ridan-to'g'ri
+    solishtirish — DB validatsiyasi qilinmaydi.
+
+    Pasport ma'lumotlari + JShShIR bo'yicha GTSP API chaqiriladi. Javob
+    bo'lmasa → `wrong_passport`. Aks holda kameradan kelgan yuz bilan
+    solishtirilib, FIO + score qaytariladi. `matched_slot` har doim None.
+    DB ga hech narsa saqlanmaydi.
+    """
+    from app.services.face_service import compare_two_faces
+
+    imei_value = (body.imei or "").strip()
+    ps_value = f"{body.ps_ser}{body.ps_num}"
+
+    logger.info(
+        "GTSP API chaqirilmoqda (check-faceid-self): ps=%s, imei=%s",
+        ps_value,
+        imei_value,
+    )
+    data, err = _call_gtsp(ps_value, imei_value)
+    if err is not None or not data:
+        return CheckFaceidGtspResponse(
+            status="wrong_passport",
+            can_attend=False,
+            message=(
+                "Pasport ma'lumotlari xato kiritildi. Iltimos to'g'ri ma'lumot kiriting"
+            ),
+            imei=imei_value or None,
+        )
+
+    photo_b64 = data.get("photo")
+
+    try:
+        verify_resp, _ps_bgr, _lv_bgr = compare_two_faces(photo_b64, body.lv_img)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("compare_two_faces xatolik: %s", e)
+        raise HTTPException(status_code=500, detail=f"Yuz solishtirishda xatolik: {e}")
+
+    return CheckFaceidGtspResponse(
+        status="ok",
+        can_attend=False,
+        success=verify_resp.verified,
+        verified=verify_resp.verified,
+        score=verify_resp.score,
+        threshold=verify_resp.thresh_score,
+        message=verify_resp.message,
+        sname=data.get("sname"),
+        fname=data.get("fname"),
+        mname=data.get("mname"),
+        imei=imei_value or None,
+        photo=photo_b64,
+        matched_slot=None,
+    )
