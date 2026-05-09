@@ -12,8 +12,6 @@ import base64
 import json
 import logging
 from datetime import datetime
-from typing import Iterator
-
 import httpx
 import redis
 from sqlalchemy import select
@@ -327,50 +325,56 @@ def _extract_total_count(source: dict) -> int:
     return 0
 
 
-def _stream_pages(
+def _parse_response_body(
+    body: dict,
+    *,
+    items_key: str,
+    data_wrapper: bool,
+    total_pages_key: str,
+) -> tuple[list[dict], int, int]:
+    """API javobidan items, total_pages, total_count'ni ajratish.
+
+    Returns: (items, total_pages, total_count)
+    """
+    if data_wrapper:
+        data = body.get("data", {})
+        items = data.get(items_key, [])
+        meta = data.get("_meta", {})
+        total_pages = meta.get(total_pages_key, 1)
+        total_count = _extract_total_count(meta)
+    else:
+        items = body.get(items_key, [])
+        total_pages = body.get(total_pages_key, 1)
+        total_count = _extract_total_count(body)
+    return items, int(total_pages or 1), int(total_count or 0)
+
+
+def _fetch_page(
+    client: httpx.Client,
     url_template: str,
     date_str: str,
+    page: int,
     headers: dict[str, str] | None,
     *,
     items_key: str,
     data_wrapper: bool,
     total_pages_key: str,
-) -> Iterator[tuple[list[dict], int, int, int]]:
-    """Tashqi API'dan sahifalarni oqim sifatida qaytaradi.
+) -> tuple[list[dict], int, int]:
+    """Bitta sahifani fetch qilish va ajratish.
 
-    Yield: (items, current_page, total_pages, total_count)
-    Hech qachon barcha sahifalarni xotirada saqlamaydi.
+    Returns: (items, total_pages, total_count)
     """
-    page = 1
-    total_pages = 1
-    total_count = 0
-
-    # SSL verify=True — productionda xavfsizlik. Agar tashqi API serveri
-    # self-signed bo'lsa, .env'da CA bundle ko'rsatish kerak.
-    with httpx.Client(timeout=HTTP_TIMEOUT, verify=False) as client:
-        while True:
-            url = url_template.format(date_str, page)
-            logger.info("Fetching: %s", url)
-            resp = client.get(url, headers=headers or {})
-            resp.raise_for_status()
-            body = resp.json()
-
-            if data_wrapper:
-                data = body.get("data", {})
-                items = data.get(items_key, [])
-                meta = data.get("_meta", {})
-                total_pages = meta.get(total_pages_key, 1)
-                total_count = _extract_total_count(meta)
-            else:
-                items = body.get(items_key, [])
-                total_pages = body.get(total_pages_key, 1)
-                total_count = _extract_total_count(body)
-
-            yield items, page, total_pages, total_count
-
-            if page >= total_pages or not items:
-                break
-            page += 1
+    url = url_template.format(date_str, page)
+    logger.info("Fetching: %s", url)
+    resp = client.get(url, headers=headers or {})
+    resp.raise_for_status()
+    body = resp.json()
+    return _parse_response_body(
+        body,
+        items_key=items_key,
+        data_wrapper=data_wrapper,
+        total_pages_key=total_pages_key,
+    )
 
 
 # ─── Asosiy yuklash funktsiyasi ──────────────────────────────────────
@@ -454,132 +458,184 @@ def load_students_for_session(db: Session, session: TestSession) -> int:
     _set_progress(
         r, session.id,
         current=0, total=0, pages_done=0, pages_total=0,
-        skipped=0, status="processing", message="Eski ma'lumotlar tozalanmoqda...",
+        skipped=0, status="processing", message="API meta-ma'lumot olinmoqda...",
+    )
+
+    sorted_days = sorted(smena_days)
+    # ─── FAZA 1: Discovery — har kun uchun page=1 dan totalCount va pageCount olish ───
+    # Maqsad: progress 0→100% strictly monoton bo'lishi uchun grand_total
+    # processing boshlanishidan AVVAL aniqlanishi kerak. Aks holda har kun
+    # boshida total o'sib, foiz orqaga sakraydi.
+    #
+    # Memory: page=1 items keshlanadi (re-fetch oldini olish uchun), 1 sahifa
+    # × N kun. Tipik holatda <100 MB.
+    day_first_pages: dict[str, list[dict]] = {}
+    day_total_pages: dict[str, int] = {}
+    grand_total_count = 0
+    grand_total_pages = 0
+
+    try:
+        with httpx.Client(timeout=HTTP_TIMEOUT, verify=False) as client:
+            for day_str in sorted_days:
+                try:
+                    items, total_pages, total_count = _fetch_page(
+                        client, url_template, day_str, 1, headers, **fetch_kwargs
+                    )
+                except httpx.HTTPError as e:
+                    raise StudentLoadError(
+                        f"Tashqi API meta olishda xato ({day_str}): {e}"
+                    ) from e
+                day_first_pages[day_str] = items
+                day_total_pages[day_str] = total_pages
+                grand_total_count += total_count
+                grand_total_pages += total_pages
+                logger.info(
+                    "Discovery %s: total_count=%d, pages=%d",
+                    day_str, total_count, total_pages,
+                )
+    except StudentLoadError:
+        _set_progress(
+            r, session.id,
+            current=0, total=0, pages_done=0, pages_total=0,
+            skipped=0, status="error",
+            message="Tashqi API meta-ma'lumot olinmadi",
+        )
+        raise
+
+    logger.info(
+        "Discovery done: %d days, grand_total_count=%d, grand_total_pages=%d",
+        len(sorted_days), grand_total_count, grand_total_pages,
+    )
+
+    _set_progress(
+        r, session.id,
+        current=0, total=grand_total_count,
+        pages_done=0, pages_total=grand_total_pages,
+        skipped=0, status="processing",
+        message="Eski ma'lumotlar tozalanmoqda...",
     )
 
     # IDEMPOTENT: shu sessiya bo'yicha avval yuklangan studentlarni o'chirish.
-    # Aks holda, qayta yuklashda (rollback'dan keyin yoki retry'dan keyin)
-    # mavjud yozuvlar ustiga yangilari qo'shilib, son ikki barobarga oshadi.
+    # Discovery muvaffaqiyatli tugagandan keyin xavfsiz — agar API xato
+    # bersa, eski ma'lumotlar saqlanib qoladi.
     # Import shu yerda — circular import oldini olish uchun.
     from app.crud.test_session import _delete_students_by_session
     _delete_students_by_session(db, session.id)
     db.commit()
 
-    _set_progress(
-        r, session.id,
-        current=0, total=0, pages_done=0, pages_total=0,
-        skipped=0, status="processing", message="API'ga ulanmoqda...",
-    )
-
+    # ─── FAZA 2: Processing — fixed grand_total'ga nisbatan monoton progress ───
     total_loaded = 0
     total_skipped = 0
-    # Kumulyativ — 3 kun bo'yicha yig'indi. Har bir kunning 1-sahifasidan
-    # `totalCount` va `pageCount`ni 1 marta qo'shamiz, keyin oshmaydi.
-    total_count_cumulative = 0
-    total_pages_cumulative = 0
     pages_done = 0
 
-    try:
-        for day_str in sorted(smena_days):
-            logger.info("Loading students: date=%s, key=%s", day_str, test_key)
+    def _process_page_items(
+        raw_items: list[dict],
+        day_str: str,
+        student_buffer: list[dict],
+        ps_buffer: list[dict],
+    ) -> int:
+        """Sahifa item'larini parser orqali bufer'ga qo'shish.
 
-            try:
-                page_iter = _stream_pages(url_template, day_str, headers, **fetch_kwargs)
-            except httpx.HTTPError as e:
-                raise StudentLoadError(f"Tashqi API ulanish xatosi: {e}") from e
+        Returns: shu chaqiruvda buffer'ga commit qilingan studentlar soni.
+        """
+        nonlocal total_loaded, total_skipped
+        committed_now = 0
+        for raw in raw_items:
+            parsed = parser(raw, zone_map)
+            if not parsed:
+                total_skipped += 1
+                continue
 
-            # Bitta kun ichidagi accumulator — INSERT_BATCH_SIZE'gacha
-            student_buffer: list[dict] = []
-            ps_buffer: list[dict] = []
-            day_meta_seen = False
+            student_data, ps_data = parsed
 
-            try:
-                for items, page_num, page_total, page_total_count in page_iter:
-                    pages_done += 1
+            smena_number = student_data.pop("_smena_number", 1)
+            item_day = student_data.pop("_day", day_str)
 
-                    # Kunning 1-javobida `totalCount` va `pageCount`ni olamiz
-                    # va kumulyativ summa'ga qo'shamiz. Keyingi sahifalarda
-                    # qaytarilmaydi — counterlar faqat o'sadi.
-                    if not day_meta_seen:
-                        day_meta_seen = True
-                        total_pages_cumulative += page_total
-                        total_count_cumulative += page_total_count
+            session_smena_id = smena_map.get((smena_number, item_day))
+            if not session_smena_id:
+                total_skipped += 1
+                continue
 
-                    for raw in items:
-                        parsed = parser(raw, zone_map)
-                        if not parsed:
-                            total_skipped += 1
-                            continue
+            student_data["session_smena_id"] = session_smena_id
+            student_data["is_image"] = bool(ps_data.get("ps_img"))
 
-                        student_data, ps_data = parsed
+            imei_val = student_data.get("imei") or ""
+            if imei_val and imei_val in blacklist_imeis:
+                student_data["is_blacklist"] = True
 
-                        smena_number = student_data.pop("_smena_number", 1)
-                        item_day = student_data.pop("_day", day_str)
+            # Gender — IMEI 1-raqamiga qarab
+            if imei_val and imei_val[0] in ("3", "5"):
+                ps_data["gender_id"] = gender_male_id
+            elif imei_val and imei_val[0] in ("4", "6"):
+                ps_data["gender_id"] = gender_female_id
+            else:
+                ps_data["gender_id"] = gender_default_id
 
-                        session_smena_id = smena_map.get((smena_number, item_day))
-                        if not session_smena_id:
-                            total_skipped += 1
-                            continue
+            student_buffer.append(student_data)
+            ps_buffer.append(ps_data)
 
-                        student_data["session_smena_id"] = session_smena_id
-                        student_data["is_image"] = bool(ps_data.get("ps_img"))
-
-                        imei_val = student_data.get("imei") or ""
-                        if imei_val and imei_val in blacklist_imeis:
-                            student_data["is_blacklist"] = True
-
-                        # Gender — IMEI 1-raqamiga qarab
-                        if imei_val and imei_val[0] in ("3", "5"):
-                            ps_data["gender_id"] = gender_male_id
-                        elif imei_val and imei_val[0] in ("4", "6"):
-                            ps_data["gender_id"] = gender_female_id
-                        else:
-                            ps_data["gender_id"] = gender_default_id
-
-                        student_buffer.append(student_data)
-                        ps_buffer.append(ps_data)
-
-                        # Bufer to'lganda — bulk insert + commit
-                        if len(student_buffer) >= INSERT_BATCH_SIZE:
-                            _flush_batch(db, student_buffer, ps_buffer)
-                            total_loaded += len(student_buffer)
-                            student_buffer.clear()
-                            ps_buffer.clear()
-
-                            _set_progress(
-                                r, session.id,
-                                current=total_loaded,
-                                total=total_count_cumulative,
-                                pages_done=pages_done,
-                                pages_total=total_pages_cumulative,
-                                skipped=total_skipped, status="processing",
-                                message=f"{day_str}: sahifa {page_num}/{page_total}",
-                            )
-
-                    _set_progress(
-                        r, session.id,
-                        current=total_loaded,
-                        total=total_count_cumulative,
-                        pages_done=pages_done,
-                        pages_total=total_pages_cumulative,
-                        skipped=total_skipped, status="processing",
-                        message=f"{day_str}: sahifa {page_num}/{page_total}",
-                    )
-            except httpx.HTTPError as e:
-                # Buferni saqlab qolaylik — qisman yuklangan ham foydali
-                if student_buffer:
-                    _flush_batch(db, student_buffer, ps_buffer)
-                    total_loaded += len(student_buffer)
-                    student_buffer.clear()
-                    ps_buffer.clear()
-                raise StudentLoadError(f"Tashqi API xatosi: {e}") from e
-
-            # Kun yakuni — qolgan buferni yozish
-            if student_buffer:
+            if len(student_buffer) >= INSERT_BATCH_SIZE:
                 _flush_batch(db, student_buffer, ps_buffer)
+                committed_now += len(student_buffer)
                 total_loaded += len(student_buffer)
                 student_buffer.clear()
                 ps_buffer.clear()
+        return committed_now
+
+    try:
+        with httpx.Client(timeout=HTTP_TIMEOUT, verify=False) as client:
+            for day_str in sorted_days:
+                logger.info("Processing students: date=%s, key=%s", day_str, test_key)
+                day_pages = day_total_pages[day_str]
+
+                student_buffer: list[dict] = []
+                ps_buffer: list[dict] = []
+
+                # Page 1 — discovery'da keshlangan
+                first_items = day_first_pages.pop(day_str, [])
+                _process_page_items(first_items, day_str, student_buffer, ps_buffer)
+                pages_done += 1
+                _set_progress(
+                    r, session.id,
+                    current=total_loaded,
+                    total=grand_total_count,
+                    pages_done=pages_done,
+                    pages_total=grand_total_pages,
+                    skipped=total_skipped, status="processing",
+                    message=f"{day_str}: sahifa 1/{day_pages}",
+                )
+
+                # Pages 2..N — fresh fetch
+                try:
+                    for page in range(2, day_pages + 1):
+                        try:
+                            items, _, _ = _fetch_page(
+                                client, url_template, day_str, page, headers,
+                                **fetch_kwargs,
+                            )
+                        except httpx.HTTPError as e:
+                            raise StudentLoadError(
+                                f"Tashqi API xatosi ({day_str} sahifa {page}): {e}"
+                            ) from e
+
+                        _process_page_items(items, day_str, student_buffer, ps_buffer)
+                        pages_done += 1
+                        _set_progress(
+                            r, session.id,
+                            current=total_loaded,
+                            total=grand_total_count,
+                            pages_done=pages_done,
+                            pages_total=grand_total_pages,
+                            skipped=total_skipped, status="processing",
+                            message=f"{day_str}: sahifa {page}/{day_pages}",
+                        )
+                finally:
+                    # Kun yakuni yoki xatolik — qolgan buferni yozib qo'yish
+                    if student_buffer:
+                        _flush_batch(db, student_buffer, ps_buffer)
+                        total_loaded += len(student_buffer)
+                        student_buffer.clear()
+                        ps_buffer.clear()
 
         # Sessiya total count yangilash
         session.count_total_student = total_loaded
@@ -588,9 +644,9 @@ def load_students_for_session(db: Session, session: TestSession) -> int:
         _set_progress(
             r, session.id,
             current=total_loaded,
-            total=total_count_cumulative or total_loaded,
+            total=grand_total_count or total_loaded,
             pages_done=pages_done,
-            pages_total=total_pages_cumulative,
+            pages_total=grand_total_pages,
             skipped=total_skipped, status="completed",
             message=f"{total_loaded} ta talaba yuklandi",
         )
@@ -605,9 +661,9 @@ def load_students_for_session(db: Session, session: TestSession) -> int:
         _set_progress(
             r, session.id,
             current=total_loaded,
-            total=total_count_cumulative or total_loaded,
+            total=grand_total_count or total_loaded,
             pages_done=pages_done,
-            pages_total=total_pages_cumulative,
+            pages_total=grand_total_pages,
             skipped=total_skipped, status="error",
             message=e.message,
         )
@@ -616,9 +672,9 @@ def load_students_for_session(db: Session, session: TestSession) -> int:
         _set_progress(
             r, session.id,
             current=total_loaded,
-            total=total_count_cumulative or total_loaded,
+            total=grand_total_count or total_loaded,
             pages_done=pages_done,
-            pages_total=total_pages_cumulative,
+            pages_total=grand_total_pages,
             skipped=total_skipped, status="error",
             message=f"Kutilmagan xatolik: {e}",
         )

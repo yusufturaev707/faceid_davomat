@@ -171,18 +171,33 @@ export default function TestSessionDetailPage() {
           setLoadProgress((prev) => Math.min(95, prev + 1));
         }
 
+        // Label: "X / TOTAL ta yuklandi" — TOTAL barcha kunlardagi
+        // totalCount'lar yig'indisi (discovery fazasidan keyin ma'lum).
         const labelParts: string[] = [];
-        if (p.current > 0) labelParts.push(`${p.current} ta yuklandi`);
-        if (p.skipped > 0) labelParts.push(`${p.skipped} ta o'tkazildi`);
+        if (p.total > 0) {
+          labelParts.push(
+            `${p.current.toLocaleString("uz-UZ")} / ${p.total.toLocaleString("uz-UZ")} ta yuklandi`,
+          );
+        } else if (p.current > 0) {
+          labelParts.push(`${p.current.toLocaleString("uz-UZ")} ta yuklandi`);
+        }
+        if (p.skipped > 0) labelParts.push(`${p.skipped.toLocaleString("uz-UZ")} ta o'tkazildi`);
         if (p.message) labelParts.push(p.message);
         setProgressLabel(
-          labelParts.length ? `Talabalar: ${labelParts.join(" · ")}` : "Talabalar yuklanmoqda..."
+          labelParts.length ? `Talabalar: ${labelParts.join(" · ")}` : "Talabalar yuklanmoqda...",
         );
 
         if (p.status === "completed") {
           clearInterval(poll);
           setLoadProgress(100);
-          setProgressLabel(`Tayyor: ${p.current} ta talaba yuklandi`);
+          const finalParts = [`Tayyor: ${p.current.toLocaleString("uz-UZ")} ta talaba yuklandi`];
+          if (p.total > 0 && p.total !== p.current) {
+            finalParts.push(`(${p.total.toLocaleString("uz-UZ")} ta umumiy)`);
+          }
+          if (p.skipped > 0) {
+            finalParts.push(`${p.skipped.toLocaleString("uz-UZ")} ta o'tkazib yuborildi`);
+          }
+          setProgressLabel(finalParts.join(" · "));
           setTimeout(async () => {
             try {
               const refreshed = await getTestSessionApi(sessionId);
