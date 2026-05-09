@@ -1,0 +1,49 @@
+[Unit]
+Description=FaceID Celery Beat (periodic task scheduler)
+Documentation=https://docs.celeryq.dev/en/stable/userguide/periodic-tasks.html
+After=network-online.target redis-server.service
+Wants=network-online.target
+Requires=redis-server.service
+PartOf=faceid-celery.target
+
+[Service]
+# Faqat BITTA Beat nusxasi ishlasin — duplicate task yuborilmasin uchun.
+Type=simple
+User=root
+Group=www-data
+
+WorkingDirectory=/var/www/faceid_davomat/backend
+EnvironmentFile=-/var/www/faceid_davomat/backend/.env
+Environment="PYTHONUNBUFFERED=1"
+Environment="PYTHONDONTWRITEBYTECODE=1"
+
+# --schedule fayli Beat'ning oxirgi run vaqtini eslab qoladi.
+# Restart bo'lganda missed run'lar tashlab yuboriladi.
+ExecStart=/var/www/faceid_davomat/backend/venv/bin/celery \
+    -A app.celery_app beat \
+    --schedule=/var/www/faceid_davomat/backend/celerybeat-schedule \
+    --pidfile=/var/www/faceid_davomat/backend/celerybeat.pid \
+    --loglevel=info
+
+Restart=always
+RestartSec=10
+
+KillSignal=SIGTERM
+TimeoutStopSec=30
+KillMode=mixed
+
+LimitNOFILE=65536
+LimitNPROC=4096
+
+StandardOutput=append:/var/www/faceid_davomat/backend/logs/celery-beat.log
+StandardError=append:/var/www/faceid_davomat/backend/logs/celery-beat.error.log
+SyslogIdentifier=faceid-celery-beat
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/var/www/faceid_davomat/backend
+
+[Install]
+WantedBy=multi-user.target
