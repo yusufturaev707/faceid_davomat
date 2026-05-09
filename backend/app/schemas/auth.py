@@ -28,7 +28,7 @@ class TokenPairResponse(BaseModel):
 
 class CreateUserRequest(BaseModel):
     username: str = Field(..., min_length=3, max_length=50, pattern=r"^[A-Za-z0-9_.\-]+$")
-    password: str = Field(..., min_length=8, max_length=128)
+    password: str = Field(..., min_length=3, max_length=128)
     full_name: str | None = Field(default=None, max_length=100)
     role_id: int | None = None
     zone_id: int | None = None
@@ -44,7 +44,7 @@ class UpdateUserRequest(BaseModel):
     username: str | None = Field(
         default=None, min_length=3, max_length=50, pattern=r"^[A-Za-z0-9_.\-]+$"
     )
-    password: str | None = Field(default=None, min_length=8, max_length=128)
+    password: str | None = Field(default=None, min_length=3, max_length=128)
     full_name: str | None = Field(default=None, max_length=100)
     role_id: int | None = None
     zone_id: int | None = None
