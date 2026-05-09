@@ -15,6 +15,7 @@ import {
   getSessionStatesLookupApi,
   getSessionStudentStatsApi,
   getSmenasLookupApi,
+  getStudentLoadProgressApi,
   getStudentsApi,
   getTestSessionApi,
   getTestsLookupApi,
@@ -154,6 +155,63 @@ export default function TestSessionDetailPage() {
 
   const [stateError, setStateError] = useState("");
 
+  // Student loading polling — Celery task'dan kelayotgan progressni Redis orqali oqish
+  const startStudentLoadPolling = useCallback((sessionId: number) => {
+    const poll = setInterval(async () => {
+      try {
+        const p = await getStudentLoadProgressApi(sessionId);
+
+        // Progress bar — agar total ma'lum bo'lsa aniq foiz, aks holda
+        // sahifalar bo'yicha (chunki backend total'ni faqat tugagandan keyin biladi)
+        if (p.percent > 0) {
+          setLoadProgress(p.percent);
+        } else if (p.current > 0) {
+          // Indeterminate — sahifa progressiga qarab oshiramiz
+          setLoadProgress((prev) => Math.min(95, prev + 1));
+        }
+
+        const labelParts: string[] = [];
+        if (p.current > 0) labelParts.push(`${p.current} ta yuklandi`);
+        if (p.skipped > 0) labelParts.push(`${p.skipped} ta o'tkazildi`);
+        if (p.message) labelParts.push(p.message);
+        setProgressLabel(
+          labelParts.length ? `Talabalar: ${labelParts.join(" · ")}` : "Talabalar yuklanmoqda..."
+        );
+
+        if (p.status === "completed") {
+          clearInterval(poll);
+          setLoadProgress(100);
+          setProgressLabel(`Tayyor: ${p.current} ta talaba yuklandi`);
+          setTimeout(async () => {
+            try {
+              const refreshed = await getTestSessionApi(sessionId);
+              setSession(refreshed);
+            } catch { /* ignore */ }
+            setChangingState(false);
+            setTargetStateId(null);
+            setLoadProgress(0);
+            setProgressLabel("");
+          }, 800);
+        } else if (p.status === "error") {
+          clearInterval(poll);
+          setLoadProgress(0);
+          setProgressLabel("");
+          setStateError(p.message || "Talabalarni yuklashda xatolik yuz berdi");
+          // Sessiya state'i backend tomonida rollback qilingan — qayta yuklash
+          try {
+            const refreshed = await getTestSessionApi(sessionId);
+            setSession(refreshed);
+          } catch { /* ignore */ }
+          setChangingState(false);
+          setTargetStateId(null);
+        }
+      } catch {
+        // Polling xatosi — keyingi cikl'da qayta urinamiz
+      }
+    }, 1500);
+    return poll;
+  }, []);
+
   // Embedding polling funksiyasi — handleNextStep va useEffect da ishlatiladi
   const startEmbeddingPolling = useCallback((sessionId: number) => {
     const poll = setInterval(async () => {
@@ -227,6 +285,28 @@ export default function TestSessionDetailPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.id, session?.test_state_id, states.length, startEmbeddingPolling]);
 
+  // Sahifa yuklanganda student loading davom etayotganini tekshirish (state key=2)
+  useEffect(() => {
+    if (!session || !states.length || changingState) return;
+    const currentState = states.find((s) => s.id === session.test_state_id);
+    if (!currentState || currentState.key !== 2) return;
+
+    let pollId: ReturnType<typeof setInterval> | null = null;
+
+    getStudentLoadProgressApi(session.id).then((p) => {
+      if (p.status === "processing") {
+        setChangingState(true);
+        setTargetStateId(session.test_state_id);
+        setLoadProgress(Math.max(p.percent, 1));
+        setProgressLabel(p.message || "Talabalar yuklanmoqda...");
+        pollId = startStudentLoadPolling(session.id);
+      }
+    }).catch(() => { /* ignore */ });
+
+    return () => { if (pollId) clearInterval(pollId); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.id, session?.test_state_id, states.length, startStudentLoadPolling]);
+
   // Sorted states by key for stepper
   const sortedStates = [...states].sort((a, b) => a.key - b.key);
   const currentStateKey = sortedStates.find(
@@ -247,6 +327,22 @@ export default function TestSessionDetailPage() {
     setLoadProgress(0);
     setProgressLabel("");
 
+    // State 2 (talabalar yuklash) — Celery task, real progress polling
+    if (nextState.key === 2) {
+      try {
+        const updated = await changeSessionStateApi(session.id, nextState.id);
+        setSession(updated);
+        setProgressLabel("Talabalar yuklash boshlanmoqda...");
+        setLoadProgress(0.5);
+        startStudentLoadPolling(session.id);
+      } catch (err) {
+        setChangingState(false);
+        setTargetStateId(null);
+        setStateError(extractErrorMessage(err));
+      }
+      return;
+    }
+
     // State 3 (embedding) — Celery task, alohida flow
     if (nextState.key === 3) {
       try {
@@ -264,35 +360,23 @@ export default function TestSessionDetailPage() {
       return;
     }
 
-    // Boshqa statelar uchun umumiy flow
-    let progressInterval: ReturnType<typeof setInterval> | null = null;
-
-    if (nextState.key === 2) {
-      setProgressLabel("Talabalar yuklanmoqda...");
-      progressInterval = setInterval(() => {
-        setLoadProgress((prev) => {
-          if (prev >= 92) return prev;
-          return prev + Math.random() * 8 + 2;
-        });
-      }, 400);
-    } else {
-      const labels: Record<number, string> = {
-        4: "Sessiya faollashtirilmoqda...",
-        5: "Sessiya yakunlanmoqda...",
-      };
-      setProgressLabel(labels[nextState.key] || "Holat o'zgartirilmoqda...");
-      setLoadProgress(5);
-      progressInterval = setInterval(() => {
-        setLoadProgress((prev) => {
-          if (prev >= 95) return prev;
-          return prev + Math.random() * 15 + 10;
-        });
-      }, 200);
-    }
+    // Boshqa statelar uchun (4 — faollashtirish, 5 — yakunlash) umumiy flow
+    const labels: Record<number, string> = {
+      4: "Sessiya faollashtirilmoqda...",
+      5: "Sessiya yakunlanmoqda...",
+    };
+    setProgressLabel(labels[nextState.key] || "Holat o'zgartirilmoqda...");
+    setLoadProgress(5);
+    const progressInterval: ReturnType<typeof setInterval> = setInterval(() => {
+      setLoadProgress((prev) => {
+        if (prev >= 95) return prev;
+        return prev + Math.random() * 15 + 10;
+      });
+    }, 200);
 
     try {
       const updated = await changeSessionStateApi(session.id, nextState.id);
-      if (progressInterval) clearInterval(progressInterval);
+      clearInterval(progressInterval);
       setLoadProgress(100);
       await new Promise((r) => setTimeout(r, 600));
       setSession(updated);
@@ -300,7 +384,7 @@ export default function TestSessionDetailPage() {
       setProgressLabel("");
       setTargetStateId(null);
     } catch (err) {
-      if (progressInterval) clearInterval(progressInterval);
+      clearInterval(progressInterval);
       setLoadProgress(0);
       setProgressLabel("");
       setTargetStateId(null);

@@ -49,7 +49,8 @@ from app.schemas.test_session import (
     TestSessionUpdate,
 )
 from app.services.embedding_extractor import get_embedding_progress
-from app.services.student_loader import StudentLoadError, load_students_for_session
+from app.services.student_loader import get_student_load_progress
+from app.tasks.student_loader_task import load_students_task
 from app.tasks.verify_task import process_embeddings, process_retry_embeddings
 
 logger = logging.getLogger(__name__)
@@ -324,27 +325,15 @@ def change_state(
     except DuplicateError as e:
         raise HTTPException(status_code=409, detail=e.message)
 
-    # key=2 → studentlarni yuklash
+    # key=2 → studentlarni yuklash (Celery task — fonda)
+    # Sinxron yuklash 100k+ talaba uchun proxy timeout (504) beradi.
+    # Frontend `/student-load-progress` endpoint orqali progress polling qiladi.
     new_state = db.get(SessionState, body.test_state_id)
     if new_state and new_state.key == STATE_KEY_LOADING:
-        try:
-            count = load_students_for_session(db, session)
-            logger.info(
-                "Session #%d: %d student yuklandi", session_id, count
-            )
-            # Refresh session after student loading (count_total_student updated)
-            db.refresh(session)
-        except StudentLoadError as e:
-            logger.error("Student load error: %s", e.message)
-            _rollback_state(db, session_id, previous_state_id)
-            raise HTTPException(status_code=400, detail=e.message)
-        except Exception as e:
-            logger.error("Session #%d: kutilmagan xatolik: %s", session_id, e)
-            _rollback_state(db, session_id, previous_state_id)
-            raise HTTPException(
-                status_code=500,
-                detail="Tashqi API dan ma'lumot olishda kutilmagan xatolik yuz berdi",
-            )
+        load_students_task.delay(session_id, previous_state_id)
+        logger.info(
+            "Session #%d: student loading Celery task boshlandi", session_id
+        )
 
     # key=3 → face embedding chiqarish (Celery task)
     if new_state and new_state.key == STATE_KEY_EMBEDDING:
@@ -429,6 +418,30 @@ def embedding_progress(
             "current": 0, "total": 0, "success": 0,
             "no_image": 0, "no_face": 0, "errors": 0, "failed": 0,
             "percent": 0, "status": "idle",
+        }
+    return progress
+
+
+@router.get("/{session_id}/student-load-progress")
+def student_load_progress(
+    session_id: int,
+    _: User = Depends(PermissionChecker(P.TEST_SESSION_READ.code)),
+):
+    """Tashqi API'dan studentlar yuklash jarayoni progressini olish (Redis'dan).
+
+    Holatlar:
+    - idle      — jarayon hali boshlanmagan yoki TTL tugagan
+    - processing — yuklanmoqda
+    - completed — muvaffaqiyatli tugadi
+    - error     — xatolik bo'ldi (sessiya state'i avvalgisiga qaytarildi)
+    """
+    progress = get_student_load_progress(session_id)
+    if not progress:
+        return {
+            "current": 0, "total": 0,
+            "pages_done": 0, "pages_total": 0,
+            "skipped": 0, "percent": 0,
+            "status": "idle", "message": "",
         }
     return progress
 

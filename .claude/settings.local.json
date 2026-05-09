@@ -25,7 +25,8 @@
       "Bash(./venv/Scripts/python.exe *)",
       "Bash(grep -E \"\\\\.env$|\\\\.env\\\\..+$\")",
       "Bash(python -m pip list)",
-      "Bash(python -m pip install slowapi==0.1.9)"
+      "Bash(python -m pip install slowapi==0.1.9)",
+      "Bash(venv/Scripts/python -m py_compile app/services/student_loader.py app/tasks/student_loader_task.py app/api/v1/endpoints/test_session.py app/celery_app.py)"
     ]
   }
 }

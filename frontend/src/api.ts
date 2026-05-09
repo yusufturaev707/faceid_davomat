@@ -326,6 +326,20 @@ export async function getEmbeddingProgressApi(sessionId: number): Promise<{
   return res.data;
 }
 
+export async function getStudentLoadProgressApi(sessionId: number): Promise<{
+  current: number;
+  total: number;
+  pages_done: number;
+  pages_total: number;
+  skipped: number;
+  percent: number;
+  status: "idle" | "processing" | "completed" | "error";
+  message: string;
+}> {
+  const res = await apiClient.get(`/test-sessions/${sessionId}/student-load-progress`);
+  return res.data;
+}
+
 export async function deleteTestSessionApi(sessionId: number): Promise<void> {
   await apiClient.delete(`/test-sessions/${sessionId}`);
 }

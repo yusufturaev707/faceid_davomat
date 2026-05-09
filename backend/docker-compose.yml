@@ -29,11 +29,22 @@ services:
     volumes:
       - ./uploads:/app/uploads
 
-  celery-worker:
+  celery-verify:
     build: .
     restart: unless-stopped
     env_file: .env
-    command: celery -A app.celery_app worker --loglevel=info --concurrency=4 --max-tasks-per-child=100
+    command: celery -A app.celery_app worker -Q verify --hostname=verify@%h --pool=threads --concurrency=4 --max-tasks-per-child=200 --loglevel=info
+    depends_on:
+      - db
+      - redis
+    volumes:
+      - ./uploads:/app/uploads
+
+  celery-storage:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    command: celery -A app.celery_app worker -Q storage --hostname=storage@%h --pool=threads --concurrency=8 --max-tasks-per-child=200 --loglevel=info
     depends_on:
       - db
       - redis
