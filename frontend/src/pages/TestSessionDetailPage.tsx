@@ -162,9 +162,10 @@ export default function TestSessionDetailPage() {
         const p = await getStudentLoadProgressApi(sessionId);
 
         // Progress bar — agar total ma'lum bo'lsa aniq foiz, aks holda
-        // sahifalar bo'yicha (chunki backend total'ni faqat tugagandan keyin biladi)
+        // sahifalar bo'yicha. Backend kumulyativ totalCount yig'ib boradi,
+        // shuning uchun foiz faqat o'sib boradi va 100%'dan oshmaydi.
         if (p.percent > 0) {
-          setLoadProgress(p.percent);
+          setLoadProgress(Math.min(100, p.percent));
         } else if (p.current > 0) {
           // Indeterminate — sahifa progressiga qarab oshiramiz
           setLoadProgress((prev) => Math.min(95, prev + 1));
@@ -297,7 +298,7 @@ export default function TestSessionDetailPage() {
       if (p.status === "processing") {
         setChangingState(true);
         setTargetStateId(session.test_state_id);
-        setLoadProgress(Math.max(p.percent, 1));
+        setLoadProgress(Math.min(100, Math.max(p.percent, 1)));
         setProgressLabel(p.message || "Talabalar yuklanmoqda...");
         pollId = startStudentLoadPolling(session.id);
       }

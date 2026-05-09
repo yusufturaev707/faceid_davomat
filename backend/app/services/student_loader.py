@@ -80,10 +80,24 @@ def _set_progress(
     status: str,
     message: str = "",
 ) -> None:
+    """Progressni Redis'ga yozish.
+
+    Percent = (current+skipped)/total — har bir API-record tomondan-tomonga
+    yo bog'langan, yo skip qilingan bo'lganligi uchun bu eng aniq foiz.
+    Total noma'lum bo'lsa pages_done/pages_total fallback. Hech qanday
+    holatda 100%'dan oshmaydi (cumulative counterlar bois sakramaydi ham).
+    """
     if r is None:
         return
     try:
         key = _PROGRESS_KEY.format(session_id=session_id)
+        if total > 0:
+            percent = round((current + skipped) / total * 100, 1)
+        elif pages_total > 0:
+            percent = round(pages_done / pages_total * 100, 1)
+        else:
+            percent = 0
+        percent = min(percent, 100.0)
         data = {
             "current": current,
             "total": total,
@@ -92,11 +106,7 @@ def _set_progress(
             "skipped": skipped,
             "status": status,
             "message": message,
-            "percent": (
-                round(current / total * 100, 1) if total > 0
-                else round(pages_done / pages_total * 100, 1) if pages_total > 0
-                else 0
-            ),
+            "percent": percent,
         }
         r.set(key, json.dumps(data), ex=_PROGRESS_TTL)
     except redis.ConnectionError:
@@ -300,6 +310,23 @@ _PARSERS = {
 # ─── HTTP stream (sahifalarni generator orqali oqim) ─────────────────
 
 
+_TOTAL_COUNT_CANDIDATE_KEYS = ("totalCount", "total_count", "total", "count")
+
+
+def _extract_total_count(source: dict) -> int:
+    """Tashqi API javobidan totalCount-ga teng kalitni topish.
+
+    CEFR/MS: `_meta.totalCount`. IIV: `count` yoki `total_count`.
+    """
+    for k in _TOTAL_COUNT_CANDIDATE_KEYS:
+        if k in source:
+            try:
+                return int(source[k])
+            except (TypeError, ValueError):
+                continue
+    return 0
+
+
 def _stream_pages(
     url_template: str,
     date_str: str,
@@ -308,14 +335,15 @@ def _stream_pages(
     items_key: str,
     data_wrapper: bool,
     total_pages_key: str,
-) -> Iterator[tuple[list[dict], int, int]]:
+) -> Iterator[tuple[list[dict], int, int, int]]:
     """Tashqi API'dan sahifalarni oqim sifatida qaytaradi.
 
-    Yield: (items, current_page, total_pages)
+    Yield: (items, current_page, total_pages, total_count)
     Hech qachon barcha sahifalarni xotirada saqlamaydi.
     """
     page = 1
     total_pages = 1
+    total_count = 0
 
     # SSL verify=True — productionda xavfsizlik. Agar tashqi API serveri
     # self-signed bo'lsa, .env'da CA bundle ko'rsatish kerak.
@@ -332,11 +360,13 @@ def _stream_pages(
                 items = data.get(items_key, [])
                 meta = data.get("_meta", {})
                 total_pages = meta.get(total_pages_key, 1)
+                total_count = _extract_total_count(meta)
             else:
                 items = body.get(items_key, [])
                 total_pages = body.get(total_pages_key, 1)
+                total_count = _extract_total_count(body)
 
-            yield items, page, total_pages
+            yield items, page, total_pages, total_count
 
             if page >= total_pages or not items:
                 break
@@ -424,12 +454,29 @@ def load_students_for_session(db: Session, session: TestSession) -> int:
     _set_progress(
         r, session.id,
         current=0, total=0, pages_done=0, pages_total=0,
+        skipped=0, status="processing", message="Eski ma'lumotlar tozalanmoqda...",
+    )
+
+    # IDEMPOTENT: shu sessiya bo'yicha avval yuklangan studentlarni o'chirish.
+    # Aks holda, qayta yuklashda (rollback'dan keyin yoki retry'dan keyin)
+    # mavjud yozuvlar ustiga yangilari qo'shilib, son ikki barobarga oshadi.
+    # Import shu yerda — circular import oldini olish uchun.
+    from app.crud.test_session import _delete_students_by_session
+    _delete_students_by_session(db, session.id)
+    db.commit()
+
+    _set_progress(
+        r, session.id,
+        current=0, total=0, pages_done=0, pages_total=0,
         skipped=0, status="processing", message="API'ga ulanmoqda...",
     )
 
     total_loaded = 0
     total_skipped = 0
-    total_pages_seen = 0
+    # Kumulyativ — 3 kun bo'yicha yig'indi. Har bir kunning 1-sahifasidan
+    # `totalCount` va `pageCount`ni 1 marta qo'shamiz, keyin oshmaydi.
+    total_count_cumulative = 0
+    total_pages_cumulative = 0
     pages_done = 0
 
     try:
@@ -444,12 +491,19 @@ def load_students_for_session(db: Session, session: TestSession) -> int:
             # Bitta kun ichidagi accumulator — INSERT_BATCH_SIZE'gacha
             student_buffer: list[dict] = []
             ps_buffer: list[dict] = []
+            day_meta_seen = False
 
             try:
-                for items, page_num, page_total in page_iter:
+                for items, page_num, page_total, page_total_count in page_iter:
                     pages_done += 1
-                    if page_total > total_pages_seen:
-                        total_pages_seen = page_total
+
+                    # Kunning 1-javobida `totalCount` va `pageCount`ni olamiz
+                    # va kumulyativ summa'ga qo'shamiz. Keyingi sahifalarda
+                    # qaytarilmaydi — counterlar faqat o'sadi.
+                    if not day_meta_seen:
+                        day_meta_seen = True
+                        total_pages_cumulative += page_total
+                        total_count_cumulative += page_total_count
 
                     for raw in items:
                         parsed = parser(raw, zone_map)
@@ -494,18 +548,22 @@ def load_students_for_session(db: Session, session: TestSession) -> int:
 
                             _set_progress(
                                 r, session.id,
-                                current=total_loaded, total=0,  # total noma'lum
-                                pages_done=pages_done, pages_total=page_total,
+                                current=total_loaded,
+                                total=total_count_cumulative,
+                                pages_done=pages_done,
+                                pages_total=total_pages_cumulative,
                                 skipped=total_skipped, status="processing",
-                                message=f"Sahifa {page_num}/{page_total}",
+                                message=f"{day_str}: sahifa {page_num}/{page_total}",
                             )
 
                     _set_progress(
                         r, session.id,
-                        current=total_loaded, total=0,
-                        pages_done=pages_done, pages_total=page_total,
+                        current=total_loaded,
+                        total=total_count_cumulative,
+                        pages_done=pages_done,
+                        pages_total=total_pages_cumulative,
                         skipped=total_skipped, status="processing",
-                        message=f"Sahifa {page_num}/{page_total} olindi",
+                        message=f"{day_str}: sahifa {page_num}/{page_total}",
                     )
             except httpx.HTTPError as e:
                 # Buferni saqlab qolaylik — qisman yuklangan ham foydali
@@ -529,8 +587,10 @@ def load_students_for_session(db: Session, session: TestSession) -> int:
 
         _set_progress(
             r, session.id,
-            current=total_loaded, total=total_loaded,
-            pages_done=pages_done, pages_total=total_pages_seen,
+            current=total_loaded,
+            total=total_count_cumulative or total_loaded,
+            pages_done=pages_done,
+            pages_total=total_pages_cumulative,
             skipped=total_skipped, status="completed",
             message=f"{total_loaded} ta talaba yuklandi",
         )
@@ -544,8 +604,10 @@ def load_students_for_session(db: Session, session: TestSession) -> int:
     except StudentLoadError as e:
         _set_progress(
             r, session.id,
-            current=total_loaded, total=total_loaded,
-            pages_done=pages_done, pages_total=total_pages_seen,
+            current=total_loaded,
+            total=total_count_cumulative or total_loaded,
+            pages_done=pages_done,
+            pages_total=total_pages_cumulative,
             skipped=total_skipped, status="error",
             message=e.message,
         )
@@ -553,8 +615,10 @@ def load_students_for_session(db: Session, session: TestSession) -> int:
     except Exception as e:
         _set_progress(
             r, session.id,
-            current=total_loaded, total=total_loaded,
-            pages_done=pages_done, pages_total=total_pages_seen,
+            current=total_loaded,
+            total=total_count_cumulative or total_loaded,
+            pages_done=pages_done,
+            pages_total=total_pages_cumulative,
             skipped=total_skipped, status="error",
             message=f"Kutilmagan xatolik: {e}",
         )
