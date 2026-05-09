@@ -67,6 +67,7 @@ export default function StudentsPage() {
   const [filterFace, setFilterFace] = useState<string>("");
   const [filterImage, setFilterImage] = useState<string>("");
   const [filterReady, setFilterReady] = useState<string>("");
+  const [filterApplied, setFilterApplied] = useState<string>("");
   const [showFilters, setShowFilters] = useState(false);
 
   // Lookup data
@@ -143,6 +144,8 @@ export default function StudentsPage() {
       if (filterImage === "false") params.is_image = false;
       if (filterReady === "true") params.is_ready = true;
       if (filterReady === "false") params.is_ready = false;
+      if (filterApplied === "true") params.is_applied = true;
+      if (filterApplied === "false") params.is_applied = false;
       const result = await getStudentsApi(params);
       setData(result);
     } catch (err) {
@@ -153,7 +156,7 @@ export default function StudentsPage() {
   }, [
     page, search, filterTestId, filterRegionId, filterSmenaId, filterGrN,
     filterDateFrom, filterDateTo, filterEntered, filterCheating,
-    filterBlacklist, filterFace, filterImage, filterReady,
+    filterBlacklist, filterFace, filterImage, filterReady, filterApplied,
   ]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
@@ -164,18 +167,18 @@ export default function StudentsPage() {
     setSearchInput(""); setSearch(""); setFilterTestId(""); setFilterRegionId("");
     setFilterSmenaId(""); setFilterGrN(""); setFilterDateFrom(""); setFilterDateTo("");
     setFilterEntered(""); setFilterCheating(""); setFilterBlacklist("");
-    setFilterFace(""); setFilterImage(""); setFilterReady(""); setPage(1);
+    setFilterFace(""); setFilterImage(""); setFilterReady(""); setFilterApplied(""); setPage(1);
   };
 
   const hasFilters =
     search || filterTestId || filterRegionId || filterSmenaId || filterGrN ||
     filterDateFrom || filterDateTo || filterEntered || filterCheating ||
-    filterBlacklist || filterFace || filterImage || filterReady;
+    filterBlacklist || filterFace || filterImage || filterReady || filterApplied;
 
   const activeFilterCount = [
     filterTestId, filterRegionId, filterSmenaId, filterGrN,
     filterDateFrom, filterDateTo, filterEntered, filterCheating,
-    filterBlacklist, filterFace, filterImage, filterReady,
+    filterBlacklist, filterFace, filterImage, filterReady, filterApplied,
   ].filter(Boolean).length;
 
   const handleRowClick = async (s: StudentResponse) => {
@@ -222,6 +225,8 @@ export default function StudentsPage() {
       is_cheating: full.is_cheating,
       is_blacklist: full.is_blacklist,
       is_entered: full.is_entered,
+      is_applied: full.is_applied,
+      desc_apply: full.desc_apply || "",
       // ps_data fields
       ps_ser: full.ps_data?.ps_ser || "",
       ps_num: full.ps_data?.ps_num || "",
@@ -275,6 +280,8 @@ export default function StudentsPage() {
           is_cheating: form.is_cheating,
           is_blacklist: form.is_blacklist,
           is_entered: form.is_entered,
+          is_applied: form.is_applied,
+          desc_apply: form.desc_apply || null,
         };
         // Include ps_data if any field was filled
         if (form.ps_ser || form.ps_num || form.ps_phone || form.ps_img || form.ps_embedding) {
@@ -453,6 +460,8 @@ export default function StudentsPage() {
                   options={[{ value: "true", label: "Ha" }, { value: "false", label: "Yo'q" }]} />
                 <FilterSelect label="Tayyor (Ready)" value={filterReady} onChange={(v) => { setFilterReady(v); setPage(1); }}
                   options={[{ value: "true", label: "Ha" }, { value: "false", label: "Yo'q" }]} />
+                <FilterSelect label="Ariza (Applied)" value={filterApplied} onChange={(v) => { setFilterApplied(v); setPage(1); }}
+                  options={[{ value: "true", label: "Ha" }, { value: "false", label: "Yo'q" }]} />
               </div>
             </div>
           )}
@@ -585,7 +594,14 @@ export default function StudentsPage() {
                     <Badge label="Tayyor" active={selected.is_ready} on="bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400" />
                     <Badge label="Yuz" active={selected.is_face} on="bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400" />
                     <Badge label="Rasm" active={selected.is_image} on="bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400" />
+                    <Badge label="Ariza" active={selected.is_applied} on="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" />
                   </div>
+                  {selected.is_applied && selected.desc_apply && (
+                    <div className="mt-3 px-3 py-2 bg-amber-50 dark:bg-amber-900/15 border border-amber-200 dark:border-amber-800/40 rounded-lg">
+                      <p className="text-[10px] uppercase tracking-wider text-amber-600 dark:text-amber-500 font-semibold mb-1">Ariza izohi</p>
+                      <p className="text-xs text-amber-800 dark:text-amber-300 whitespace-pre-wrap break-words">{selected.desc_apply}</p>
+                    </div>
+                  )}
                 </div>
 
                 {/* Personal */}
@@ -880,6 +896,22 @@ export default function StudentsPage() {
                     <ToggleField label="Cheating" checked={!!form.is_cheating} onChange={(v) => setField("is_cheating", v)} color="orange" />
                     <ToggleField label="Qora ro'yxat" checked={!!form.is_blacklist} onChange={(v) => setField("is_blacklist", v)} color="red" />
                     <ToggleField label="Kirgan (Entered)" checked={!!form.is_entered} onChange={(v) => setField("is_entered", v)} color="green" />
+                    <ToggleField label="Ariza (Applied)" checked={!!form.is_applied} onChange={(v) => setField("is_applied", v)} color="orange" />
+                  </div>
+                  <div className="mt-3">
+                    <ModalField label="Ariza izohi (Desc apply)">
+                      <textarea
+                        value={form.desc_apply || ""}
+                        onChange={(e) => setField("desc_apply", e.target.value)}
+                        placeholder="Arizaga oid izoh kiriting..."
+                        rows={2}
+                        maxLength={255}
+                        className="input-field w-full resize-y"
+                      />
+                      <p className="text-[10px] text-gray-400 dark:text-slate-500 mt-1">
+                        {(form.desc_apply || "").length}/255
+                      </p>
+                    </ModalField>
                   </div>
                 </>
               )}

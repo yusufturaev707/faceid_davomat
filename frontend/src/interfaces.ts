@@ -577,6 +577,8 @@ export interface StudentUpdate {
   is_cheating?: boolean;
   is_blacklist?: boolean;
   is_entered?: boolean;
+  is_applied?: boolean;
+  desc_apply?: string | null;
   ps_data?: StudentPsDataUpdate;
 }
 
@@ -619,6 +621,8 @@ export interface StudentResponse {
   is_cheating: boolean;
   is_blacklist: boolean;
   is_entered: boolean;
+  is_applied: boolean;
+  desc_apply: string | null;
   ps_data: StudentPsDataResponse | null;
 }
 

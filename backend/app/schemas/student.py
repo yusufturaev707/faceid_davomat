@@ -76,6 +76,8 @@ class StudentUpdate(BaseModel):
     is_cheating: bool | None = None
     is_blacklist: bool | None = None
     is_entered: bool | None = None
+    is_applied: bool | None = None
+    desc_apply: str | None = Field(default=None, max_length=255)
     ps_data: StudentPsDataUpdate | None = None
 
 
@@ -108,6 +110,8 @@ class StudentResponse(BaseModel):
     is_cheating: bool
     is_blacklist: bool
     is_entered: bool
+    is_applied: bool
+    desc_apply: str | None = None
     ps_data: StudentPsDataResponse | None = None
 
     model_config = {"from_attributes": True}
@@ -121,6 +125,29 @@ class StudentListResponse(BaseModel):
     page: int
     per_page: int
     pages: int
+
+
+class AppliedStudentItem(BaseModel):
+    """Ariza bergan talaba (`is_applied=True`) — minimal ro'yxat formati."""
+
+    id: int
+    last_name: str
+    first_name: str
+    middle_name: str | None = None
+    imei: str | None = None
+    region_name: str | None = None
+    zone_name: str | None = None
+    test_date: str | None = None
+    smena_name: str | None = None
+    gr_n: int = 0
+    desc_apply: str | None = None
+
+
+class AppliedStudentsResponse(BaseModel):
+    """Ariza bergan talabalar ro'yxati."""
+
+    items: list[AppliedStudentItem]
+    total: int
 
 
 # --- StudentLog ---

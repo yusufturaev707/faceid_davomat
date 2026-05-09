@@ -1,6 +1,6 @@
 from datetime import date
 
-from sqlalchemy import BigInteger, ForeignKey, String
+from sqlalchemy import BigInteger, ForeignKey, String, false
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -38,3 +38,5 @@ class Student(Base):
     is_cheating: Mapped[bool] = mapped_column(default=False)
     is_blacklist: Mapped[bool] = mapped_column(default=False)
     is_entered: Mapped[bool] = mapped_column(default=False)
+    is_applied: Mapped[bool] = mapped_column(default=False, server_default=false())
+    desc_apply: Mapped[str | None] = mapped_column(String(255), nullable=True)

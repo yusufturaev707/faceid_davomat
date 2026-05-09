@@ -51,6 +51,8 @@ from app.dependencies import (
 )
 from app.models.user import User
 from app.schemas.student import (
+    AppliedStudentItem,
+    AppliedStudentsResponse,
     CheatingLogCreate,
     CheatingLogListResponse,
     CheatingLogResponse,
@@ -256,6 +258,91 @@ def delete_cheating_log_endpoint(
 # ===================== Student =====================
 
 
+@router.get("/applied", response_model=AppliedStudentsResponse)
+def list_applied_students(
+    session_smena_id: int = Query(
+        ...,
+        description=(
+            "Joriy test_session_smena.id — undan test_session_id aniqlanadi va "
+            "shu test sessiyasidagi barcha smenalar kesimida ariza bergan "
+            "talabalar qaytariladi."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Ariza bergan (`is_applied=True`) talabalar ro'yxati — joriy test
+    sessiyasi va foydalanuvchi region'i kesimida.
+
+    Foydalanuvchi region'i `current_user.zone.region_id` orqali aniqlanadi.
+    Talaba `zone.region_id` shu region'ga teng bo'lgan barcha studentlar
+    qaytariladi (zone foydalanuvchi zonasi bo'lishi shart emas).
+    """
+    from sqlalchemy import select as sa_select
+
+    from app.models.region import Region
+    from app.models.smena import Smena
+    from app.models.student import Student as StudentModel
+    from app.models.test_session_smena import TestSessionSmena
+    from app.models.zone import Zone
+
+    user_region_id = current_user.region_id
+    if not user_region_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Foydalanuvchiga region biriktirilmagan",
+        )
+
+    current_tss = db.get(TestSessionSmena, session_smena_id)
+    if current_tss is None:
+        raise HTTPException(status_code=404, detail="Test sessiya smena topilmadi")
+
+    stmt = (
+        sa_select(
+            StudentModel.id,
+            StudentModel.last_name,
+            StudentModel.first_name,
+            StudentModel.middle_name,
+            StudentModel.imei,
+            StudentModel.gr_n,
+            StudentModel.desc_apply,
+            StudentModel.e_date,
+            Region.name.label("region_name"),
+            Zone.name.label("zone_name"),
+            Smena.name.label("smena_name"),
+        )
+        .join(TestSessionSmena, TestSessionSmena.id == StudentModel.session_smena_id)
+        .join(Zone, Zone.id == StudentModel.zone_id)
+        .join(Region, Region.id == Zone.region_id)
+        .join(Smena, Smena.id == TestSessionSmena.test_smena_id)
+        .where(
+            TestSessionSmena.test_session_id == current_tss.test_session_id,
+            Zone.region_id == int(user_region_id),
+            StudentModel.is_applied.is_(True),
+        )
+        .order_by(StudentModel.last_name, StudentModel.first_name)
+    )
+
+    rows = db.execute(stmt).all()
+    items = [
+        AppliedStudentItem(
+            id=r.id,
+            last_name=r.last_name,
+            first_name=r.first_name,
+            middle_name=r.middle_name,
+            imei=r.imei,
+            region_name=r.region_name,
+            zone_name=r.zone_name,
+            test_date=r.e_date.isoformat() if r.e_date else None,
+            smena_name=r.smena_name,
+            gr_n=r.gr_n or 0,
+            desc_apply=r.desc_apply,
+        )
+        for r in rows
+    ]
+    return AppliedStudentsResponse(items=items, total=len(items))
+
+
 @router.get("", response_model=StudentListResponse)
 def list_students(
     page: int = Query(1, ge=1),
@@ -274,6 +361,7 @@ def list_students(
     is_face: bool | None = None,
     is_image: bool | None = None,
     is_ready: bool | None = None,
+    is_applied: bool | None = None,
     search: str | None = None,
     db: Session = Depends(get_db),
     _: User = Depends(PermissionChecker(P.STUDENT_READ.code)),
@@ -296,6 +384,7 @@ def list_students(
         is_face=is_face,
         is_image=is_image,
         is_ready=is_ready,
+        is_applied=is_applied,
         search=search,
     )
     return StudentListResponse(
@@ -530,6 +619,8 @@ class CheckFaceidGtspResponse(BaseModel):
                           (`matched_slot` to'ldiriladi; davomatga qo'shib bo'lmaydi)
       - "wrong_passport"→ slot mos, lekin GTSP ps_ser+ps_num bo'yicha rasm
                           qaytarmadi (pasport ma'lumoti noto'g'ri kiritilgan)
+      - "applied"       → talaba ariza bergan (is_applied=True) — testga
+                          kirita olmaymiz, `message` da `desc_apply` matni
     """
 
     status: str = "ok"
@@ -721,6 +812,19 @@ def check_faceid_gtsp(
             region_row,
         )
         current_fio = (stu_row.last_name, stu_row.first_name, stu_row.middle_name)
+
+        # Talaba ariza bergan bo'lsa — testga kirita olmaymiz, GTSP chaqirilmaydi.
+        if stu_row.is_applied:
+            return CheckFaceidGtspResponse(
+                status="applied",
+                can_attend=False,
+                message=stu_row.desc_apply or "Talaba ariza bergan",
+                sname=stu_row.last_name,
+                fname=stu_row.first_name,
+                mname=stu_row.middle_name,
+                imei=imei_value or None,
+                matched_slot=current_slot,
+            )
 
     # ── 2) GTSP chaqiruvi ─────────────────────────────────────────────
     logger.info(

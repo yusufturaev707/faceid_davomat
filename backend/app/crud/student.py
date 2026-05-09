@@ -87,6 +87,8 @@ def _student_to_dict(
         "is_cheating": student.is_cheating,
         "is_blacklist": student.is_blacklist,
         "is_entered": student.is_entered,
+        "is_applied": student.is_applied,
+        "desc_apply": student.desc_apply,
     }
     if ps_data:
         ps_dict: dict = {
@@ -166,6 +168,7 @@ def get_students_paginated(
     is_face: bool | None = None,
     is_image: bool | None = None,
     is_ready: bool | None = None,
+    is_applied: bool | None = None,
     search: str | None = None,
 ) -> tuple[list[dict], int]:
     stmt = _build_student_query().order_by(Student.id.desc())
@@ -238,6 +241,11 @@ def get_students_paginated(
     if is_ready is not None:
         stmt, count_stmt = _apply_filter(stmt, count_stmt, Student.is_ready == is_ready)
 
+    if is_applied is not None:
+        stmt, count_stmt = _apply_filter(
+            stmt, count_stmt, Student.is_applied == is_applied
+        )
+
     if search:
         search_pattern = f"%{search}%"
         search_filter = (
@@ -272,12 +280,18 @@ def get_students_by_session_and_zone(
     test_session_id: int,
     zone_id: int,
 ) -> list[dict]:
-    """Test sessiya va zonaga tegishli barcha studentlarni olish."""
+    """Test sessiya va zonaga tegishli studentlarni olish.
+
+    Ariza bergan (`is_applied=True`) talabalar javobga qo'shilmaydi —
+    desktop client ularni lokal bazaga yuklab olmasin va davomatga
+    qo'shish ro'yxatida ham ko'rmasin.
+    """
     stmt = (
         _build_student_query()
         .where(
             TestSessionSmena.test_session_id == test_session_id,
             Student.zone_id == zone_id,
+            Student.is_applied.is_(False),
         )
         .order_by(Student.last_name, Student.first_name)
     )
