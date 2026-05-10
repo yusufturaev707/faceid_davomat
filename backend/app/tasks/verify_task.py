@@ -238,7 +238,15 @@ def process_verify_two_faces(self, ps_img_b64: str, lv_img_b64: str, user_id: in
     max_retries=0,
     name="tasks.process_embeddings",
     queue="verify",
-    time_limit=600,  # 10 daqiqa — ko'p studentlar uchun
+    # 100k+ talaba uchun ~1.5–5 soat ketishi mumkin (CPU inferensiyasi).
+    time_limit=6 * 3600,
+    soft_time_limit=6 * 3600 - 60,
+    # Global task_acks_late=True + task_reject_on_worker_lost=True kombinatsiyasi
+    # time_limit kill bo'lganda task'ni avtomatik qayta queue'ga tushiradi va
+    # nol'dan boshlaydi — bu cheksiz qayta-qayta urinishga olib keladi.
+    # Bu task DB ga commit qilib boradi, shuning uchun acks_late kerak emas.
+    acks_late=False,
+    reject_on_worker_lost=False,
 )
 def process_embeddings(self, session_id: int) -> dict:
     """Sessiya talabalari uchun yuz embeddinglarini chiqarish.
@@ -265,7 +273,10 @@ def process_embeddings(self, session_id: int) -> dict:
     max_retries=0,
     name="tasks.process_retry_embeddings",
     queue="verify",
-    time_limit=600,
+    time_limit=6 * 3600,
+    soft_time_limit=6 * 3600 - 60,
+    acks_late=False,
+    reject_on_worker_lost=False,
 )
 def process_retry_embeddings(self, session_id: int) -> dict:
     """Faqat is_ready=False bo'lgan studentlar uchun qayta embedding chiqarish.

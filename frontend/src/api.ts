@@ -321,6 +321,7 @@ export async function getEmbeddingProgressApi(sessionId: number): Promise<{
   failed: number;
   percent: number;
   status: string;
+  message?: string;
 }> {
   const res = await apiClient.get(`/test-sessions/${sessionId}/embedding-progress`);
   return res.data;

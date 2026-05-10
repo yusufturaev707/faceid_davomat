@@ -230,9 +230,31 @@ export default function TestSessionDetailPage() {
 
   // Embedding polling funksiyasi — handleNextStep va useEffect da ishlatiladi
   const startEmbeddingPolling = useCallback((sessionId: number) => {
+    // Backend Redis kalitiga TTL qo'yadi va task crash bo'lsa "error" holatini
+    // saqlaydi. TTL tugab "idle" qaytsa (yoki Redis o'chsa) — ortiqcha kutmasdan
+    // to'xtatamiz. consecutiveIdle counter false-positive lardan himoya qiladi.
+    let consecutiveIdle = 0;
     const poll = setInterval(async () => {
       try {
         const p = await getEmbeddingProgressApi(sessionId);
+
+        if (p.status === "idle") {
+          consecutiveIdle += 1;
+          // ~6s davomida idle bo'lsa — task crash yoki TTL tugagan deb hisoblaymiz
+          if (consecutiveIdle >= 4) {
+            clearInterval(poll);
+            setStateError(
+              "Embedding jarayoni to'xtab qoldi (vaqt tugadi yoki task ishdan chiqdi). Iltimos, qayta urinib ko'ring.",
+            );
+            setChangingState(false);
+            setTargetStateId(null);
+            setLoadProgress(0);
+            setProgressLabel("");
+          }
+          return;
+        }
+        consecutiveIdle = 0;
+
         if (p.total > 0) {
           setLoadProgress(p.percent);
           const parts: string[] = [`${p.current}/${p.total}`];
@@ -241,6 +263,24 @@ export default function TestSessionDetailPage() {
           if (p.no_face > 0) parts.push(`${p.no_face} yuzsiz`);
           if (p.errors > 0) parts.push(`${p.errors} xato`);
           setProgressLabel(`Embedding: ${parts.join(", ")}`);
+        }
+
+        if (p.status === "error") {
+          clearInterval(poll);
+          const message =
+            (p as { message?: string }).message ||
+            "Embedding jarayonida kutilmagan xatolik yuz berdi";
+          setStateError(message);
+          setChangingState(false);
+          setTargetStateId(null);
+          setLoadProgress(0);
+          setProgressLabel("");
+          // Sessiya holatini yangilash — backend rollback qilgan bo'lishi mumkin
+          try {
+            const refreshed = await getTestSessionApi(sessionId);
+            setSession(refreshed);
+          } catch { /* ignore */ }
+          return;
         }
 
         if (p.status === "completed" || p.status === "completed_with_errors") {
@@ -763,10 +803,12 @@ export default function TestSessionDetailPage() {
                           width: (() => {
                             const targetKey = sortedStates.find(s => s.id === targetStateId)?.key ?? 0;
                             if (changingState && targetStateId) {
-                              // O'tish paytida: oldingi steplar to'liq, target step ga boradigan connector progress
-                              if (state.key < currentStateKey) return "100%";
-                              if (state.key >= currentStateKey && state.key < targetKey - 1) return "100%";
+                              // Target step'ga olib keluvchi connector — loadProgress ni
+                              // ko'rsatadi (DB state allaqachon target ga o'tib bo'lgan, lekin
+                              // ish hali davom etayotgan holatda ham). Boshqa connectorlar:
+                              // ungacha bo'lgani — 100%, undan keyingisi — 0%.
                               if (state.key === targetKey - 1) return `${loadProgress}%`;
+                              if (state.key < targetKey - 1) return "100%";
                               return "0%";
                             }
                             return state.key < currentStateKey ? "100%" : "0%";

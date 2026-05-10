@@ -1,6 +1,9 @@
 """Sessiya talabalari uchun yuz embeddinglarini chiqarish xizmati.
 
 Celery task orqali ishga tushadi. Progress Redis da saqlanadi.
+
+100k+ talabada xotira to'lib ketmasligi uchun studentlar va ularning
+ps_img blob'lari kichik chunk'larda DB dan o'qiladi (streaming).
 """
 
 import json
@@ -8,7 +11,7 @@ import logging
 
 import numpy as np
 import redis
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -21,11 +24,17 @@ from app.services.image_decoder import decode_image_bytes
 
 logger = logging.getLogger("faceid.embedding_extractor")
 
+# Bir chunk da DB dan o'qiladigan studentlar soni. ps_img blob ~50-500 KB
+# bo'lgani uchun 500 student ≈ 25-250 MB RAM. Bu xavfsiz chegara.
+CHUNK_SIZE = 500
+
+# Progress va commit chastotasi (har N student dan keyin)
 BATCH_SIZE = 50
 
 # Redis key pattern
 _PROGRESS_KEY = "embedding_progress:{session_id}"
-_PROGRESS_TTL = 3600  # 1 soat
+# 6 soat — task time_limit dan kengroq, network glitch da expire bo'lib qolmasligi uchun
+_PROGRESS_TTL = 6 * 3600
 
 
 def _get_redis() -> redis.Redis:
@@ -43,6 +52,7 @@ def _set_progress(
     no_face: int,
     errors: int,
     status: str = "processing",
+    message: str | None = None,
 ) -> None:
     """Redis da progress yangilash."""
     key = _PROGRESS_KEY.format(session_id=session_id)
@@ -57,6 +67,8 @@ def _set_progress(
         "status": status,
         "percent": round(current / total * 100, 1) if total > 0 else 0,
     }
+    if message:
+        data["message"] = message
     r.set(key, json.dumps(data), ex=_PROGRESS_TTL)
 
 
@@ -80,125 +92,195 @@ def get_embedding_progress(session_id: int) -> dict | None:
     return None
 
 
-def extract_embeddings_for_session(session_id: int) -> dict:
-    """Sessiya talabalari uchun yuz embeddinglarini chiqarish.
+def _get_smena_ids(db: Session, session_id: int) -> list[int]:
+    return [
+        row[0]
+        for row in db.execute(
+            select(TestSessionSmena.id).where(
+                TestSessionSmena.test_session_id == session_id
+            )
+        )
+    ]
 
-    Celery task ichidan chaqiriladi. O'z DB sessionini ochadi.
+
+def _process_chunk(
+    db: Session, students: list[Student]
+) -> tuple[int, int, int, int]:
+    """Berilgan student chunk uchun embedding chiqarish.
+
+    ps_img faqat shu chunk uchun yuklanadi — RAM ni tejash uchun.
+
+    Returns:
+        (success, no_image, no_face, errors)
+    """
+    if not students:
+        return 0, 0, 0, 0
+
+    chunk_ids = [s.id for s in students]
+    ps_data_map: dict[int, StudentPsData] = {
+        ps.student_id: ps
+        for ps in db.execute(
+            select(StudentPsData).where(StudentPsData.student_id.in_(chunk_ids))
+        ).scalars()
+    }
+
+    success = 0
+    no_image = 0
+    no_face = 0
+    errors = 0
+
+    for student in students:
+        ps_data = ps_data_map.get(student.id)
+
+        if not ps_data or not ps_data.ps_img:
+            student.is_image = False
+            student.is_face = False
+            student.is_ready = False
+            no_image += 1
+            continue
+
+        student.is_image = True
+        try:
+            img_bgr, _ = decode_image_bytes(ps_data.ps_img)
+            faces = detect_faces(img_bgr)
+
+            if faces:
+                ps_data.embedding = np.asarray(
+                    faces[0].embedding, dtype=np.float32
+                ).tobytes()
+                student.is_face = True
+                student.is_ready = True
+                success += 1
+            else:
+                student.is_face = False
+                student.is_ready = False
+                no_face += 1
+        except Exception:
+            student.is_face = False
+            student.is_ready = False
+            errors += 1
+            logger.debug("Student #%d: embedding xatosi", student.id, exc_info=True)
+
+    # Chunk ichidagi ps_img referencesini bo'shatish — keyingi chunk gacha xotirada turmasligi uchun
+    ps_data_map.clear()
+    return success, no_image, no_face, errors
+
+
+def _run_embedding_job(
+    session_id: int,
+    only_not_ready: bool,
+) -> dict:
+    """Streaming embedding extractor — barcha yoki faqat is_ready=False studentlar uchun.
 
     Args:
         session_id: TestSession ID si.
+        only_not_ready: True bo'lsa faqat is_ready=False bo'lganlarni qayta ishlaydi.
 
     Returns:
-        Natija dict: {success, no_image, no_face, errors, total}
+        {success, no_image, no_face, errors, total}
     """
     from app.db.session import SessionLocal
     from app.models.test_session import TestSession
 
     db: Session = SessionLocal()
 
+    # Redis progress holatini boshlash — exception bo'lsa ham frontend bilsin
+    try:
+        r: redis.Redis | None = _get_redis()
+    except redis.ConnectionError:
+        logger.warning("Redis ulanish xatosi — progress saqlanmaydi")
+        r = None
+
+    success_count = 0
+    no_image_count = 0
+    no_face_count = 0
+    error_count = 0
+    total = 0
+
     try:
         session = db.get(TestSession, session_id)
         if not session:
             raise ValueError(f"TestSession #{session_id} topilmadi")
 
-        # Sessiyaga tegishli barcha smena ID larni olish
-        smena_ids = [
-            row[0]
-            for row in db.execute(
-                select(TestSessionSmena.id).where(
-                    TestSessionSmena.test_session_id == session_id
-                )
-            )
-        ]
+        smena_ids = _get_smena_ids(db, session_id)
         if not smena_ids:
             raise ValueError("Sessiyada smenalar topilmadi")
 
-        # Barcha studentlarni olish
-        all_students: list[Student] = list(
-            db.execute(
-                select(Student)
-                .where(Student.session_smena_id.in_(smena_ids))
-                .order_by(Student.id)
-            ).scalars().all()
-        )
+        base_filter = [Student.session_smena_id.in_(smena_ids)]
+        if only_not_ready:
+            base_filter.append(Student.is_ready.is_(False))
 
-        total = len(all_students)
+        total = db.scalar(
+            select(func.count(Student.id)).where(*base_filter)
+        ) or 0
+
         if total == 0:
             logger.info("Session #%d: studentlar topilmadi", session_id)
+            if r:
+                try:
+                    _set_progress(r, session_id, 0, 0, 0, 0, 0, 0, "completed")
+                except redis.ConnectionError:
+                    pass
             return {"success": 0, "no_image": 0, "no_face": 0, "errors": 0, "total": 0}
 
-        # Student ID → StudentPsData mapping (batch qilib olish — katta listda IN xavfli)
-        ps_data_map: dict[int, StudentPsData] = {}
-        for i in range(0, len(all_students), 1000):
-            chunk_ids = [s.id for s in all_students[i:i + 1000]]
-            for ps in db.execute(
-                select(StudentPsData).where(StudentPsData.student_id.in_(chunk_ids))
-            ).scalars():
-                ps_data_map[ps.student_id] = ps
+        if r:
+            try:
+                _set_progress(r, session_id, 0, total, 0, 0, 0, 0, "processing")
+            except redis.ConnectionError:
+                pass
 
-        logger.info("Session #%d: %d ta student uchun embedding boshlanmoqda", session_id, total)
+        logger.info(
+            "Session #%d: %d ta student uchun embedding boshlanmoqda (only_not_ready=%s)",
+            session_id, total, only_not_ready,
+        )
 
-        # Redis progress
-        try:
-            r = _get_redis()
-            _set_progress(r, session_id, 0, total, 0, 0, 0, 0, "processing")
-        except redis.ConnectionError:
-            logger.warning("Redis ulanish xatosi — progress saqlanmaydi")
-            r = None
+        processed = 0
+        last_id = 0
+        # Keyset pagination — `id > last_id` orqali. limit/offset emas, chunki
+        # offset katta bo'lsa indeks orqali ham sekin bo'ladi.
+        while True:
+            chunk: list[Student] = list(
+                db.execute(
+                    select(Student)
+                    .where(*base_filter, Student.id > last_id)
+                    .order_by(Student.id)
+                    .limit(CHUNK_SIZE)
+                ).scalars().all()
+            )
+            if not chunk:
+                break
 
-        success_count = 0
-        no_image_count = 0
-        no_face_count = 0
-        error_count = 0
+            last_id = chunk[-1].id
 
-        for i, student in enumerate(all_students):
-            ps_data = ps_data_map.get(student.id)
+            # Chunk ichida BATCH_SIZE bo'lakda commit + progress yangilash
+            for batch_start in range(0, len(chunk), BATCH_SIZE):
+                batch = chunk[batch_start: batch_start + BATCH_SIZE]
+                s, ni, nf, er = _process_chunk(db, batch)
+                success_count += s
+                no_image_count += ni
+                no_face_count += nf
+                error_count += er
+                processed += len(batch)
 
-            # ps_data yo'q yoki ps_img bo'sh — rasmsiz
-            if not ps_data or not ps_data.ps_img:
-                student.is_image = False
-                student.is_face = False
-                student.is_ready = False
-                no_image_count += 1
-            else:
-                student.is_image = True
-                try:
-                    img_bgr, _ = decode_image_bytes(ps_data.ps_img)
-                    faces = detect_faces(img_bgr)
-
-                    if faces:
-                        ps_data.embedding = np.asarray(
-                            faces[0].embedding, dtype=np.float32
-                        ).tobytes()
-                        student.is_face = True
-                        student.is_ready = True
-                        success_count += 1
-                    else:
-                        student.is_face = False
-                        student.is_ready = False
-                        no_face_count += 1
-                except Exception:
-                    student.is_face = False
-                    student.is_ready = False
-                    error_count += 1
-                    logger.debug("Student #%d: embedding xatosi", student.id, exc_info=True)
-
-            # Har BATCH_SIZE da commit + progress yangilash
-            current = i + 1
-            if current % BATCH_SIZE == 0 or current == total:
                 db.commit()
+
                 if r:
                     try:
                         _set_progress(
-                            r, session_id, current, total,
+                            r, session_id, processed, total,
                             success_count, no_image_count, no_face_count, error_count,
                         )
                     except redis.ConnectionError:
                         pass
+
                 logger.info(
                     "Session #%d: %d/%d (success=%d, no_image=%d, no_face=%d, errors=%d)",
-                    session_id, current, total, success_count, no_image_count, no_face_count, error_count,
+                    session_id, processed, total,
+                    success_count, no_image_count, no_face_count, error_count,
                 )
+
+            # Chunk objektlarini sessiondan chiqarib tashlash — RAM tejash uchun
+            db.expunge_all()
 
         # Yakuniy progress
         failed = no_image_count + no_face_count + error_count
@@ -224,149 +306,35 @@ def extract_embeddings_for_session(session_id: int) -> dict:
             "errors": error_count,
             "total": total,
         }
-    finally:
-        db.close()
-
-
-def extract_embeddings_for_not_ready(session_id: int) -> dict:
-    """Faqat is_ready=False bo'lgan studentlar uchun qayta embedding chiqarish.
-
-    Qo'lda rasm yuklangandan keyin chaqiriladi.
-
-    Args:
-        session_id: TestSession ID si.
-
-    Returns:
-        Natija dict: {success, no_image, no_face, errors, total}
-    """
-    from app.db.session import SessionLocal
-    from app.models.test_session import TestSession
-
-    db: Session = SessionLocal()
-
-    try:
-        session = db.get(TestSession, session_id)
-        if not session:
-            raise ValueError(f"TestSession #{session_id} topilmadi")
-
-        # Sessiyaga tegishli barcha smena ID larni olish
-        smena_ids = [
-            row[0]
-            for row in db.execute(
-                select(TestSessionSmena.id).where(
-                    TestSessionSmena.test_session_id == session_id
-                )
-            )
-        ]
-        if not smena_ids:
-            raise ValueError("Sessiyada smenalar topilmadi")
-
-        # Faqat is_ready=False bo'lgan studentlarni olish
-        not_ready_students: list[Student] = list(
-            db.execute(
-                select(Student)
-                .where(
-                    Student.session_smena_id.in_(smena_ids),
-                    Student.is_ready.is_(False),
-                )
-                .order_by(Student.id)
-            ).scalars().all()
-        )
-
-        total = len(not_ready_students)
-        if total == 0:
-            logger.info("Session #%d: is_ready=False studentlar topilmadi", session_id)
-            return {"success": 0, "no_image": 0, "no_face": 0, "errors": 0, "total": 0}
-
-        # Student ID → StudentPsData mapping
-        ps_data_map: dict[int, StudentPsData] = {}
-        for i in range(0, len(not_ready_students), 1000):
-            chunk_ids = [s.id for s in not_ready_students[i:i + 1000]]
-            for ps in db.execute(
-                select(StudentPsData).where(StudentPsData.student_id.in_(chunk_ids))
-            ).scalars():
-                ps_data_map[ps.student_id] = ps
-
-        logger.info("Session #%d: %d ta is_ready=False student uchun qayta embedding", session_id, total)
-
-        # Redis progress
-        try:
-            r = _get_redis()
-            _set_progress(r, session_id, 0, total, 0, 0, 0, 0, "processing")
-        except redis.ConnectionError:
-            logger.warning("Redis ulanish xatosi — progress saqlanmaydi")
-            r = None
-
-        success_count = 0
-        no_image_count = 0
-        no_face_count = 0
-        error_count = 0
-
-        for i, student in enumerate(not_ready_students):
-            ps_data = ps_data_map.get(student.id)
-
-            if not ps_data or not ps_data.ps_img:
-                student.is_image = False
-                student.is_face = False
-                student.is_ready = False
-                no_image_count += 1
-            else:
-                student.is_image = True
-                try:
-                    img_bgr, _ = decode_image_bytes(ps_data.ps_img)
-                    faces = detect_faces(img_bgr)
-
-                    if faces:
-                        ps_data.embedding = np.asarray(
-                            faces[0].embedding, dtype=np.float32
-                        ).tobytes()
-                        student.is_face = True
-                        student.is_ready = True
-                        success_count += 1
-                    else:
-                        student.is_face = False
-                        student.is_ready = False
-                        no_face_count += 1
-                except Exception:
-                    student.is_face = False
-                    student.is_ready = False
-                    error_count += 1
-                    logger.debug("Student #%d: embedding xatosi", student.id, exc_info=True)
-
-            current = i + 1
-            if current % BATCH_SIZE == 0 or current == total:
-                db.commit()
-                if r:
-                    try:
-                        _set_progress(
-                            r, session_id, current, total,
-                            success_count, no_image_count, no_face_count, error_count,
-                        )
-                    except redis.ConnectionError:
-                        pass
-
-        failed = no_image_count + no_face_count + error_count
-        final_status = "completed" if failed == 0 else "completed_with_errors"
+    except Exception as e:
+        # Frontend cheksiz polling qilmasin — Redis da error holatini saqlaymiz
+        logger.exception("Session #%d: embedding jarayonida xatolik", session_id)
         if r:
             try:
                 _set_progress(
-                    r, session_id, total, total,
-                    success_count, no_image_count, no_face_count, error_count, final_status,
+                    r, session_id,
+                    success_count + no_image_count + no_face_count + error_count,
+                    total,
+                    success_count, no_image_count, no_face_count, error_count,
+                    status="error",
+                    message=str(e)[:200],
                 )
             except redis.ConnectionError:
                 pass
-
-        logger.info(
-            "Session #%d: qayta embedding tugadi — success=%d, no_image=%d, no_face=%d, errors=%d",
-            session_id, success_count, no_image_count, no_face_count, error_count,
-        )
-
-        return {
-            "success": success_count,
-            "no_image": no_image_count,
-            "no_face": no_face_count,
-            "errors": error_count,
-            "total": total,
-        }
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        raise
     finally:
         db.close()
+
+
+def extract_embeddings_for_session(session_id: int) -> dict:
+    """Sessiya talabalari uchun yuz embeddinglarini chiqarish (streaming)."""
+    return _run_embedding_job(session_id, only_not_ready=False)
+
+
+def extract_embeddings_for_not_ready(session_id: int) -> dict:
+    """Faqat is_ready=False bo'lgan studentlar uchun qayta embedding (streaming)."""
+    return _run_embedding_job(session_id, only_not_ready=True)
