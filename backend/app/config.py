@@ -53,6 +53,24 @@ class Settings(BaseSettings):
     # Database
     DATABASE_URL: str
 
+    # DB connection pool va timeoutlar.
+    # Idle ulanishlar firewall/NAT tomonidan jimgina uzilganda ("half-open"
+    # socket) — keepalives ularni tirik tutadi va o'lganini tez aniqlaydi,
+    # statement_timeout esa hech bir so'rov cheksiz "pending" qolmasligini
+    # kafolatlaydi. Hammasi default qiymatli — .env ga qo'shish shart emas.
+    DB_POOL_SIZE: int = 10
+    DB_MAX_OVERFLOW: int = 20
+    DB_POOL_TIMEOUT: int = 30
+    # NAT/firewall idle timeout odatda ≥5 daqiqa — undan past qiymat
+    # ulanishni eskirishidan oldin yangilaydi.
+    DB_POOL_RECYCLE: int = 280
+    # Yangi ulanish o'rnatish uchun cap (sekund).
+    DB_CONNECT_TIMEOUT: int = 10
+    # Server tomonida har bir SQL statement uchun qattiq limit (millisekund).
+    # Celery batch tasklari (student loader DELETE/INSERT) ham shu engine'dan
+    # foydalanadi — qiymat ular uchun yetarli darajada katta.
+    DB_STATEMENT_TIMEOUT_MS: int = 60000
+
     # Rasm tekshiruv parametrlari
     MAX_BASE64_SIZE: int
     MIN_WIDTH: int
