@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     SECRET_KEY: str
     ALGORITHM: str
     ACCESS_TOKEN_EXPIRE_MINUTES: int
-    ADMIN_ACCESS_TOKEN_EXPIRE_MINUTES: int = 10
+    ADMIN_ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     JWT_ISSUER: str = "faceid-api"
 
     # API key hashlash uchun server-side pepper (SECRET_KEY'dan alohida).

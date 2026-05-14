@@ -53,6 +53,8 @@ from app.models.user import User
 from app.schemas.student import (
     AppliedStudentItem,
     AppliedStudentsResponse,
+    NotEnteredStudentItem,
+    NotEnteredStudentsResponse,
     CheatingLogCreate,
     CheatingLogListResponse,
     CheatingLogResponse,
@@ -341,6 +343,76 @@ def list_applied_students(
         for r in rows
     ]
     return AppliedStudentsResponse(items=items, total=len(items))
+
+
+@router.get("/not-entered", response_model=NotEnteredStudentsResponse)
+def list_not_entered_students(
+    session_smena_id: int = Query(
+        ...,
+        description=(
+            "Joriy test_session_smena.id — shu test/sana/smena kesimida "
+            "hali kelmagan (is_entered=False) talabalar qaytariladi."
+        ),
+    ),
+    zone_id: int | None = Query(
+        None,
+        description="Bino (zone) id. Berilmasa — foydalanuvchining zone'i.",
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Tanlangan test_session_smena + bino (zone) kesimida hali kelmagan
+    (`is_entered=False`) talabalar ro'yxati.
+
+    Desktop client "Kelmaganlar ro'yxati" uchun ishlatadi. `is_entered`
+    backend tomonida `/students/logs/bulk` sync paytida yangilanadi —
+    shuning uchun bu ro'yxat barcha operatorlar sync qilgan davomatni
+    hisobga oladi.
+    """
+    from sqlalchemy import select as sa_select
+
+    from app.models.student import Student as StudentModel
+    from app.models.test_session_smena import TestSessionSmena
+
+    target_zone_id = zone_id or current_user.zone_id
+    if not target_zone_id:
+        raise HTTPException(status_code=400, detail="Bino (zone) aniqlanmadi")
+
+    if db.get(TestSessionSmena, session_smena_id) is None:
+        raise HTTPException(status_code=404, detail="Test sessiya smena topilmadi")
+
+    stmt = (
+        sa_select(
+            StudentModel.last_name,
+            StudentModel.first_name,
+            StudentModel.middle_name,
+            StudentModel.imei,
+            StudentModel.gr_n,
+        )
+        .where(
+            StudentModel.session_smena_id == session_smena_id,
+            StudentModel.zone_id == int(target_zone_id),
+            StudentModel.is_entered.is_(False),
+        )
+        # Guruh raqami bo'yicha, guruh ichida familiya/ism bo'yicha.
+        .order_by(
+            StudentModel.gr_n,
+            StudentModel.last_name,
+            StudentModel.first_name,
+        )
+    )
+    rows = db.execute(stmt).all()
+    items = [
+        NotEnteredStudentItem(
+            last_name=r.last_name,
+            first_name=r.first_name,
+            middle_name=r.middle_name,
+            imei=r.imei,
+            gr_n=r.gr_n or 0,
+        )
+        for r in rows
+    ]
+    return NotEnteredStudentsResponse(items=items, total=len(items))
 
 
 @router.get("", response_model=StudentListResponse)

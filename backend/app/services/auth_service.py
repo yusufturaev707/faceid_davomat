@@ -53,6 +53,19 @@ def _access_ttl_for(user: User) -> timedelta:
     return timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
 
 
+def _as_utc(dt: datetime | None) -> datetime | None:
+    """Naive datetime'ni UTC-aware ga aylantirish (defense-in-depth).
+
+    RefreshToken vaqt ustunlari endi TIMESTAMPTZ, lekin migration hali
+    tarqalmagan DB'da (yoki eski driver bilan) naive qiymat kelishi mumkin.
+    DB'ga ular doim UTC bilan yozilgani uchun naive'ni UTC deb belgilaymiz —
+    aks holda UTC-aware `now` bilan solishtirish TypeError beradi.
+    """
+    if dt is not None and dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
 def authenticate_user(
     db: Session,
     username: str,
@@ -150,9 +163,9 @@ def rotate_refresh_token(
             in_grace = (
                 replacement is not None
                 and not replacement.revoked
-                and replacement.expires_at > now
+                and _as_utc(replacement.expires_at) > now
                 and replacement.replaced_by_hash is None
-                and (now - replacement.created_at).total_seconds()
+                and (now - _as_utc(replacement.created_at)).total_seconds()
                 < REFRESH_ROTATION_GRACE_SECONDS
             )
 

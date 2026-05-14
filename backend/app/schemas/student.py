@@ -150,6 +150,23 @@ class AppliedStudentsResponse(BaseModel):
     total: int
 
 
+class NotEnteredStudentItem(BaseModel):
+    """Hali kelmagan (`is_entered=False`) talaba — minimal ro'yxat formati."""
+
+    last_name: str
+    first_name: str
+    middle_name: str | None = None
+    imei: str | None = None
+    gr_n: int = 0
+
+
+class NotEnteredStudentsResponse(BaseModel):
+    """Tanlangan test/sana/smena + bino kesimida kelmagan talabalar ro'yxati."""
+
+    items: list[NotEnteredStudentItem]
+    total: int
+
+
 # --- StudentLog ---
 
 

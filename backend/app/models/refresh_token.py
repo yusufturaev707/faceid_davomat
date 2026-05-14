@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import ForeignKey, String, func
+from sqlalchemy import DateTime, ForeignKey, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -17,10 +17,16 @@ class RefreshToken(Base):
     family_id: Mapped[str] = mapped_column(String(36), index=True)
     # Bu token rotate qilinganida — yangi tokenning hash'i shu yerda saqlanadi.
     replaced_by_hash: Mapped[str | None] = mapped_column(String(64), default=None)
-    expires_at: Mapped[datetime] = mapped_column()
+    # Vaqt ustunlari timezone-aware (TIMESTAMPTZ) — kod UTC-aware datetime
+    # bilan ishlaydi, naive bo'lsa rotate_refresh_token'da TypeError chiqadi.
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     revoked: Mapped[bool] = mapped_column(default=False)
     # Reuse aniqlanganida butun oila bekor qilingan deb belgilanadi.
-    reuse_detected_at: Mapped[datetime | None] = mapped_column(default=None)
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    reuse_detected_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
     user: Mapped["User"] = relationship(back_populates="refresh_tokens")  # noqa: F821
