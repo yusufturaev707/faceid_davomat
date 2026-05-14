@@ -3,6 +3,8 @@ backend/alembic.ini
 backend/Pipfile
 backend/Pipfile.lock
 
+backend/app/db/migrations/versions/
+
 # Maxfiy konfiguratsiya — sirlar va prod tokenlari
 .env
 .env.local
@@ -225,6 +227,3 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
-
-
-app/db/migrations/versions/
