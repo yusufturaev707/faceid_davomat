@@ -67,8 +67,12 @@ class Settings(BaseSettings):
     # Yangi ulanish o'rnatish uchun cap (sekund).
     DB_CONNECT_TIMEOUT: int = 10
     # Server tomonida har bir SQL statement uchun qattiq limit (millisekund).
-    # Celery batch tasklari (student loader DELETE/INSERT) ham shu engine'dan
-    # foydalanadi — qiymat ular uchun yetarli darajada katta.
+    # Ulanishdan KEYIN `SET statement_timeout` orqali beriladi (startup
+    # parametri sifatida emas) — shuning uchun PgBouncer ham rad etmaydi.
+    # 0 = o'chirilgan. Celery batch tasklari (student loader DELETE/INSERT)
+    # ham shu engine'dan foydalanadi — qiymat ular uchun yetarli katta.
+    # PgBouncer transaction-pooling rejimida eng ishonchli yo'l — buni
+    # Postgres rolida sozlash: ALTER ROLE <user> SET statement_timeout='60s';
     DB_STATEMENT_TIMEOUT_MS: int = 60000
 
     # Rasm tekshiruv parametrlari
