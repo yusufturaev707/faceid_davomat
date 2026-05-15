@@ -86,6 +86,7 @@ def get_test_sessions_paginated(
     per_page: int = 20,
     is_active: bool | None = None,
     test_id: int | None = None,
+    test_state_id: int | None = None,
 ) -> tuple[list[TestSession], int]:
     stmt = select(TestSession).order_by(TestSession.id.desc())
     count_stmt = select(func.count(TestSession.id))
@@ -96,6 +97,9 @@ def get_test_sessions_paginated(
     if test_id is not None:
         stmt = stmt.where(TestSession.test_id == test_id)
         count_stmt = count_stmt.where(TestSession.test_id == test_id)
+    if test_state_id is not None:
+        stmt = stmt.where(TestSession.test_state_id == test_state_id)
+        count_stmt = count_stmt.where(TestSession.test_state_id == test_state_id)
 
     total = db.execute(count_stmt).scalar() or 0
     items = list(

@@ -14,25 +14,39 @@ const iconBg: Record<string, string> = {
 };
 
 const valueColors: Record<string, string> = {
-  primary: "text-primary-700 dark:text-primary-400",
-  green: "text-emerald-700 dark:text-emerald-400",
-  purple: "text-violet-700 dark:text-violet-400",
-  orange: "text-amber-700 dark:text-amber-400",
+  primary: "text-primary-700 dark:text-primary-300",
+  green: "text-emerald-700 dark:text-emerald-300",
+  purple: "text-violet-700 dark:text-violet-300",
+  orange: "text-amber-700 dark:text-amber-300",
 };
 
-export default function StatsCard({ title, value, subtitle, icon, color = "primary" }: StatsCardProps) {
+export default function StatsCard({
+  title,
+  value,
+  subtitle,
+  icon,
+  color = "primary",
+}: StatsCardProps) {
   return (
-    <div className="glass-card p-5">
-      <div className="flex items-start justify-between">
-        <div>
-          <p className="text-sm text-gray-500 dark:text-slate-400 font-medium">{title}</p>
-          <p className={`text-3xl font-bold mt-2 ${valueColors[color]}`}>{value}</p>
+    <div className="glass-card p-4 sm:p-5">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[12px] sm:text-sm text-gray-500 dark:text-slate-400 font-medium truncate">
+            {title}
+          </p>
+          <p className={`text-2xl sm:text-3xl font-bold mt-1.5 sm:mt-2 ${valueColors[color]} tabular-nums`}>
+            {value}
+          </p>
           {subtitle && (
-            <p className="text-xs text-gray-400 dark:text-slate-500 mt-1.5">{subtitle}</p>
+            <p className="text-[11px] sm:text-xs text-gray-400 dark:text-slate-500 mt-1.5 line-clamp-2">
+              {subtitle}
+            </p>
           )}
         </div>
         {icon && (
-          <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${iconBg[color]}`}>
+          <div
+            className={`w-10 h-10 sm:w-11 sm:h-11 rounded-2xl flex items-center justify-center shrink-0 ${iconBg[color]}`}
+          >
             {icon}
           </div>
         )}

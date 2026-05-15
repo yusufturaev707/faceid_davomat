@@ -319,6 +319,51 @@ export interface TestSessionResponse {
   created_at: string;
 }
 
+// === Dashboard Statistics (test session) ===
+
+export interface GenderStat {
+  total: number;
+  male: number;
+  female: number;
+  unknown: number;
+}
+
+export interface CheatingStat {
+  total: number;
+  at_entry: number;
+  during_test: number;
+  other: number;
+  male: number;
+  female: number;
+  unknown: number;
+}
+
+export interface StatGroup {
+  total: GenderStat;
+  attended: GenderStat;
+  not_attended: GenderStat;
+  cheating: CheatingStat;
+}
+
+export interface RegionStatItem {
+  region_id: number;
+  region_number: number;
+  region_name: string;
+  stats: StatGroup;
+}
+
+export interface DashboardStatsResponse {
+  session_id: number;
+  session_smena_id: number;
+  day: string;
+  smena_number: number;
+  smena_name: string;
+  session_state_key: number;
+  is_realtime: boolean;
+  summary: StatGroup;
+  regions: RegionStatItem[];
+}
+
 export interface TestSessionListResponse {
   items: TestSessionResponse[];
   total: number;

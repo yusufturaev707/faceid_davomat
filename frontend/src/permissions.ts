@@ -7,6 +7,13 @@ export const PERM = {
   DASHBOARD_READ: "dashboard:read",
   DASHBOARD_STATS: "dashboard:stats",
 
+  // Rasm tekshirish / yuz solishtirish (xizmatlar)
+  PHOTO_VERIFY: "photo:verify",
+  PHOTO_VERIFY_TWO_FACE: "photo:verify_two_face",
+
+  // Embedding xizmati
+  EMBEDDING_EXTRACT: "embedding:extract",
+
   // Tekshiruv loglari
   LOG_READ: "log:read",
   LOG_DELETE: "log:delete",
@@ -70,6 +77,9 @@ export const PERM = {
 
   // Xavfsizlik auditi
   FAILED_LOGIN_READ: "failed_login:read",
+
+  // Test sessiya statistika dashboard
+  STATISTICS_READ: "statistics:read",
 } as const;
 
 export type PermCode = (typeof PERM)[keyof typeof PERM];

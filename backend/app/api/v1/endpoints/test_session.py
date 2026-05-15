@@ -1,10 +1,12 @@
 """Test Session CRUD endpoints."""
 
+import base64
 import logging
 import math
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from pydantic import BaseModel
+from sqlalchemy import select as sa_select
 from sqlalchemy.orm import Session
 
 from app.crud.lookup import DuplicateError
@@ -48,10 +50,26 @@ from app.schemas.test_session import (
     TestSessionSmenaResponse,
     TestSessionUpdate,
 )
+from app.models.test_session_smena import TestSessionSmena
+from app.schemas.dashboard_stats import DashboardStatsResponse
 from app.services.embedding_extractor import get_embedding_progress
+from app.services.session_dashboard_stats import (
+    DashboardStatsError,
+    get_dashboard_stats,
+)
 from app.services.student_loader import get_student_load_progress
+from app.tasks.excel_loader_task import excel_load_and_enrich_task
 from app.tasks.student_loader_task import load_students_task
 from app.tasks.verify_task import process_embeddings, process_retry_embeddings
+
+# Maksimal yuklanadigan Excel hajmi (16 MB) — bu 100k qatordan ortiq Excel'lar
+# uchun ham yetarli. Ko'paytirish kerak bo'lsa shu konstantani o'zgartiring.
+_MAX_EXCEL_BYTES = 16 * 1024 * 1024
+_ALLOWED_EXCEL_MIME = {
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/vnd.ms-excel",
+    "application/octet-stream",  # ba'zi browserlar shu bilan yuborishi mumkin
+}
 
 logger = logging.getLogger(__name__)
 
@@ -175,12 +193,21 @@ def list_sessions(
     per_page: int = Query(20, ge=1, le=100),
     is_active: bool | None = None,
     test_id: int | None = None,
+    test_state_id: int | None = Query(
+        default=None,
+        description="SessionState.id bo'yicha filter (Yaratilgan, Yuklab olindi, Embedding, Tayyor, Yakunlangan)",
+    ),
     db: Session = Depends(get_db),
     _: User = Depends(PermissionChecker(P.TEST_SESSION_READ.code)),
 ):
     """Test sessiyalar ro'yxati (pagination bilan)."""
     items, total = get_test_sessions_paginated(
-        db, page=page, per_page=per_page, is_active=is_active, test_id=test_id
+        db,
+        page=page,
+        per_page=per_page,
+        is_active=is_active,
+        test_id=test_id,
+        test_state_id=test_state_id,
     )
     return TestSessionListResponse(
         items=items,
@@ -422,6 +449,97 @@ def embedding_progress(
     return progress
 
 
+@router.post(
+    "/{session_id}/upload-excel",
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Excel'dan studentlarni yuklash (Celery background)",
+)
+async def upload_students_excel(
+    session_id: int,
+    file: UploadFile = File(..., description=".xlsx fayl"),
+    db: Session = Depends(get_db),
+    _: User = Depends(PermissionChecker(P.TEST_SESSION_UPDATE.code)),
+):
+    """Test sessiyaga Excel orqali studentlarni yuklash.
+
+    Talab:
+    - Sessiya state.key=1 (yangi yaratilgan) bo'lishi shart.
+    - Sessiyada kamida bitta smena bo'lishi kerak.
+    - Fayl `.xlsx` formatida, hajmi <= 16MB.
+
+    Endpoint darhol 202 qaytaradi va Celery background task'ni ishga tushiradi.
+    Frontend `/student-load-progress` endpoint orqali progress polling qiladi.
+    Yakunida sessiya state.key=2 ("Yuklab olindi") ga avtomatik o'tadi.
+    """
+    session = db.get(TestSession, session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Sessiya topilmadi")
+
+    # Faqat "yaratilgan" (key=1) holatdagi sessiyalarga Excel yuklash mumkin.
+    current_state = db.get(SessionState, session.test_state_id)
+    if current_state is None or current_state.key != 1:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Excel yuklash faqat 'Yaratilgan' (yangi) holatdagi "
+                "sessiyalar uchun mumkin"
+            ),
+        )
+
+    # Sessiyada smena bormi?
+    smena_count = db.scalar(
+        sa_select(TestSessionSmena.id)
+        .where(TestSessionSmena.test_session_id == session_id)
+        .limit(1)
+    )
+    if smena_count is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Sessiyaga avval smena qo'shing — Excel'dagi qatorlarni "
+            "shu smenalar bo'yicha bog'laymiz",
+        )
+
+    # MIME va kengaytma tekshiruvi (defense in depth — openpyxl o'zi ham tekshiradi)
+    filename = (file.filename or "").lower()
+    if not filename.endswith(".xlsx"):
+        raise HTTPException(
+            status_code=400, detail="Fayl `.xlsx` formatida bo'lishi kerak"
+        )
+    if file.content_type and file.content_type not in _ALLOWED_EXCEL_MIME:
+        # Faqat ogohlantirish — ba'zi browserlar generic MIME yuborishi mumkin
+        logger.warning(
+            "Excel upload: content_type=%s (kutilmagan, davom etilmoqda)",
+            file.content_type,
+        )
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Fayl bo'sh")
+    if len(content) > _MAX_EXCEL_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Fayl hajmi {_MAX_EXCEL_BYTES // (1024 * 1024)}MB dan oshmasin",
+        )
+
+    encoded = base64.b64encode(content).decode("ascii")
+    previous_state_id = int(session.test_state_id)
+
+    task = excel_load_and_enrich_task.delay(
+        session_id, encoded, previous_state_id
+    )
+    logger.info(
+        "Excel upload Celery task'ga yuborildi: session=%d, task=%s, size=%d bytes",
+        session_id,
+        task.id,
+        len(content),
+    )
+    return {
+        "task_id": task.id,
+        "status": "queued",
+        "message": "Excel qayta ishlanmoqda — progress orqali kuzating",
+    }
+
+
 @router.get("/{session_id}/student-load-progress")
 def student_load_progress(
     session_id: int,
@@ -444,6 +562,39 @@ def student_load_progress(
             "status": "idle", "message": "",
         }
     return progress
+
+
+@router.get(
+    "/{session_id}/dashboard-stats",
+    response_model=DashboardStatsResponse,
+    summary="Sessiya statistika dashboard",
+)
+def session_dashboard_stats(
+    session_id: int,
+    session_smena_id: int = Query(
+        ..., description="TestSessionSmena.id — kun va smena tanlovi shu yozuv orqali"
+    ),
+    db: Session = Depends(get_db),
+    _: User = Depends(PermissionChecker(P.STATISTICS_READ.code)),
+):
+    """Tanlangan sessiya/smena+kun uchun dashboard statistikasini qaytarish.
+
+    - **Real-time**: javobda `is_realtime=True` qaytsa (sessiya state.key=4),
+      frontend bu endpoint'ni har necha sekundda qayta chaqirib turishi
+      tavsiya etiladi.
+    - **Boshqa holatlarda**: oxirgi ma'lumotni qaytaradi (cache emas, har safar
+      DB'dan o'qiydi; agar polling kerak bo'lmasa frontend bir marta chaqiradi).
+
+    `summary` — 4 ta dashboard cardini to'ldiradi.
+    `regions` — region.number bo'yicha tartiblangan ro'yxat, har birida shu
+    statistikalarning to'liq nusxasi.
+    """
+    try:
+        return get_dashboard_stats(
+            db, session_id=session_id, session_smena_id=session_smena_id
+        )
+    except DashboardStatsError as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
 
 @router.get("/{session_id}/student-stats")

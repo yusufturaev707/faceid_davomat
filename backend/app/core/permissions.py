@@ -23,6 +23,15 @@ class P:
     DASHBOARD_READ = _Perm("dashboard:read", "Dashboard ko'rish", "dashboard")
     DASHBOARD_STATS = _Perm("dashboard:stats", "Dashboard statistikasi", "dashboard")
 
+    # === Photo / Face services ===
+    PHOTO_VERIFY = _Perm("photo:verify", "Rasm tekshirish", "photo")
+    PHOTO_VERIFY_TWO_FACE = _Perm(
+        "photo:verify_two_face", "Yuzlarni solishtirish", "photo"
+    )
+
+    # === Embedding service ===
+    EMBEDDING_EXTRACT = _Perm("embedding:extract", "Embedding olish", "embedding")
+
     # === Verification logs ===
     LOG_READ = _Perm("log:read", "Tekshiruv loglarini ko'rish", "log")
     LOG_DELETE = _Perm("log:delete", "Tekshiruv logini o'chirish", "log")
@@ -89,6 +98,13 @@ class P:
         "failed_login:read",
         "Failed login audit yozuvlarini ko'rish",
         "security",
+    )
+
+    # === Test session statistics dashboard ===
+    STATISTICS_READ = _Perm(
+        "statistics:read",
+        "Test sessiya statistikasini ko'rish",
+        "statistics",
     )
 
 

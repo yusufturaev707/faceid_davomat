@@ -30,7 +30,13 @@
       "Bash(cmd /c \"dir C:\\\\Applocation\\\\face-id-desktop /b\")",
       "Bash(venv/Scripts/python.exe -m alembic history)",
       "Bash(venv/Scripts/python.exe -m py_compile app/schemas/student.py app/api/v1/endpoints/student.py)",
-      "Bash(venv/Scripts/python.exe -m py_compile app/api/v1/endpoints/student.py)"
+      "Bash(venv/Scripts/python.exe -m py_compile app/api/v1/endpoints/student.py)",
+      "Bash(grep -E \"\\\\.tsx$\")",
+      "Bash(xargs grep -l \"TestSession\")",
+      "Bash(xargs grep -l \"gtsp\")",
+      "Bash(xargs grep -l \"GTSP\")",
+      "PowerShell(python -m pip install httpx==0.28.1 2>&1 | Select-Object -Last 3)",
+      "PowerShell(python -c \"import httpx; print\\(httpx.__version__\\)\")"
     ]
   }
 }

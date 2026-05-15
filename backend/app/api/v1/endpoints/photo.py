@@ -11,8 +11,9 @@ from sqlalchemy.orm import Session
 
 from app.celery_app import celery_app
 from app.config import settings
+from app.core.permissions import P
 from app.core.rate_limit import limiter
-from app.dependencies import get_current_active_user, get_db
+from app.dependencies import PermissionChecker, get_db
 from app.models.user import User
 from app.schemas.photo import (
     PhotoVerifyRequest,
@@ -94,7 +95,7 @@ def _check_queue_backpressure(queue_name: str = "verify") -> None:
 def submit_verify_photo(
     request: Request,
     payload: PhotoVerifyRequest,
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(PermissionChecker(P.PHOTO_VERIFY.code)),
     _db: Session = Depends(get_db),
 ) -> TaskSubmitResponse:
     """Rasm tekshiruvini navbatga qo'shish. Darhol task_id qaytaradi."""
@@ -119,7 +120,7 @@ def submit_verify_photo(
 )
 def get_task_status(
     task_id: str,
-    _current_user: User = Depends(get_current_active_user),
+    _current_user: User = Depends(PermissionChecker(P.PHOTO_VERIFY.code)),
 ) -> TaskStatusResponse:
     """Celery task holatini va natijasini qaytarish."""
     task_result = celery_app.AsyncResult(task_id)
@@ -157,7 +158,7 @@ def get_task_status(
 def submit_verify_two_face(
     request: Request,
     payload: TwoFaceVerifyRequest,
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(PermissionChecker(P.PHOTO_VERIFY_TWO_FACE.code)),
 ) -> TaskSubmitResponse:
     """Ikki yuzni solishtirish taskini navbatga qo'shish."""
     _check_queue_backpressure("verify")
@@ -183,7 +184,7 @@ def submit_verify_two_face(
 )
 def get_two_face_task_status(
     task_id: str,
-    _current_user: User = Depends(get_current_active_user),
+    _current_user: User = Depends(PermissionChecker(P.PHOTO_VERIFY_TWO_FACE.code)),
 ) -> TwoFaceTaskStatusResponse:
     """Ikki yuz solishtirish task holatini qaytarish."""
     task_result = celery_app.AsyncResult(task_id)

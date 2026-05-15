@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import Layout from "./components/Layout";
 import PermissionRoute from "./components/PermissionRoute";
 import ProtectedRoute from "./components/ProtectedRoute";
+import { usePermission } from "./hooks/usePermission";
 import { PERM } from "./permissions";
 import DashboardPage from "./pages/DashboardPage";
 import LoginPage from "./pages/LoginPage";
@@ -34,6 +35,28 @@ import StudentLogsPage from "./pages/StudentLogsPage";
 import CheatingLogsPage from "./pages/CheatingLogsPage";
 import RolePermissionsPage from "./pages/RolePermissionsPage";
 import FailedLoginsPage from "./pages/FailedLoginsPage";
+import StatisticsPage from "./pages/StatisticsPage";
+
+/**
+ * Asosiy sahifani foydalanuvchining huquqlariga qarab tanlash.
+ * Xizmat sahifalari endi permission-gate'lanadi, shuning uchun root'ni
+ * doim /verify ga yuborib bo'lmaydi — ruxsati yo'q user redirect halqasiga
+ * tushib qolardi.
+ */
+function HomeRedirect() {
+  const { hasPermission, hasAnyPermission } = usePermission();
+
+  if (hasPermission(PERM.PHOTO_VERIFY)) return <Navigate to="/verify" replace />;
+  if (hasPermission(PERM.PHOTO_VERIFY_TWO_FACE))
+    return <Navigate to="/verify-two-face" replace />;
+  if (hasPermission(PERM.EMBEDDING_EXTRACT))
+    return <Navigate to="/embedding" replace />;
+  if (hasAnyPermission(PERM.DASHBOARD_READ, PERM.DASHBOARD_STATS))
+    return <Navigate to="/dashboard" replace />;
+  if (hasAnyPermission(PERM.TEST_SESSION_READ))
+    return <Navigate to="/test-dashboard" replace />;
+  return <Navigate to="/settings" replace />;
+}
 
 export default function App() {
   return (
@@ -41,10 +64,34 @@ export default function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route element={<ProtectedRoute />}>
         <Route element={<Layout />}>
-          <Route path="/" element={<Navigate to="/verify" replace />} />
-          <Route path="/verify" element={<VerifyPage />} />
-          <Route path="/verify-two-face" element={<VerifyTwoFacePage />} />
-          <Route path="/embedding" element={<EmbeddingPage />} />
+          <Route path="/" element={<HomeRedirect />} />
+
+          <Route element={<PermissionRoute permission={PERM.PHOTO_VERIFY} redirectTo="/settings" />}>
+            <Route path="/verify" element={<VerifyPage />} />
+          </Route>
+
+          <Route
+            element={
+              <PermissionRoute
+                permission={PERM.PHOTO_VERIFY_TWO_FACE}
+                redirectTo="/settings"
+              />
+            }
+          >
+            <Route path="/verify-two-face" element={<VerifyTwoFacePage />} />
+          </Route>
+
+          <Route
+            element={
+              <PermissionRoute
+                permission={PERM.EMBEDDING_EXTRACT}
+                redirectTo="/settings"
+              />
+            }
+          >
+            <Route path="/embedding" element={<EmbeddingPage />} />
+          </Route>
+
           <Route path="/settings" element={<SettingsPage />} />
 
           {/* Boshqaruv */}
@@ -76,6 +123,12 @@ export default function App() {
             }
           >
             <Route path="/api-keys" element={<ApiKeysPage />} />
+          </Route>
+
+          <Route
+            element={<PermissionRoute permission={PERM.STATISTICS_READ} />}
+          >
+            <Route path="/statistics" element={<StatisticsPage />} />
           </Route>
 
           {/* Test markazi */}

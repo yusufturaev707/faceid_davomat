@@ -1,12 +1,20 @@
 import { useEffect, useState } from "react";
 import type { UserResponse, CreateUserRequest, UpdateUserRequest, LookupRoleResponse, LookupRegionResponse, LookupZoneResponse } from "../interfaces";
 import { getUsersApi, createUserApi, updateUserApi, deleteUserApi, getRolesListApi, getRegionsListApi, getZonesListApi, getZonesByRegionApi } from "../api";
+import { useAuth } from "../contexts/AuthContext";
 import PageLoader from "../components/PageLoader";
 import PermissionGate from "../components/PermissionGate";
 import { PERM } from "../permissions";
 import { extractErrorMessage } from "../utils/errorMessage";
 
+// Admin role yagona "super-protected" rol — uni faqat user id=1 boshqaradi.
+const ADMIN_ROLE_KEY = 1;
+const SUPER_ADMIN_USER_ID = 1;
+
 export default function UsersPage() {
+  const { user: currentUser } = useAuth();
+  const isSuperAdmin = currentUser?.id === SUPER_ADMIN_USER_ID;
+
   const [users, setUsers] = useState<UserResponse[]>([]);
   const [roles, setRoles] = useState<LookupRoleResponse[]>([]);
   const [regions, setRegions] = useState<LookupRegionResponse[]>([]);
@@ -349,19 +357,65 @@ export default function UsersPage() {
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Rol</label>
-                <select
-                  value={form.role_id ?? ""}
-                  onChange={(e) => setForm({ ...form, role_id: e.target.value ? Number(e.target.value) : null })}
-                  className="input-field w-full"
-                >
-                  <option value="">— Tanlanmagan —</option>
-                  {roles.map((r) => (
-                    <option key={r.id} value={r.id}>{r.name}</option>
-                  ))}
-                </select>
-              </div>
+              {(() => {
+                // Admin (key=1) rolidagi userning rolini faqat super-admin (id=1) o'zgartira oladi.
+                // Yangi user yaratishda ham admin biriktirish faqat super-admin huquqi.
+                const editingUser = editId ? users.find((u) => u.id === editId) : null;
+                const targetIsAdmin = editingUser?.role_key === ADMIN_ROLE_KEY;
+                const roleLocked = targetIsAdmin && !isSuperAdmin;
+                return (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+                      Rol
+                    </label>
+                    <select
+                      value={form.role_id ?? ""}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          role_id: e.target.value ? Number(e.target.value) : null,
+                        })
+                      }
+                      disabled={roleLocked}
+                      className="input-field w-full disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                      <option value="">— Tanlanmagan —</option>
+                      {roles.map((r) => {
+                        const isAdminRole = r.key === ADMIN_ROLE_KEY;
+                        // Admin variantini super-admin bo'lmaganlar uchun yopiq qilamiz,
+                        // lekin agar joriy tanlangan rol shu bo'lsa (edit holatda) — ko'rinib tursin.
+                        const optDisabled =
+                          isAdminRole && !isSuperAdmin && form.role_id !== r.id;
+                        return (
+                          <option key={r.id} value={r.id} disabled={optDisabled}>
+                            {r.name}
+                            {optDisabled ? " — faqat super-admin" : ""}
+                          </option>
+                        );
+                      })}
+                    </select>
+                    {roleLocked && (
+                      <p className="mt-1.5 text-[11px] text-amber-600 dark:text-amber-400 flex items-start gap-1.5">
+                        <svg
+                          className="w-3.5 h-3.5 mt-px shrink-0"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M12 15v2m0-9v4m-9 5h18a2 2 0 001.83-2.82L13.92 4.62a2 2 0 00-3.84 0L2.17 17.18A2 2 0 003 20z"
+                          />
+                        </svg>
+                        Admin rolidagi userning rolini faqat super-admin (id=1)
+                        o'zgartira oladi.
+                      </p>
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* Cascade: Region → Zone */}
               <div>

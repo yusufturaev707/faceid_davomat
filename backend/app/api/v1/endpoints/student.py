@@ -571,9 +571,14 @@ def fetch_gtsp_image(
     """
     from sqlalchemy import select
 
-    from app.config import settings
+    from app.models.gender import Gender
     from app.models.student import Student as StudentModel
     from app.models.student_ps_data import StudentPsData
+    from app.services.gtsp_client import (
+        GtspError,
+        GtspNotConfigured,
+        fetch_gtsp_data,
+    )
 
     student_obj = db.get(StudentModel, student_id)
     if not student_obj:
@@ -588,55 +593,32 @@ def fetch_gtsp_image(
         )
 
     ps_value = f"{ps_data.ps_ser}{ps_data.ps_num}"
-    imei_value = student_obj.imei or ""
-
-    if not settings.API_GTSP:
-        raise HTTPException(status_code=500, detail="API_GTSP sozlamasi topilmadi")
-
-    url = settings.API_GTSP.format(imei_value, ps_value)
     logger.info("GTSP API chaqirilmoqda: student_id=%d, ps=%s", student_id, ps_value)
 
     try:
-        with httpx.Client(timeout=30, verify=False) as client:
-            resp = client.get(url)
-            resp.raise_for_status()
-            result = resp.json()
-    except httpx.HTTPStatusError as e:
-        logger.error("GTSP API HTTP xatolik: %s", e)
-        raise HTTPException(
-            status_code=502, detail=f"GTSP API xatolik: {e.response.status_code}"
-        )
-    except Exception as e:
-        logger.error("GTSP API ulanish xatolik: %s", e)
-        raise HTTPException(status_code=502, detail="GTSP API ga ulanib bo'lmadi")
-
-    if result.get("status") != 1:
-        msg = result.get("data", {}).get("message", "Noma'lum xatolik")
-        raise HTTPException(status_code=400, detail=f"GTSP: {msg}")
-
-    data = result["data"]
+        result = fetch_gtsp_data(student_obj.imei, ps_value, timeout=30.0)
+    except GtspNotConfigured as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    except GtspError as e:
+        # retryable=True → ulanish xatosi, boshqa hollarda — API rad etdi
+        status_code = 502 if e.retryable else 400
+        raise HTTPException(status_code=status_code, detail=e.message)
 
     # Student ma'lumotlarini yangilash
-    student_obj.last_name = data.get("sname", student_obj.last_name)
-    student_obj.first_name = data.get("fname", student_obj.first_name)
-    student_obj.middle_name = data.get("mname", student_obj.middle_name)
+    if result.last_name:
+        student_obj.last_name = result.last_name
+    if result.first_name:
+        student_obj.first_name = result.first_name
+    if result.middle_name is not None:
+        student_obj.middle_name = result.middle_name
     student_obj.is_image = True
 
     # StudentPsData yangilash
-    photo = data.get("photo")
-    if photo:
-        ps_data.ps_img = _b64_to_bytes(photo)
+    if result.photo:
+        ps_data.ps_img = result.photo
 
-    # Gender ni key orqali topish: sex=1 → key=1 (erkak), sex=2 → key=2 (ayol), boshqa → key=0
-    from app.models.gender import Gender
-
-    sex = data.get("sex")
-    if sex == 1:
-        gender_key = 1
-    elif sex == 2:
-        gender_key = 2
-    else:
-        gender_key = 0
+    # Gender ni key orqali topish: sex=1 → key=1, sex=2 → key=2, boshqa → key=0
+    gender_key = result.sex if result.sex in (1, 2) else 0
     gender = db.execute(select(Gender).where(Gender.key == gender_key)).scalar()
     if gender:
         ps_data.gender_id = gender.id

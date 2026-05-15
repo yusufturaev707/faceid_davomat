@@ -33,6 +33,7 @@ from app.crud.verify_faces import (
     get_face_logs_paginated,
 )
 from app.dependencies import PermissionChecker, get_current_active_user, get_db
+from app.models.role import Role
 from app.models.user import User
 from app.models.verification_log import VerificationLog
 from app.models.verify_faces import VerifyFaces
@@ -52,6 +53,19 @@ from app.schemas.api_key import (
 from app.schemas.auth import CreateUserRequest, UpdateUserRequest, UserResponse
 
 router = APIRouter()
+
+# Admin role identifier (matches DB seed). Mutations involving this role are gated
+# to the super-admin (id=1).
+ADMIN_ROLE_KEY = 1
+SUPER_ADMIN_USER_ID = 1
+
+
+def _is_admin_role(db: Session, role_id: int | None) -> bool:
+    """role_id => Role(key=1) mi? None bo'lsa False."""
+    if role_id is None:
+        return False
+    role = db.get(Role, role_id)
+    return role is not None and role.key == ADMIN_ROLE_KEY
 
 
 def _safe_image_path(base_dir: str, filename: str, suffix: str) -> str:
@@ -174,9 +188,20 @@ def create_new_user(
     request: Request,
     data: CreateUserRequest,
     db: Session = Depends(get_db),
-    _: User = Depends(PermissionChecker(P.USER_CREATE.code)),
+    current_user: User = Depends(PermissionChecker(P.USER_CREATE.code)),
 ) -> UserResponse:
-    """Yangi foydalanuvchi yaratish."""
+    """Yangi foydalanuvchi yaratish.
+
+    Xavfsizlik: admin (key=1) rolini biriktirish faqat super-admin (id=1) huquqida.
+    """
+    if (
+        _is_admin_role(db, data.role_id)
+        and current_user.id != SUPER_ADMIN_USER_ID
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin rolini biriktirish faqat super-admin (id=1) huquqida",
+        )
     return create_user(db, data)
 
 
@@ -193,14 +218,48 @@ def update_existing_user(
     db: Session = Depends(get_db),
     current_user: User = Depends(PermissionChecker(P.USER_UPDATE.code)),
 ) -> UserResponse:
-    """Foydalanuvchini tahrirlash. role_id va is_active faqat admin uchun."""
-    if current_user.role_key != 1:
-        provided = data.model_dump(exclude_unset=True)
-        if "role_id" in provided or "is_active" in provided:
+    """Foydalanuvchini tahrirlash.
+
+    Xavfsizlik qoidalari:
+    - Admin bo'lmagan user role_id yoki is_active'ni o'zgartira olmaydi.
+    - Admin (key=1) rolidagi foydalanuvchining rolini faqat super-admin (id=1)
+      o'zgartira oladi — boshqa admin yoki o'zi ham o'zgartira olmaydi.
+    - Boshqa rolga admin (key=1) biriktirish ham faqat super-admin huquqida.
+    """
+    provided = data.model_dump(exclude_unset=True)
+
+    if current_user.role_key != ADMIN_ROLE_KEY and (
+        "role_id" in provided or "is_active" in provided
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="role_id va is_active faqat admin tomonidan o'zgartiriladi",
+        )
+
+    if "role_id" in provided:
+        target = db.get(User, user_id)
+        if target is None:
             raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="role_id va is_active faqat admin tomonidan o'zgartiriladi",
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Foydalanuvchi topilmadi",
             )
+        # Faqat qiymat haqiqatan o'zgaradigan bo'lsa qoidani qo'llaymiz.
+        role_actually_changing = provided["role_id"] != target.role_id
+        if role_actually_changing:
+            target_is_admin = target.role_key == ADMIN_ROLE_KEY
+            new_is_admin = _is_admin_role(db, provided["role_id"])
+            if (
+                (target_is_admin or new_is_admin)
+                and current_user.id != SUPER_ADMIN_USER_ID
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=(
+                        "Admin rolidagi userning rolini faqat super-admin (id=1) "
+                        "o'zgartira oladi"
+                    ),
+                )
+
     user = update_user(db, user_id, data)
     if not user:
         raise HTTPException(

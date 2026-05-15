@@ -223,9 +223,9 @@ export default function StudentLogsPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-5">
         <div>
-          <h2 className="section-title">Student kirish loglari</h2>
+          <h2 className="section-title">Talabgorlar kirish loglari</h2>
           <p className="section-subtitle">
-            Studentlarning kirish va tekshiruv loglari
+            Talabgorlarning kirish va tekshiruv loglari
           </p>
         </div>
       </div>
@@ -371,7 +371,7 @@ export default function StudentLogsPage() {
                 }))}
               />
               <FilterSelect
-                label="Bino (Zona)"
+                label="Bino"
                 value={filterZoneId}
                 onChange={(v) => {
                   setFilterZoneId(v);
@@ -537,9 +537,9 @@ export default function StudentLogsPage() {
               <thead>
                 <tr className="bg-gray-50/80 dark:bg-slate-800/80 border-b border-gray-200 dark:border-slate-700">
                   <TH>ID</TH>
-                  <TH>Student</TH>
+                  <TH>Talabgor</TH>
                   <TH>Test / Sessiya</TH>
-                  <TH>Zona / Smena</TH>
+                  <TH>Bino / Smena</TH>
                   <TH>Test sana</TH>
                   <TH>Birinchi kirish</TH>
                   <TH>Oxirgi kirish</TH>

@@ -23,6 +23,7 @@ import {
   retryEmbeddingApi,
   updateTestSessionApi,
   uploadStudentImageApi,
+  uploadStudentsExcelApi,
   fileToBase64,
 } from "../api";
 import PageLoader from "../components/PageLoader";
@@ -88,6 +89,12 @@ export default function TestSessionDetailPage() {
   const [loadingFailedStudents, setLoadingFailedStudents] = useState(false);
   const [retryingEmbedding, setRetryingEmbedding] = useState(false);
   const [uploadingImageId, setUploadingImageId] = useState<number | null>(null);
+
+  // === Excel upload (state.key=1 → key=2 alternative flow) ===
+  const [showExcelUpload, setShowExcelUpload] = useState(false);
+  const [excelFile, setExcelFile] = useState<File | null>(null);
+  const [excelError, setExcelError] = useState<string | null>(null);
+  const [excelSubmitting, setExcelSubmitting] = useState(false);
 
   const fetchSession = useCallback(async () => {
     if (!id) return;
@@ -495,6 +502,37 @@ export default function TestSessionDetailPage() {
     }
   };
 
+  // Excel orqali studentlarni yuklash. Backend Celery task yuradi, biz mavjud
+  // student-load polling'ni qayta ishlatamiz — yakunida sessiya state.key=2 ga
+  // o'tadi va status badge avtomatik yangilanadi.
+  const openExcelUpload = () => {
+    setExcelFile(null);
+    setExcelError(null);
+    setShowExcelUpload(true);
+  };
+
+  const handleExcelUpload = async () => {
+    if (!session || !excelFile) return;
+    setExcelSubmitting(true);
+    setExcelError(null);
+    try {
+      await uploadStudentsExcelApi(session.id, excelFile);
+      // Server qabul qildi — modalni yopib, mavjud progress flow'ni boshlaymiz
+      setShowExcelUpload(false);
+      setExcelFile(null);
+      setChangingState(true);
+      setTargetStateId(session.test_state_id);
+      setStateError("");
+      setLoadProgress(2);
+      setProgressLabel("Excel qabul qilindi, qayta ishlanmoqda...");
+      startStudentLoadPolling(session.id);
+    } catch (err) {
+      setExcelError(extractErrorMessage(err));
+    } finally {
+      setExcelSubmitting(false);
+    }
+  };
+
   const handlePrevStep = async () => {
     if (!session || currentStateKey !== 5) return;
     const prevState = sortedStates.find((s) => s.key === 4);
@@ -879,7 +917,7 @@ export default function TestSessionDetailPage() {
               {sortedStates.find((s) => s.id === session.test_state_id)?.name || "—"}
             </span>
           </p>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {/* Faqat state 5 dan state 4 ga qaytish tugmasi */}
             {currentStateKey === 5 && (
               <PermissionGate permission={PERM.TEST_SESSION_UPDATE}>
@@ -892,6 +930,22 @@ export default function TestSessionDetailPage() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                   </svg>
                   Faollashtirish
+                </button>
+              </PermissionGate>
+            )}
+            {/* Excel orqali yuklash — faqat state=1 (Yaratilgan) holat uchun */}
+            {currentStateKey === 1 && session.smenas.length > 0 && (
+              <PermissionGate permission={PERM.TEST_SESSION_UPDATE}>
+                <button
+                  onClick={openExcelUpload}
+                  disabled={changingState}
+                  title="Studentlar ro'yxatini Excel fayldan yuklash (tashqi API o'rniga)"
+                  className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-900/30 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 border border-emerald-200/70 dark:border-emerald-800/40 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  Excel-dan yuklash
                 </button>
               </PermissionGate>
             )}
@@ -1312,6 +1366,86 @@ export default function TestSessionDetailPage() {
             onConfirm={handleAddSmena}
             confirmText={addSmenaSubmitting ? "Qo'shilmoqda..." : "Qo'shish"}
             disabled={addSmenaSubmitting}
+          />
+        </Modal>
+      )}
+
+      {/* Excel Upload Modal — faqat state.key=1 (Yaratilgan) holatda */}
+      {showExcelUpload && (
+        <Modal
+          title="Excel'dan studentlarni yuklash"
+          onClose={() => (excelSubmitting ? undefined : setShowExcelUpload(false))}
+        >
+          <div className="space-y-4">
+            {excelError && <ErrorBox message={excelError} />}
+
+            {/* Help / instructions */}
+            <div className="p-4 rounded-xl bg-sky-50 dark:bg-sky-900/20 border border-sky-200/60 dark:border-sky-800/40 text-[13px] text-sky-900 dark:text-sky-200 space-y-1.5">
+              <p className="font-semibold flex items-center gap-2">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Talab qilinadigan ustunlar
+              </p>
+              <p className="text-[12px] leading-relaxed">
+                <code className="font-mono">last_name</code>, <code className="font-mono">first_name</code>,{" "}
+                <code className="font-mono">middle_name</code>, <code className="font-mono">imei</code>,{" "}
+                <code className="font-mono">ps_ser</code>, <code className="font-mono">ps_num</code>,{" "}
+                <code className="font-mono">region number</code>, <code className="font-mono">zone number</code>,{" "}
+                <code className="font-mono">smena number</code>, <code className="font-mono">gr_n</code>,{" "}
+                <code className="font-mono">e_date</code>, <code className="font-mono">subject_name</code>
+              </p>
+              <ul className="text-[12px] list-disc pl-5 space-y-0.5 mt-1">
+                <li>Birinchi qator — sarlavha. Keyingilar — qatorlar.</li>
+                <li><strong>smena number</strong> bo'yicha sessiyadagi smenaga bog'lanadi (sana = <code className="font-mono">e_date</code>).</li>
+                <li>Yuklab olingach FIO va rasm GTSP xizmatidan avtomatik to'ldiriladi.</li>
+              </ul>
+            </div>
+
+            <Field label="Excel fayl (.xlsx)">
+              <input
+                type="file"
+                accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                onChange={(e) => {
+                  const f = e.target.files?.[0] ?? null;
+                  setExcelFile(f);
+                  setExcelError(null);
+                }}
+                disabled={excelSubmitting}
+                className="block w-full text-sm text-gray-600 dark:text-slate-300
+                  file:mr-3 file:py-2.5 file:px-4 file:rounded-full file:border-0
+                  file:text-sm file:font-medium file:bg-primary-50 file:text-primary-700
+                  dark:file:bg-primary-900/40 dark:file:text-primary-200
+                  hover:file:bg-primary-100 dark:hover:file:bg-primary-900/60
+                  file:cursor-pointer cursor-pointer
+                  disabled:opacity-50 disabled:cursor-not-allowed"
+              />
+              {excelFile && (
+                <p className="mt-2 text-[12px] text-gray-500 dark:text-slate-400">
+                  Tanlandi: <span className="font-medium text-gray-700 dark:text-slate-300">{excelFile.name}</span>{" "}
+                  <span className="text-gray-400 dark:text-slate-500">
+                    ({Math.ceil(excelFile.size / 1024)} KB)
+                  </span>
+                </p>
+              )}
+            </Field>
+
+            <p className="text-[12px] text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 px-3 py-2 rounded-lg flex items-start gap-2">
+              <svg className="w-4 h-4 mt-px shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              <span>
+                Yuborilgach jarayon arqa fonda davom etadi — modal yopilib,
+                progress ko'rsatkichi ostida ko'rasiz. Yakunida sessiya
+                <strong> "Yuklab olindi"</strong> holatiga o'tadi.
+              </span>
+            </p>
+          </div>
+          <ModalFooter
+            onCancel={() => setShowExcelUpload(false)}
+            onConfirm={handleExcelUpload}
+            confirmText={excelSubmitting ? "Yuborilmoqda..." : "Yuborish va boshlash"}
+            disabled={!excelFile || excelSubmitting}
           />
         </Modal>
       )}

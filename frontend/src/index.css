@@ -62,75 +62,198 @@
     --color-border: 51 65 85;
   }
 
+  html {
+    -webkit-text-size-adjust: 100%;
+    -moz-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+  }
+
   body {
     background-color: rgb(var(--color-bg));
     color: rgb(var(--color-text));
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
     transition: background-color 0.3s ease, color 0.3s ease;
+  }
+
+  /* Focus rings — Material 3 style */
+  *:focus-visible {
+    outline: 2px solid rgb(var(--color-primary-500));
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+
+  /* Custom scrollbars — thin, minimalist (MD3) */
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  *::-webkit-scrollbar-thumb {
+    background-color: rgb(0 0 0 / 0.12);
+    border-radius: 10px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: rgb(0 0 0 / 0.22);
+  }
+  .dark *::-webkit-scrollbar-thumb {
+    background-color: rgb(255 255 255 / 0.1);
+  }
+  .dark *::-webkit-scrollbar-thumb:hover {
+    background-color: rgb(255 255 255 / 0.2);
   }
 }
 
 @layer components {
+  /* === SURFACE / CARDS (Material 3 elevation) === */
   .glass-card {
-    @apply bg-surface border border-gray-200 dark:border-slate-700 rounded-2xl shadow-card;
-    transition: box-shadow 0.2s ease, border-color 0.2s ease;
+    @apply bg-surface border border-gray-200/70 dark:border-slate-700/60 rounded-2xl shadow-card;
+    transition: box-shadow 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
   }
-
   .glass-card:hover {
     @apply shadow-card-hover;
   }
 
+  .surface-tonal {
+    @apply bg-gray-50 dark:bg-slate-800/60 border border-gray-200/60 dark:border-slate-700/60 rounded-2xl;
+  }
+
+  /* === BUTTONS (Material 3 filled / outlined / text) === */
   .btn-primary {
-    @apply bg-primary-600 text-white px-5 py-2.5 rounded-xl font-medium
+    @apply inline-flex items-center justify-center gap-2 bg-primary-600 text-white
+           px-5 h-11 min-h-[44px] rounded-full text-sm font-medium tracking-[0.005em]
            hover:bg-primary-700 active:bg-primary-800
            disabled:opacity-50 disabled:cursor-not-allowed
+           shadow-sm shadow-primary-600/20 hover:shadow-md hover:shadow-primary-600/25
            transition-all duration-200 ease-out;
   }
 
   .btn-secondary {
-    @apply bg-surface text-gray-700 dark:text-slate-300 px-5 py-2.5 rounded-xl font-medium
-           border border-gray-200 dark:border-slate-600
-           hover:bg-gray-50 dark:hover:bg-slate-700
+    @apply inline-flex items-center justify-center gap-2 bg-surface text-gray-800 dark:text-slate-200
+           px-5 h-11 min-h-[44px] rounded-full text-sm font-medium
+           border border-gray-300 dark:border-slate-600
+           hover:bg-gray-50 dark:hover:bg-slate-700/60
+           disabled:opacity-50 disabled:cursor-not-allowed
            transition-all duration-200 ease-out;
   }
 
+  .btn-text {
+    @apply inline-flex items-center gap-2 text-primary-700 dark:text-primary-300
+           px-3 h-10 rounded-full text-sm font-medium
+           hover:bg-primary-50 dark:hover:bg-primary-900/30
+           transition-colors duration-200;
+  }
+
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-2 bg-red-600 text-white
+           px-5 h-11 rounded-full text-sm font-medium
+           hover:bg-red-700 active:bg-red-800 transition-colors duration-200;
+  }
+
+  /* Icon-only button — accessible 40px target */
+  .btn-icon {
+    @apply inline-flex items-center justify-center w-10 h-10 rounded-full
+           text-gray-500 dark:text-slate-400
+           hover:bg-gray-100 dark:hover:bg-slate-700/60
+           hover:text-gray-900 dark:hover:text-white
+           transition-colors duration-200;
+  }
+
+  /* === INPUTS / SELECTS (Material 3 outlined) === */
   .input-field {
-    @apply w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-slate-600
+    @apply w-full px-4 py-3 min-h-[44px] rounded-xl border border-gray-300 dark:border-slate-600
            bg-surface dark:bg-slate-800 text-gray-900 dark:text-slate-100
            placeholder-gray-400 dark:placeholder-slate-500
-           focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500
+           focus:ring-4 focus:ring-primary-500/15 focus:border-primary-500
            outline-none transition-all duration-200;
   }
 
+  /* === BADGES === */
   .badge-success {
     @apply inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold
            bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400;
   }
-
   .badge-error {
     @apply inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold
            bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-400;
   }
+  .badge-warning {
+    @apply inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold
+           bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400;
+  }
+  .badge-info {
+    @apply inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold
+           bg-sky-50 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400;
+  }
 
+  /* === TYPOGRAPHY — responsive scale (MD3 display/headline/title) === */
   .section-title {
-    @apply text-2xl font-bold text-gray-900 dark:text-white;
+    @apply text-xl sm:text-2xl font-bold tracking-tight text-gray-900 dark:text-white;
   }
-
   .section-subtitle {
-    @apply text-sm text-gray-500 dark:text-slate-400 mt-1;
+    @apply text-xs sm:text-sm text-gray-500 dark:text-slate-400 mt-1;
   }
-
   .label-text {
-    @apply text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-slate-400;
+    @apply text-[11px] font-semibold uppercase tracking-[0.1em] text-gray-500 dark:text-slate-400;
   }
 
+  /* === PAGE HEADER (responsive flex) === */
+  .page-header {
+    @apply flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-5 sm:mb-6;
+  }
+
+  /* === RESPONSIVE TABLE WRAPPER ===
+     Wraps tables so they scroll horizontally on small screens without breaking the layout.
+     The wrapper element should also have `rounded-2xl` for nice clipping. */
+  .table-responsive {
+    @apply -mx-4 sm:mx-0 overflow-x-auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .table-responsive table {
+    @apply min-w-full;
+  }
+  .table-responsive thead th {
+    @apply whitespace-nowrap;
+  }
+
+  /* === SPINNER === */
   .spinner {
     @apply animate-spin rounded-full border-4 border-primary-200 border-t-primary-600;
+  }
+
+  /* === DIALOG / MODAL surface === */
+  .md3-dialog {
+    @apply bg-surface dark:bg-slate-800 rounded-3xl shadow-2xl border border-gray-200/60 dark:border-slate-700/60;
+  }
+
+  /* === STATE LAYER === simulate Material's hover/press state-layer */
+  .state-layer {
+    @apply relative isolate;
+  }
+  .state-layer::before {
+    content: "";
+    @apply absolute inset-0 rounded-[inherit] bg-current opacity-0 transition-opacity duration-200 pointer-events-none;
+  }
+  .state-layer:hover::before {
+    @apply opacity-[0.08];
+  }
+  .state-layer:active::before {
+    @apply opacity-[0.12];
   }
 }
 
 @layer utilities {
+  /* === MOTION === */
   .animate-slide-in-right {
     animation: slideInRight 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+
+  .animate-fade-in {
+    animation: fadeIn 0.25s ease-out forwards;
   }
 
   /* Staggered fade-in for detail panel sections */
@@ -163,6 +286,14 @@
     margin-left: 1.25rem;
     opacity: 1;
   }
+  /* On tablet/phone the detail panel takes the full width below the list */
+  @media (max-width: 1023px) {
+    .detail-panel-wrapper.open {
+      width: 100%;
+      margin-left: 0;
+      margin-top: 1rem;
+    }
+  }
 
   /* Header photo scale-in */
   .detail-photo-animate {
@@ -181,6 +312,14 @@
   /* Snackbar slide up */
   .animate-slide-up {
     animation: slideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+
+  /* Safe area helpers for notched devices */
+  .safe-pt {
+    padding-top: max(env(safe-area-inset-top), 0px);
+  }
+  .safe-pb {
+    padding-bottom: max(env(safe-area-inset-bottom), 0px);
   }
 }
 
@@ -226,4 +365,9 @@
     opacity: 1;
     transform: translate(-50%, 0);
   }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }

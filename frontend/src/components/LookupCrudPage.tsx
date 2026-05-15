@@ -186,13 +186,13 @@ export default function LookupCrudPage<T extends { id: number; is_active?: boole
   return (
     <div>
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
+      <div className="page-header">
+        <div className="min-w-0">
           <h2 className="section-title">{title}</h2>
           <p className="section-subtitle">{subtitle}</p>
         </div>
         <PermissionGate permission={createPermission}>
-          <button onClick={openCreate} className="btn-primary flex items-center gap-2">
+          <button onClick={openCreate} className="btn-primary self-start sm:self-auto">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
             </svg>
@@ -202,15 +202,16 @@ export default function LookupCrudPage<T extends { id: number; is_active?: boole
       </div>
 
       {error && (
-        <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-xl text-sm">
-          {error}
-          <button onClick={() => setError("")} className="ml-2 underline">Yopish</button>
+        <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-xl text-sm flex items-start justify-between gap-3">
+          <span>{error}</span>
+          <button onClick={() => setError("")} className="underline shrink-0">Yopish</button>
         </div>
       )}
 
       {/* Table */}
       <div className="glass-card overflow-hidden">
-        <table className="w-full">
+        <div className="overflow-x-auto" style={{ WebkitOverflowScrolling: "touch" }}>
+        <table className="w-full min-w-[600px]">
           <thead>
             <tr className="border-b border-gray-100 dark:border-slate-700">
               {columns.map((col) => (
@@ -304,14 +305,15 @@ export default function LookupCrudPage<T extends { id: number; is_active?: boole
             )}
           </tbody>
         </table>
+        </div>
       </div>
 
       <p className="mt-3 text-xs text-gray-400 dark:text-slate-500">Jami: {items.length}</p>
 
       {/* Create / Edit Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/40 dark:bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-md p-6">
+        <div className="fixed inset-0 bg-black/40 dark:bg-black/60 backdrop-blur-[2px] flex items-end sm:items-center justify-center z-50 p-0 sm:p-4 animate-fade-in">
+          <div className="md3-dialog w-full sm:max-w-md max-h-[92vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl p-5 sm:p-6 safe-pb">
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
               {editingItem ? "Tahrirlash" : "Yangi qo'shish"}
             </h3>
@@ -369,8 +371,8 @@ export default function LookupCrudPage<T extends { id: number; is_active?: boole
 
       {/* Delete Confirm */}
       {deleteId !== null && (
-        <div className="fixed inset-0 bg-black/40 dark:bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-sm p-6 text-center">
+        <div className="fixed inset-0 bg-black/40 dark:bg-black/60 backdrop-blur-[2px] flex items-end sm:items-center justify-center z-50 p-0 sm:p-4 animate-fade-in">
+          <div className="md3-dialog w-full sm:max-w-sm rounded-t-3xl sm:rounded-3xl p-6 text-center safe-pb">
             <div className="w-12 h-12 mx-auto mb-4 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
               <svg className="w-6 h-6 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />

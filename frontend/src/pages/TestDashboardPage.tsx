@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import type { TestSessionResponse, TestSessionListResponse } from "../interfaces";
+import type {
+  TestSessionResponse,
+  TestSessionListResponse,
+} from "../interfaces";
 import { getTestSessionsApi } from "../api";
 import PageLoader from "../components/PageLoader";
 
@@ -20,7 +23,10 @@ export default function TestDashboardPage() {
   const sessions = data?.items || [];
   const totalSessions = sessions.length;
   const activeSessions = sessions.filter((s) => s.is_active).length;
-  const totalStudents = sessions.reduce((sum, s) => sum + s.count_total_student, 0);
+  const totalStudents = sessions.reduce(
+    (sum, s) => sum + s.count_total_student,
+    0,
+  );
   const totalSmenas = sessions.reduce((sum, s) => sum + s.smenas.length, 0);
 
   // Sessiyalarni state bo'yicha guruhlash
@@ -51,8 +57,18 @@ export default function TestDashboardPage() {
           title="Jami sessiyalar"
           value={totalSessions}
           icon={
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            <svg
+              className="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+              />
             </svg>
           }
           color="primary"
@@ -61,18 +77,38 @@ export default function TestDashboardPage() {
           title="Faol sessiyalar"
           value={activeSessions}
           icon={
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            <svg
+              className="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+              />
             </svg>
           }
           color="green"
         />
         <StatCard
-          title="Jami talabalar"
+          title="Jami talabgorlar"
           value={totalStudents}
           icon={
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+            <svg
+              className="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"
+              />
             </svg>
           }
           color="purple"
@@ -81,8 +117,18 @@ export default function TestDashboardPage() {
           title="Jami smenalar"
           value={totalSmenas}
           icon={
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            <svg
+              className="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+              />
             </svg>
           }
           color="orange"
@@ -98,11 +144,14 @@ export default function TestDashboardPage() {
           {Object.keys(stateGroups).length > 0 ? (
             <div className="space-y-3">
               {Object.entries(stateGroups).map(([state, items]) => {
-                const pct = totalSessions > 0 ? (items.length / totalSessions) * 100 : 0;
+                const pct =
+                  totalSessions > 0 ? (items.length / totalSessions) * 100 : 0;
                 return (
                   <div key={state}>
                     <div className="flex items-center justify-between mb-1">
-                      <span className="text-sm text-gray-600 dark:text-slate-400">{state}</span>
+                      <span className="text-sm text-gray-600 dark:text-slate-400">
+                        {state}
+                      </span>
                       <span className="text-sm font-medium text-gray-900 dark:text-white">
                         {items.length}
                       </span>
@@ -118,7 +167,9 @@ export default function TestDashboardPage() {
               })}
             </div>
           ) : (
-            <p className="text-sm text-gray-400 dark:text-slate-500">Ma'lumot yo'q</p>
+            <p className="text-sm text-gray-400 dark:text-slate-500">
+              Ma'lumot yo'q
+            </p>
           )}
         </div>
 
@@ -229,7 +280,10 @@ export default function TestDashboardPage() {
               ))}
               {sessions.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-gray-400 dark:text-slate-500 text-sm">
+                  <td
+                    colSpan={6}
+                    className="px-4 py-8 text-center text-gray-400 dark:text-slate-500 text-sm"
+                  >
                     Sessiya yo'q
                   </td>
                 </tr>
@@ -254,20 +308,28 @@ function StatCard({
   color: "primary" | "green" | "purple" | "orange";
 }) {
   const colorMap = {
-    primary: "bg-primary-50 text-primary-600 dark:bg-primary-900/20 dark:text-primary-400",
-    green: "bg-green-50 text-green-600 dark:bg-green-900/20 dark:text-green-400",
-    purple: "bg-purple-50 text-purple-600 dark:bg-purple-900/20 dark:text-purple-400",
-    orange: "bg-orange-50 text-orange-600 dark:bg-orange-900/20 dark:text-orange-400",
+    primary:
+      "bg-primary-50 text-primary-600 dark:bg-primary-900/20 dark:text-primary-400",
+    green:
+      "bg-green-50 text-green-600 dark:bg-green-900/20 dark:text-green-400",
+    purple:
+      "bg-purple-50 text-purple-600 dark:bg-purple-900/20 dark:text-purple-400",
+    orange:
+      "bg-orange-50 text-orange-600 dark:bg-orange-900/20 dark:text-orange-400",
   };
 
   return (
     <div className="glass-card p-5">
       <div className="flex items-center gap-3 mb-3">
-        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${colorMap[color]}`}>
+        <div
+          className={`w-10 h-10 rounded-xl flex items-center justify-center ${colorMap[color]}`}
+        >
           {icon}
         </div>
       </div>
-      <p className="text-2xl font-bold text-gray-900 dark:text-white">{value.toLocaleString()}</p>
+      <p className="text-2xl font-bold text-gray-900 dark:text-white">
+        {value.toLocaleString()}
+      </p>
       <p className="text-xs text-gray-500 dark:text-slate-400 mt-1">{title}</p>
     </div>
   );

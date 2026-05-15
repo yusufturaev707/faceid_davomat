@@ -341,6 +341,40 @@ export async function getStudentLoadProgressApi(sessionId: number): Promise<{
   return res.data;
 }
 
+/**
+ * Tanlangan sessiya/smena+kun uchun dashboard statistikasini olish.
+ * `is_realtime=true` (session state.key=4) bo'lsa frontend polling qiladi.
+ */
+export async function getSessionDashboardStatsApi(
+  sessionId: number,
+  sessionSmenaId: number,
+): Promise<import("./interfaces").DashboardStatsResponse> {
+  const res = await apiClient.get(
+    `/test-sessions/${sessionId}/dashboard-stats`,
+    { params: { session_smena_id: sessionSmenaId } },
+  );
+  return res.data;
+}
+
+/**
+ * Test sessiyaga Excel orqali studentlarni yuklash. Backend Celery task
+ * boshlaydi va darhol 202 qaytaradi — natijani `getStudentLoadProgressApi`
+ * orqali polling qiling. Task yakunida sessiya state.key=2 ga o'tadi.
+ */
+export async function uploadStudentsExcelApi(
+  sessionId: number,
+  file: File,
+): Promise<{ task_id: string; status: string; message: string }> {
+  const formData = new FormData();
+  formData.append("file", file);
+  const res = await apiClient.post(
+    `/test-sessions/${sessionId}/upload-excel`,
+    formData,
+    { headers: { "Content-Type": "multipart/form-data" } },
+  );
+  return res.data;
+}
+
 export async function deleteTestSessionApi(sessionId: number): Promise<void> {
   await apiClient.delete(`/test-sessions/${sessionId}`);
 }
