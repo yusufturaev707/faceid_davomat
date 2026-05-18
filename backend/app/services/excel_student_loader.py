@@ -111,7 +111,16 @@ _HEADER_ALIASES: dict[str, str] = {
 
 # Majburiy maydonlar — yo'q bo'lsa qator o'tkazib yuboriladi va xato ro'yxatga
 # qo'shiladi.
-_REQUIRED_FIELDS = ("last_name", "first_name", "ps_ser", "ps_num", "smena_number", "e_date")
+_REQUIRED_FIELDS = (
+    "last_name",
+    "first_name",
+    "imei",
+    "ps_ser",
+    "ps_num",
+    "smena_number",
+    "e_date",
+    "region_number",
+)
 
 
 def _norm(s: Any) -> str:
@@ -261,7 +270,9 @@ def parse_excel(content: bytes) -> tuple[list[ExcelRow], list[str]]:
 # ─── Lookups ─────────────────────────────────────────────────────────
 
 
-def _build_zone_lookup(db: Session) -> tuple[dict[tuple[int, int], int], dict[int, int]]:
+def _build_zone_lookup(
+    db: Session,
+) -> tuple[dict[tuple[int, int], int], dict[int, int]]:
     """((region.number, zone.number) → zone.id, region.number → first active zone.id) ikki map.
 
     Zone.number unique emas — shuning uchun (region, zone) tuple bilan kalitlaymiz.
@@ -374,7 +385,9 @@ def _insert_students(
     student_ids: list[int] = []
 
     student_rows: list[dict] = []
-    ps_rows_pending: list[tuple[int, str, str]] = []  # (index_in_student_rows, ps_ser, ps_num)
+    ps_rows_pending: list[
+        tuple[int, str, str]
+    ] = []  # (index_in_student_rows, ps_ser, ps_num)
 
     for row in rows:
         # Smena
@@ -585,7 +598,11 @@ def load_students_from_excel(
     """
     r = _get_redis()
     _set_progress(
-        r, session.id, current=0, total=0, status="processing",
+        r,
+        session.id,
+        current=0,
+        total=0,
+        status="processing",
         message="Excel parslangmoqda...",
     )
 
@@ -600,7 +617,8 @@ def load_students_from_excel(
             message="Excelda yaroqli qator topilmadi",
         )
         raise ExcelLoadError(
-            "Yaroqli qatorlar topilmadi: " + ("; ".join(parse_errors)[:300] or "bo'sh fayl")
+            "Yaroqli qatorlar topilmadi: "
+            + ("; ".join(parse_errors)[:300] or "bo'sh fayl")
         )
 
     logger.info(
@@ -621,9 +639,7 @@ def load_students_from_excel(
             status="error",
             message="Sessiyada smena topilmadi",
         )
-        raise ExcelLoadError(
-            "Bu sessiyada smena qo'shilmagan — avval smena qo'shing"
-        )
+        raise ExcelLoadError("Bu sessiyada smena qo'shilmagan — avval smena qo'shing")
 
     _set_progress(
         r,

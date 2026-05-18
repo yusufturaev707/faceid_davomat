@@ -36,7 +36,12 @@
       "Bash(xargs grep -l \"gtsp\")",
       "Bash(xargs grep -l \"GTSP\")",
       "PowerShell(python -m pip install httpx==0.28.1 2>&1 | Select-Object -Last 3)",
-      "PowerShell(python -c \"import httpx; print\\(httpx.__version__\\)\")"
+      "PowerShell(python -c \"import httpx; print\\(httpx.__version__\\)\")",
+      "Bash(./.venv/Scripts/python.exe -c ' *)",
+      "Bash(pip install *)",
+      "Bash(PYTHONUTF8=1 python *)",
+      "Bash(Get-ChildItem -Path \"C:/FastApi/faceid/backend\" -Recurse -Name)",
+      "Bash(Select-Object -First 50)"
     ]
   }
 }

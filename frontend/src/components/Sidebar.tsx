@@ -298,6 +298,25 @@ export default function Sidebar({ drawerOpen = false, onClose }: SidebarProps) {
               </NavLink>
             )}
 
+            {hasPermission(PERM.DAVOMAT_BOT_READ) && (
+              <NavLink to="/davomat-bots" className={navLinkClass}>
+                <svg
+                  className={iconClass}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"
+                  />
+                </svg>
+                Davomat bot foydalanuvchilari
+              </NavLink>
+            )}
+
             {hasPermission(PERM.ROLE_READ) && (
               <NavLink to="/manage-roles" className={navLinkClass}>
                 <svg

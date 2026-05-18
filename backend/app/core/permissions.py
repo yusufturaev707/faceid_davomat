@@ -107,6 +107,28 @@ class P:
         "statistics",
     )
 
+    # === Davomat bot foydalanuvchilari (Telegram bot) ===
+    DAVOMAT_BOT_READ = _Perm(
+        "davomat_bot:read",
+        "Davomat bot foydalanuvchilarini ko'rish",
+        "davomat_bot",
+    )
+    DAVOMAT_BOT_CREATE = _Perm(
+        "davomat_bot:create",
+        "Davomat bot foydalanuvchisi yaratish",
+        "davomat_bot",
+    )
+    DAVOMAT_BOT_UPDATE = _Perm(
+        "davomat_bot:update",
+        "Davomat bot foydalanuvchisini tahrirlash",
+        "davomat_bot",
+    )
+    DAVOMAT_BOT_DELETE = _Perm(
+        "davomat_bot:delete",
+        "Davomat bot foydalanuvchisini o'chirish",
+        "davomat_bot",
+    )
+
 
 ALL_PERMISSIONS: list[_Perm] = [
     value

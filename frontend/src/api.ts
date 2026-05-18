@@ -699,3 +699,29 @@ export async function assignPermissionsToRoleApi(roleId: number, data: import(".
   const res = await apiClient.put(`/permissions/roles/${roleId}`, data);
   return res.data;
 }
+
+// === Davomat bot foydalanuvchilari (admin) ===
+
+export async function getDavomatBotsApi(): Promise<import("./interfaces").DavomatBotAdminResponse[]> {
+  const res = await apiClient.get("/admin/davomat-bots");
+  return res.data;
+}
+
+export async function createDavomatBotApi(
+  data: import("./interfaces").DavomatBotCreateRequest,
+): Promise<import("./interfaces").DavomatBotAdminResponse> {
+  const res = await apiClient.post("/admin/davomat-bots", data);
+  return res.data;
+}
+
+export async function updateDavomatBotApi(
+  id: number,
+  data: import("./interfaces").DavomatBotUpdateRequest,
+): Promise<import("./interfaces").DavomatBotAdminResponse> {
+  const res = await apiClient.patch(`/admin/davomat-bots/${id}`, data);
+  return res.data;
+}
+
+export async function deleteDavomatBotApi(id: number): Promise<void> {
+  await apiClient.delete(`/admin/davomat-bots/${id}`);
+}

@@ -503,6 +503,44 @@ export interface LookupRoleResponse {
   created_at: string;
 }
 
+// === Davomat bot (Telegram bot foydalanuvchilari) ===
+
+export interface DavomatBotAdminRegion {
+  id: number;
+  name: string;
+  number: number;
+}
+
+export interface DavomatBotAdminResponse {
+  id: number;
+  fio: string;
+  telegram_id: number;
+  role_id: number | null;
+  role: string;
+  role_key: number;
+  is_active: boolean;
+  regions: DavomatBotAdminRegion[];
+  region_ids: number[];
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface DavomatBotCreateRequest {
+  fio: string;
+  telegram_id: number;
+  role_id: number | null;
+  is_active: boolean;
+  region_ids: number[];
+}
+
+export interface DavomatBotUpdateRequest {
+  fio?: string;
+  telegram_id?: number;
+  role_id?: number | null;
+  is_active?: boolean;
+  region_ids?: number[];
+}
+
 export interface LookupReasonCreate {
   reason_type_id?: number | null;
   name: string;

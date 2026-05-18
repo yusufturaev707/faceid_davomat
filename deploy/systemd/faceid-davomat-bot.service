@@ -1,0 +1,40 @@
+[Unit]
+Description=FaceID Davomat Telegram Bot (aiogram 3, long polling)
+Documentation=https://docs.aiogram.dev/
+After=network-online.target faceid-api.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=www-data
+
+WorkingDirectory=/var/www/faceid_davomat/davomat_bot
+EnvironmentFile=-/var/www/faceid_davomat/davomat_bot/.env
+Environment="PYTHONUNBUFFERED=1"
+Environment="PYTHONDONTWRITEBYTECODE=1"
+
+ExecStart=/var/www/faceid_davomat/davomat_bot/venv/bin/python main.py
+
+Restart=always
+RestartSec=10
+
+KillSignal=SIGTERM
+TimeoutStopSec=30
+KillMode=mixed
+
+LimitNOFILE=65536
+LimitNPROC=4096
+
+StandardOutput=append:/var/www/faceid_davomat/davomat_bot/logs/bot.log
+StandardError=append:/var/www/faceid_davomat/davomat_bot/logs/bot.error.log
+SyslogIdentifier=faceid-davomat-bot
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/var/www/faceid_davomat/davomat_bot
+
+[Install]
+WantedBy=multi-user.target

@@ -80,6 +80,12 @@ export const PERM = {
 
   // Test sessiya statistika dashboard
   STATISTICS_READ: "statistics:read",
+
+  // Davomat bot foydalanuvchilari (Telegram bot)
+  DAVOMAT_BOT_READ: "davomat_bot:read",
+  DAVOMAT_BOT_CREATE: "davomat_bot:create",
+  DAVOMAT_BOT_UPDATE: "davomat_bot:update",
+  DAVOMAT_BOT_DELETE: "davomat_bot:delete",
 } as const;
 
 export type PermCode = (typeof PERM)[keyof typeof PERM];

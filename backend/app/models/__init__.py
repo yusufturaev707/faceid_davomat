@@ -21,6 +21,7 @@ from app.models.reason_type import ReasonType
 from app.models.cheating_log import CheatingLog
 from app.models.permission import Permission
 from app.models.gender import Gender
+from app.models.davomat_bot import DavomatBot, DavomatBotRegion
 
 __all__ = [
     "User", "VerificationLog", "RefreshToken", "FailedLoginAttempt", "VerifyFaces", "ApiKey",
@@ -28,4 +29,5 @@ __all__ = [
     "Test", "TestSession", "TestSessionSmena",
     "Student", "StudentLog", "StudentPsData", "StudentBlacklist",
     "Reason", "ReasonType", "CheatingLog", "Permission", "Gender",
+    "DavomatBot", "DavomatBotRegion",
 ]

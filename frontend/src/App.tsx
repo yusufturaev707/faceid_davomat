@@ -19,6 +19,7 @@ import TestSessionsPage from "./pages/TestSessionsPage";
 import TestSessionDetailPage from "./pages/TestSessionDetailPage";
 import TestDashboardPage from "./pages/TestDashboardPage";
 import UsersPage from "./pages/UsersPage";
+import DavomatBotsPage from "./pages/DavomatBotsPage";
 import TestsPage from "./pages/TestsPage";
 import SmenasPage from "./pages/SmenasPage";
 import SessionStatesPage from "./pages/SessionStatesPage";
@@ -171,6 +172,10 @@ export default function App() {
           {/* Tizim sozlamalari */}
           <Route element={<PermissionRoute permission={PERM.USER_READ} />}>
             <Route path="/users" element={<UsersPage />} />
+          </Route>
+
+          <Route element={<PermissionRoute permission={PERM.DAVOMAT_BOT_READ} />}>
+            <Route path="/davomat-bots" element={<DavomatBotsPage />} />
           </Route>
 
           <Route element={<PermissionRoute permission={PERM.ROLE_READ} />}>
