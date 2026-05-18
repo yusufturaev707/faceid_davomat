@@ -108,7 +108,7 @@ def smena_kb(session_id: int, smenas: list[dict]) -> InlineKeyboardMarkup:
                 ).pack(),
             )
         kb.button(
-            text=f"📅 {day_str} • {s['smena_name']} (#{s['smena_number']})",
+            text=f"📅 {day_str} • {s['smena_name']}",
             callback_data=SmenaCB(
                 session_id=session_id, smena_id=int(s["id"])
             ).pack(),
@@ -124,7 +124,7 @@ def smena_kb(session_id: int, smenas: list[dict]) -> InlineKeyboardMarkup:
         )
     # Sessiya bo'yicha umumiy aggregat (day = "-" sentinel)
     kb.button(
-        text="📊 Umumiy statistika (barcha kunlar)",
+        text="📊 Umumiy statistika",
         callback_data=AggrCB(
             scope="total", session_id=session_id, day="-"
         ).pack(),

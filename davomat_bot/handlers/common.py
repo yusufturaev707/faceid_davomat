@@ -58,7 +58,7 @@ async def _fetch_profile(message: Message, telegram_id: int) -> dict | None:
         return None
 
     if not resp.get("allowed"):
-        msg = resp.get("message") or "Sizga botdan foydalanish ruxsati berilmagan."
+        msg = resp.get("message") or f"Sizga botdan foydalanish ruxsati berilmagan. Telegram id: {telegram_id}"
         await message.answer(f"⛔ {msg}")
         # Eski region tanlovini tozalash — boshqa user uchun bo'lishi mumkin emas,
         # lekin xavfsizlik uchun.
@@ -90,8 +90,8 @@ async def _send_main_menu(
     text = format_user_greeting(fio, [r["name"] for r in all_regions])
     if selected_name:
         text += (
-            f"📍 <b>Joriy region:</b> {selected_name}\n\n"
-            "Endi <b>davomat amallari</b> tanlangan region kesimida bajariladi."
+            f"📍 <b>Joriy viloyat:</b> {selected_name}\n\n"
+            "Endi <b>davomat amallari</b> tanlangan viloyat kesimida bajariladi."
         )
 
     await target.answer(
@@ -107,9 +107,9 @@ async def _ask_region(target: Message, profile: dict) -> None:
     regions = _allowed_regions(profile)
     text = (
         f"👋 <b>Assalomu alaykum, {fio}!</b>\n\n"
-        f"🌍 <b>Sizga biriktirilgan viloyatlar:</b> "
+        f"🏠 <b>Sizga biriktirilgan viloyatlar:</b> "
         f"{', '.join(r['name'] for r in regions)}\n\n"
-        "📍 <b>Iltimos, qaysi region bo'yicha ishlamoqchi ekanligingizni "
+        "📍 <b>Iltimos, qaysi viloyat bo'yicha ishlamoqchi ekanligingizni "
         "tanlang:</b>\n\n"
         "<i>Tanlangan region kesimida davomat, statistika, Face ID va "
         "kelmaganlar ro'yxati ishlaydi. Keyin bosh menyudan istalgan vaqtda "
@@ -141,7 +141,7 @@ async def _entry(message: Message, telegram_id: int) -> None:
     if not regions:
         clear_region(telegram_id)
         await message.answer(
-            "⛔ Sizga biriktirilgan region yo'q. Iltimos, administrator bilan "
+            "⛔ Sizga biriktirilgan viloyat yo'q. Iltimos, Administrator bilan "
             "bog'laning."
         )
         return
@@ -228,7 +228,7 @@ async def region_picked(
     region_ids = {r["id"] for r in _allowed_regions(profile)}
     if callback_data.region_id not in region_ids:
         await cb.message.answer(  # type: ignore[union-attr]
-            "⚠️ Tanlangan region sizga ruxsat etilmagan. Qayta urinib ko'ring."
+            "⚠️ Tanlangan viloyat sizga ruxsat etilmagan. Qayta urinib ko'ring."
         )
         await _ask_region(cb.message, profile)  # type: ignore[arg-type]
         return

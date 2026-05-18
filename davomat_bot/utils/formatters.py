@@ -51,7 +51,7 @@ def format_user_greeting(fio: str, regions: list[str]) -> str:
     rlist = ", ".join(_esc(r) for r in regions) or "—"
     return (
         f"👋 <b>Assalomu alaykum, {_esc(fio)}!</b>\n\n"
-        f"🌍 <b>Sizga biriktirilgan viloyatlar:</b> {rlist}\n\n"
+        f"🏠 <b>Sizga biriktirilgan viloyatlar:</b> {rlist}\n\n"
     )
 
 
