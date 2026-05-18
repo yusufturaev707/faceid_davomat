@@ -13,6 +13,11 @@ backend/app/db/migrations/versions/
 backend/.env
 backend/.env.local
 backend/.env.prod
+davomat_bot/.env
+davomat_bot/.env.local
+davomat_bot/.env.prod
+davomat_bot/.env.example
+
 backend/celerybeat-schedule*
 
 node_modules/

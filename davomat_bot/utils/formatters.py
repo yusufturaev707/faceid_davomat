@@ -22,28 +22,14 @@ def _bar(percent: int, width: int = 12) -> str:
 
 
 def format_sessions_list(sessions: list[dict]) -> str:
-    """Tayyor test sessiyalarini batafsil card ko'rinishida formatlash.
+    """Sessiya tanlash sahifasi uchun qisqa sarlavha.
 
-    Har bir karta'da: sessiya nomi, test nomi, boshlanish ↔ tugash sanalari.
-    Tugmalar'ning matni qisqa (faqat sessiya nomi) qoladi — to'liq tafsilot
-    foydalanuvchiga xabar matnida ko'rsatiladi.
+    Batafsil info tugmalarning o'zida ko'rsatiladi (`sessiya nomi • sana`),
+    shuning uchun bu yerda faqat bitta qator yetarli.
     """
     if not sessions:
         return "ℹ️ Hozircha faol test sessiyalari yo'q."
-
-    lines: list[str] = ["📋 <b>Faol test sessiyalari:</b>", "━━━━━━━━━━━━━━━━━━━━"]
-    for i, s in enumerate(sessions, 1):
-        name = s.get("name") or "—"
-        test_name = s.get("test_name") or "—"
-        start = s.get("start_date") or "—"
-        finish = s.get("finish_date") or "—"
-        lines.append(f"<b>{i}.</b> 📋 <b>{_esc(name)}</b>")
-        lines.append(f"   📚 <b>Test:</b> {_esc(test_name)}")
-        lines.append(f"   📅 <b>Sanalar:</b> {_esc(start)} → {_esc(finish)}")
-        lines.append("")
-
-    lines.append("👇 Kerakli sessiyani tanlang.")
-    return "\n".join(lines).rstrip()
+    return "👇 <b>Faol test sessiyasini tanlang:</b>"
 
 
 def format_session_header(session: dict) -> str:

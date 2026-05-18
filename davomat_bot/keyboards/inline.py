@@ -65,11 +65,18 @@ def region_pick_kb(regions: list[dict]) -> InlineKeyboardMarkup:
 
 
 def sessions_kb(sessions: list[dict]) -> InlineKeyboardMarkup:
-    """Tayyor sessiyalarni tugmalar shaklida ko'rsatish."""
+    """Tayyor sessiyalarni tugmalar shaklida ko'rsatish.
+
+    Tugma matni: `📋 <sessiya nomi> • <boshlanish sanasi>`. To'liq info
+    tugmaning o'zida ko'rinadi — xabarda alohida karta kerak emas.
+    """
     kb = InlineKeyboardBuilder()
     for s in sessions:
+        name = s.get("name") or "—"
+        start = s.get("start_date") or ""
+        label = f"📋 {name} • {start}" if start else f"📋 {name}"
         kb.button(
-            text=f"📋 {s['name']}",
+            text=label,
             callback_data=SessionCB(session_id=int(s["id"])).pack(),
         )
     kb.button(text="🔙 Orqaga", callback_data=BackCB(to="main").pack())
