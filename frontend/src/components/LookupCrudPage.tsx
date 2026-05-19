@@ -1,6 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { extractErrorMessage } from "../utils/errorMessage";
 import PermissionGate from "./PermissionGate";
+import Pagination from "./Pagination";
+
+const PAGE_SIZE = 20;
 
 /**
  * Universal CRUD page component for lookup/reference tables.
@@ -82,9 +85,24 @@ export default function LookupCrudPage<T extends { id: number; is_active?: boole
   // Delete confirm
   const [deleteId, setDeleteId] = useState<number | null>(null);
 
+  // Pagination (client-side — backend lookup endpointlari hozir paginatsiyani
+  // qo'llab-quvvatlamaydi, ro'yxat odatda kichik).
+  const [page, setPage] = useState(1);
+
   useEffect(() => {
     load();
   }, []);
+
+  const totalPages = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
+
+  const pagedItems = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE;
+    return items.slice(start, start + PAGE_SIZE);
+  }, [items, page]);
 
   async function load() {
     try {
@@ -230,7 +248,7 @@ export default function LookupCrudPage<T extends { id: number; is_active?: boole
             </tr>
           </thead>
           <tbody>
-            {items.map((item) => (
+            {pagedItems.map((item) => (
               <tr key={item.id} className="border-b border-gray-50 dark:border-slate-700/50 hover:bg-gray-50/50 dark:hover:bg-slate-700/30 transition-colors">
                 {columns.map((col) => (
                   <td key={col.key} className="px-5 py-3.5 text-sm text-gray-700 dark:text-slate-300">
@@ -307,6 +325,8 @@ export default function LookupCrudPage<T extends { id: number; is_active?: boole
         </table>
         </div>
       </div>
+
+      <Pagination page={page} pages={totalPages} onPageChange={setPage} />
 
       <p className="mt-3 text-xs text-gray-400 dark:text-slate-500">Jami: {items.length}</p>
 

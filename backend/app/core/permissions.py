@@ -107,6 +107,13 @@ class P:
         "statistics",
     )
 
+    # === Passport ma'lumotlari (GTSP orqali) ===
+    PASPORT_INFO_READ = _Perm(
+        "pasport_info:read",
+        "Pasport ma'lumotlarini olish (GTSP)",
+        "pasport_info",
+    )
+
     # === Davomat bot foydalanuvchilari (Telegram bot) ===
     DAVOMAT_BOT_READ = _Perm(
         "davomat_bot:read",

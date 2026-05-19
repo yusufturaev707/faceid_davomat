@@ -1,11 +1,14 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { UserResponse, CreateUserRequest, UpdateUserRequest, LookupRoleResponse, LookupRegionResponse, LookupZoneResponse } from "../interfaces";
 import { getUsersApi, createUserApi, updateUserApi, deleteUserApi, getRolesListApi, getRegionsListApi, getZonesListApi, getZonesByRegionApi } from "../api";
 import { useAuth } from "../contexts/AuthContext";
 import PageLoader from "../components/PageLoader";
+import Pagination from "../components/Pagination";
 import PermissionGate from "../components/PermissionGate";
 import { PERM } from "../permissions";
 import { extractErrorMessage } from "../utils/errorMessage";
+
+const PAGE_SIZE = 20;
 
 // Admin role yagona "super-protected" rol — uni faqat user id=1 boshqaradi.
 const ADMIN_ROLE_KEY = 1;
@@ -187,11 +190,31 @@ export default function UsersPage() {
     return region?.name || "—";
   };
 
-  const filtered = users.filter(
-    (u) =>
-      u.username.toLowerCase().includes(search.toLowerCase()) ||
-      (u.full_name || "").toLowerCase().includes(search.toLowerCase())
+  const filtered = useMemo(
+    () =>
+      users.filter(
+        (u) =>
+          u.username.toLowerCase().includes(search.toLowerCase()) ||
+          (u.full_name || "").toLowerCase().includes(search.toLowerCase())
+      ),
+    [users, search]
   );
+
+  const [page, setPage] = useState(1);
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+
+  useEffect(() => {
+    setPage(1);
+  }, [search]);
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
+
+  const pagedUsers = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE;
+    return filtered.slice(start, start + PAGE_SIZE);
+  }, [filtered, page]);
 
   if (loading) return <PageLoader />;
 
@@ -248,7 +271,7 @@ export default function UsersPage() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map((user) => (
+            {pagedUsers.map((user) => (
               <tr key={user.id} className="border-b border-gray-50 dark:border-slate-700/50 hover:bg-gray-50/50 dark:hover:bg-slate-700/30 transition-colors">
                 <td className="px-6 py-4 text-sm text-gray-500 dark:text-slate-400">{user.id}</td>
                 <td className="px-6 py-4">
@@ -306,6 +329,8 @@ export default function UsersPage() {
           </tbody>
         </table>
       </div>
+
+      <Pagination page={page} pages={totalPages} onPageChange={setPage} />
 
       <p className="mt-3 text-xs text-gray-400 dark:text-slate-500">Jami: {filtered.length} ta foydalanuvchi</p>
 

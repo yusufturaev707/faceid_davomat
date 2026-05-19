@@ -15,6 +15,7 @@ import {
   updateDavomatBotApi,
 } from "../api";
 import PageLoader from "../components/PageLoader";
+import Pagination from "../components/Pagination";
 import PermissionGate from "../components/PermissionGate";
 import { PERM } from "../permissions";
 import { extractErrorMessage } from "../utils/errorMessage";
@@ -22,6 +23,7 @@ import { extractErrorMessage } from "../utils/errorMessage";
 // `roles.key == 4` → faqat 1 region biriktirilishi mumkin (backend bilan
 // teng sertkasiya). Boshqa kalit qiymatlari uchun 1+ region.
 const SINGLE_REGION_ROLE_KEY = 4;
+const PAGE_SIZE = 20;
 
 interface FormState {
   fio: string;
@@ -210,6 +212,22 @@ export default function DavomatBotsPage() {
     );
   }, [bots, search]);
 
+  const [page, setPage] = useState(1);
+  const totalPages = Math.max(1, Math.ceil(filteredBots.length / PAGE_SIZE));
+
+  useEffect(() => {
+    setPage(1);
+  }, [search]);
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
+
+  const pagedBots = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE;
+    return filteredBots.slice(start, start + PAGE_SIZE);
+  }, [filteredBots, page]);
+
   const filteredRegions = useMemo(() => {
     const q = regionSearch.trim().toLowerCase();
     const sorted = [...regions].sort(
@@ -306,7 +324,7 @@ export default function DavomatBotsPage() {
             </tr>
           </thead>
           <tbody>
-            {filteredBots.map((bot) => (
+            {pagedBots.map((bot) => (
               <tr
                 key={bot.id}
                 className="border-b border-gray-50 dark:border-slate-700/50 hover:bg-gray-50/50 dark:hover:bg-slate-700/30 transition-colors"
@@ -453,6 +471,8 @@ export default function DavomatBotsPage() {
           </tbody>
         </table>
       </div>
+
+      <Pagination page={page} pages={totalPages} onPageChange={setPage} />
 
       <p className="mt-3 text-xs text-gray-400 dark:text-slate-500">
         Jami: {filteredBots.length} ta foydalanuvchi

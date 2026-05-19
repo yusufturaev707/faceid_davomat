@@ -1,10 +1,13 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ApiKeyCreateResponse, ApiKeyResponse } from "../interfaces";
 import { createApiKeyApi, getApiKeysApi, revokeApiKeyApi } from "../api";
 import PageLoader from "../components/PageLoader";
+import Pagination from "../components/Pagination";
 import PermissionGate from "../components/PermissionGate";
 import { PERM } from "../permissions";
 import { extractErrorMessage } from "../utils/errorMessage";
+
+const PAGE_SIZE = 20;
 
 export default function ApiKeysPage() {
   const [keys, setKeys] = useState<ApiKeyResponse[]>([]);
@@ -60,6 +63,18 @@ export default function ApiKeysPage() {
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
+
+  const [page, setPage] = useState(1);
+  const totalPages = Math.max(1, Math.ceil(keys.length / PAGE_SIZE));
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
+
+  const pagedKeys = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE;
+    return keys.slice(start, start + PAGE_SIZE);
+  }, [keys, page]);
 
   return (
     <div className="space-y-6">
@@ -188,7 +203,7 @@ export default function ApiKeysPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-slate-700">
-                {keys.map((key) => (
+                {pagedKeys.map((key) => (
                   <tr key={key.id} className="hover:bg-gray-50/50 dark:hover:bg-slate-700/30 transition-colors">
                     <td className="px-5 py-3.5 font-medium text-gray-900 dark:text-white">
                       {key.name}
@@ -232,6 +247,10 @@ export default function ApiKeysPage() {
           </div>
         )}
       </div>
+
+      {keys.length > 0 && (
+        <Pagination page={page} pages={totalPages} onPageChange={setPage} />
+      )}
     </div>
   );
 }

@@ -39,6 +39,16 @@ class GtspResult:
     middle_name: str | None
     photo: bytes | None
     sex: int | None  # 1=erkak, 2=ayol, boshqa=None
+    # Qo'shimcha pasport ma'lumotlari (default None — mavjud chaqiruvchilar
+    # uchun zarar yetmaydi).
+    birth_place: str | None = None
+    birth_date: str | None = None
+    birth_country: str | None = None
+    livestatus: str | None = None
+    nationality: str | None = None
+    doc_give_place: str | None = None
+    matches_date_begin_document: str | None = None
+    matches_date_end_document: str | None = None
 
 
 def _decode_photo(val: object) -> bytes | None:
@@ -100,10 +110,29 @@ def fetch_gtsp_data(
         raise GtspError(f"GTSP: {msg}")
 
     data = result.get("data") or {}
+
+    def _s(key: str) -> str | None:
+        """data[key] -> trimmed non-empty string yoki None."""
+        val = data.get(key)
+        if val is None:
+            return None
+        if isinstance(val, str):
+            val = val.strip()
+            return val or None
+        return str(val) or None
+
     return GtspResult(
         last_name=(data.get("sname") or None),
         first_name=(data.get("fname") or None),
         middle_name=(data.get("mname") or None),
         photo=_decode_photo(data.get("photo")),
         sex=data.get("sex") if isinstance(data.get("sex"), int) else None,
+        birth_place=_s("birth_place"),
+        birth_date=_s("birth_date"),
+        birth_country=_s("birth_country"),
+        livestatus=_s("livestatus"),
+        nationality=_s("nationality"),
+        doc_give_place=_s("doc_give_place"),
+        matches_date_begin_document=_s("matches_date_begin_document"),
+        matches_date_end_document=_s("matches_date_end_document"),
     )

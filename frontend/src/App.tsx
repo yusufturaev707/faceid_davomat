@@ -12,6 +12,7 @@ import FaceLogsPage from "./pages/FaceLogsPage";
 import FaceLogDetailPage from "./pages/FaceLogDetailPage";
 import ApiKeysPage from "./pages/ApiKeysPage";
 import EmbeddingPage from "./pages/EmbeddingPage";
+import PasportInfoPage from "./pages/PasportInfoPage";
 import NotFoundPage from "./pages/NotFoundPage";
 import VerifyPage from "./pages/VerifyPage";
 import SettingsPage from "./pages/SettingsPage";
@@ -91,6 +92,17 @@ export default function App() {
             }
           >
             <Route path="/embedding" element={<EmbeddingPage />} />
+          </Route>
+
+          <Route
+            element={
+              <PermissionRoute
+                permission={PERM.PASPORT_INFO_READ}
+                redirectTo="/settings"
+              />
+            }
+          >
+            <Route path="/pasport-info" element={<PasportInfoPage />} />
           </Route>
 
           <Route path="/settings" element={<SettingsPage />} />

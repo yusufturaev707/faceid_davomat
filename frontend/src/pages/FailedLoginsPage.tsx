@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getFailedLoginsApi, getFailedLoginsCountApi } from "../api";
 import PageLoader from "../components/PageLoader";
+import Pagination from "../components/Pagination";
 import type { FailedLoginAttemptResponse } from "../interfaces";
 import { extractErrorMessage } from "../utils/errorMessage";
+
+const PAGE_SIZE = 20;
 
 const REASON_META: Record<string, { label: string; cls: string }> = {
   no_user: {
@@ -107,6 +110,22 @@ export default function FailedLoginsPage() {
     if (!reasonFilter) return items;
     return items.filter((i) => i.reason === reasonFilter);
   }, [items, reasonFilter]);
+
+  const [page, setPage] = useState(1);
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+
+  useEffect(() => {
+    setPage(1);
+  }, [reasonFilter, items]);
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
+
+  const pagedFiltered = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE;
+    return filtered.slice(start, start + PAGE_SIZE);
+  }, [filtered, page]);
 
   const reasonCounts = useMemo(() => {
     const map: Record<string, number> = {};
@@ -285,7 +304,7 @@ export default function FailedLoginsPage() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((row) => (
+                {pagedFiltered.map((row) => (
                   <tr
                     key={row.id}
                     className="border-b border-gray-100 dark:border-slate-700/50 hover:bg-primary-50/50 dark:hover:bg-primary-900/10 transition"
@@ -318,6 +337,8 @@ export default function FailedLoginsPage() {
           </div>
         )}
       </div>
+
+      <Pagination page={page} pages={totalPages} onPageChange={setPage} />
 
       <p className="mt-4 text-xs text-gray-400 dark:text-slate-500">
         ⚠ 90 kundan eski yozuvlar avtomatik o'chiriladi (Celery beat).

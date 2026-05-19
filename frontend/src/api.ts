@@ -700,6 +700,41 @@ export async function assignPermissionsToRoleApi(roleId: number, data: import(".
   return res.data;
 }
 
+// === Pasport info (GTSP) ===
+
+export interface PasportInfoRequest {
+  ps_ser: string;
+  ps_num: string;
+  imei?: string | null;
+}
+
+export interface PasportInfoResponse {
+  last_name: string | null;
+  first_name: string | null;
+  middle_name: string | null;
+  sex: number | null;
+  sex_label: string | null;
+  ps_ser: string;
+  ps_num: string;
+  imei: string | null;
+  photo: string | null;
+  birth_place: string | null;
+  birth_date: string | null;
+  birth_country: string | null;
+  livestatus: string | null;
+  nationality: string | null;
+  doc_give_place: string | null;
+  matches_date_begin_document: string | null;
+  matches_date_end_document: string | null;
+}
+
+export async function getPasportInfoApi(
+  data: PasportInfoRequest,
+): Promise<PasportInfoResponse> {
+  const res = await apiClient.post<PasportInfoResponse>("/pasport-info", data);
+  return res.data;
+}
+
 // === Davomat bot foydalanuvchilari (admin) ===
 
 export async function getDavomatBotsApi(): Promise<import("./interfaces").DavomatBotAdminResponse[]> {

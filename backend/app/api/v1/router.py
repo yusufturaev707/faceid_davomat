@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import admin, auth, davomat_bot, davomat_bot_admin, embedding, lookup, permission, photo, student, test_session
+from app.api.v1.endpoints import admin, auth, davomat_bot, davomat_bot_admin, embedding, lookup, pasport_info, permission, photo, student, test_session
 
 api_router = APIRouter()
 api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
@@ -26,4 +26,7 @@ api_router.include_router(
     davomat_bot_admin.router,
     prefix="/admin/davomat-bots",
     tags=["admin", "davomat-bot"],
+)
+api_router.include_router(
+    pasport_info.router, prefix="/pasport-info", tags=["pasport-info"]
 )
