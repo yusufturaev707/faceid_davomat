@@ -20,7 +20,7 @@ davomat_bot/.env.example
 
 backend/celerybeat-schedule*
 
-node_modules/
+frontend/node_modules/
 frontend/dist/
 
 
