@@ -44,7 +44,12 @@ export interface UserResponse {
   full_name: string | null;
   role: string;
   role_key: number;
+  // region_id — foydalanuvchiga bevosita biriktirilgan viloyat (asosiy
+  // bog'lanish). zone_id ixtiyoriy "uy zonasi".
+  region_id: number | null;
+  region_name: string;
   zone_id: number | null;
+  zone_name: string;
   telegram_id: string | null;
   is_active: boolean;
   permissions: string[];
@@ -140,6 +145,7 @@ export interface CreateUserRequest {
   password: string;
   full_name?: string;
   role_id?: number | null;
+  region_id?: number | null;
   zone_id?: number | null;
   telegram_id?: string | null;
 }
@@ -149,6 +155,7 @@ export interface UpdateUserRequest {
   password?: string;
   full_name?: string;
   role_id?: number | null;
+  region_id?: number | null;
   zone_id?: number | null;
   telegram_id?: string | null;
   is_active?: boolean;

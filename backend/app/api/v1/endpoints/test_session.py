@@ -113,6 +113,46 @@ def _resolve_effective_zone(
     return int(zone.id), zone.name
 
 
+def _resolve_effective_region(
+    db: Session, current_user: User, requested_region_id: int | None
+) -> int:
+    """Statistika olinadigan effective `region_id`ni aniqlaydi.
+
+    Region-darajadagi endpointlar uchun — zonadan mustaqil.
+
+    Xatti-harakat:
+    - `requested_region_id` berilmasa — foydalanuvchining bevosita biriktirilgan
+      `region_id`i ishlatiladi. Eski akkaunt (region_id to'ldirilmagan) bo'lsa,
+      region zona orqali aniqlanadi.
+    - Berilgan bo'lsa — user o'z regioniga tegishliligi tekshiriladi (boshqa
+      region ma'lumotini so'rashi bloklanadi).
+    - Hech qaysi yo'l bilan region topilmasa — 400 qaytadi.
+    """
+    user_region_id = current_user.region_id
+    # Eski akkaunt: region_id hali to'ldirilmagan bo'lsa, zona orqali aniqlaymiz.
+    if not user_region_id and current_user.zone_id:
+        zone = db.get(Zone, int(current_user.zone_id))
+        if zone:
+            user_region_id = zone.region_id
+
+    if requested_region_id is None:
+        effective = user_region_id
+    else:
+        effective = int(requested_region_id)
+        if user_region_id and effective != int(user_region_id):
+            raise HTTPException(
+                status_code=403,
+                detail="Tanlangan region foydalanuvchiga tegishli emas",
+            )
+
+    if not effective:
+        raise HTTPException(
+            status_code=400,
+            detail="Foydalanuvchiga region biriktirilmagan",
+        )
+    return int(effective)
+
+
 # --- Справочники (lookups) ---
 
 
@@ -691,11 +731,19 @@ def smena_attendance_stats(
 @router.get("/smenas/{smena_id}/attendance-by-region")
 def smena_attendance_by_region(
     smena_id: int,
+    region_id: int | None = Query(
+        default=None,
+        description=(
+            "Ixtiyoriy: statistika olinadigan region. Berilmasa — "
+            "foydalanuvchining o'z regioni ishlatiladi. Statistika "
+            "zonaga emas, regionga bog'liq."
+        ),
+    ),
     zone_id: int | None = Query(
         default=None,
         description=(
-            "Tanlangan/aktiv bino. Berilmasa — user o'zining zonasi. "
-            "Region shu zonadan aniqlanadi va bino bu region ichida bo'lishi shart."
+            "Ixtiyoriy: aktiv bino — faqat modal'da `is_active` highlight "
+            "uchun. Statistika natijasiga ta'sir qilmaydi."
         ),
     ),
     db: Session = Depends(get_db),
@@ -703,10 +751,13 @@ def smena_attendance_by_region(
 ):
     """Smena + region kesimida har bir bino bo'yicha davomat statistikasi.
 
+    Statistika foydalanuvchining (yoki so'ralgan) **regioni** bo'yicha
+    aniqlanadi — zona biriktirilmagan foydalanuvchilar uchun ham ishlaydi.
+
     Qaytaradi:
       - test_day, smena_number, smena_name (test_session_smena dan);
-      - region_id, region_name (aktiv zonadan kelib chiqib);
-      - active_zone_id (tanlangan bino — chiroyli highlight uchun);
+      - region_id, region_name;
+      - active_zone_id / active_zone_name (highlight uchun, bo'lishi shart emas);
       - zones: shu region'dagi har bino bo'yicha
         {zone_id, zone_name, zone_number, total, entered, not_entered, cheating, is_active}.
 
@@ -718,12 +769,10 @@ def smena_attendance_by_region(
     from app.models.student import Student
     from app.models.test_session_smena import TestSessionSmena
 
-    effective_zone_id, _name = _resolve_effective_zone(db, current_user, zone_id)
-    if not effective_zone_id:
-        raise HTTPException(
-            status_code=400,
-            detail="Foydalanuvchiga zona biriktirilmagan",
-        )
+    effective_region_id = _resolve_effective_region(db, current_user, region_id)
+    # Highlight uchun aktiv bino — so'ralgan `zone_id` yoki user zonasi.
+    # Bo'lmasligi mumkin; statistikaga ta'sir qilmaydi.
+    active_zone_id = int(zone_id) if zone_id else (current_user.zone_id or None)
 
     tss_row = db.execute(
         sa_select(
@@ -738,22 +787,15 @@ def smena_attendance_by_region(
     if not tss_row:
         raise HTTPException(status_code=404, detail="Smena topilmadi")
 
-    active_zone = db.execute(
-        sa_select(Zone.id, Zone.name, Zone.number, Zone.region_id).where(
-            Zone.id == effective_zone_id
-        )
-    ).first()
-    if not active_zone:
-        raise HTTPException(status_code=404, detail="Bino topilmadi")
-
-    region_id = active_zone.region_id
     region_row = db.execute(
-        sa_select(Region.id, Region.name).where(Region.id == region_id)
+        sa_select(Region.id, Region.name).where(Region.id == effective_region_id)
     ).first()
+    if not region_row:
+        raise HTTPException(status_code=404, detail="Region topilmadi")
 
     zones_in_region = db.execute(
         sa_select(Zone.id, Zone.name, Zone.number)
-        .where(Zone.region_id == region_id, Zone.is_active.is_(True))
+        .where(Zone.region_id == effective_region_id, Zone.is_active.is_(True))
         .order_by(Zone.number, Zone.name)
     ).all()
 
@@ -787,6 +829,16 @@ def smena_attendance_by_region(
                 "cheating": int(row.cheating or 0),
             }
 
+    # Aktiv bino faqat shu region ichida bo'lsagina highlight qilinadi.
+    active_zone_name = ""
+    if active_zone_id is not None:
+        match = next((z for z in zones_in_region if z.id == active_zone_id), None)
+        if match is None:
+            # So'ralgan/user zonasi bu regionga tegishli emas — highlight yo'q.
+            active_zone_id = None
+        else:
+            active_zone_name = match.name
+
     zones_payload = []
     for z in zones_in_region:
         s = stats_by_zone.get(z.id, {"total": 0, "entered": 0, "cheating": 0})
@@ -801,7 +853,7 @@ def smena_attendance_by_region(
                 "entered": entered,
                 "not_entered": max(0, total - entered),
                 "cheating": s["cheating"],
-                "is_active": z.id == effective_zone_id,
+                "is_active": z.id == active_zone_id,
             }
         )
 
@@ -809,10 +861,10 @@ def smena_attendance_by_region(
         "test_day": tss_row.day.isoformat() if tss_row.day else None,
         "smena_number": tss_row.number,
         "smena_name": tss_row.name,
-        "region_id": region_row.id if region_row else region_id,
-        "region_name": region_row.name if region_row else "",
-        "active_zone_id": effective_zone_id,
-        "active_zone_name": active_zone.name,
+        "region_id": region_row.id,
+        "region_name": region_row.name,
+        "active_zone_id": active_zone_id,
+        "active_zone_name": active_zone_name,
         "zones": zones_payload,
     }
 

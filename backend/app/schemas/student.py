@@ -158,13 +158,20 @@ class NotEnteredStudentItem(BaseModel):
     middle_name: str | None = None
     imei: str | None = None
     gr_n: int = 0
+    # Ro'yxat region kesimida (bir nechta bino) qaytariladi — talaba qaysi
+    # binoga tegishli ekani ko'rinib tursin. Desktop hozircha ko'rsatmaydi.
+    zone_name: str = ""
 
 
 class NotEnteredStudentsResponse(BaseModel):
-    """Tanlangan test/sana/smena + bino kesimida kelmagan talabalar ro'yxati."""
+    """Tanlangan test/sana/smena + region kesimida kelmagan talabalar ro'yxati."""
 
     items: list[NotEnteredStudentItem]
     total: int
+    # roster_total — shu test/smena + region kesimidagi JAMI talaba soni.
+    # Client `items` bo'sh kelganda "hammasi kirgan" (roster_total > 0) va
+    # "ro'yxat umuman yo'q" (roster_total == 0) holatlarini ajratishi uchun.
+    roster_total: int = 0
 
 
 # --- StudentLog ---

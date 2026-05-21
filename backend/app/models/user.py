@@ -18,6 +18,12 @@ class User(Base):
         ForeignKey("roles.id"), index=True, nullable=True
     )
     zone_id: Mapped[int | None] = mapped_column(ForeignKey("zone.id"), nullable=True)
+    # Region — foydalanuvchiga bevosita biriktirilgan viloyat. Operator butun
+    # region kesimida ishlaydi (bir nechta bino); `zone_id` esa ixtiyoriy
+    # "uy zonasi" sifatida zona-darajadagi endpointlarda default bo'lib qoladi.
+    region_id: Mapped[int | None] = mapped_column(
+        ForeignKey("regions.id"), index=True, nullable=True
+    )
     telegram_id: Mapped[str | None] = mapped_column(nullable=True)
     is_active: Mapped[bool] = mapped_column(default=True)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
@@ -27,6 +33,7 @@ class User(Base):
 
     role_ref = relationship("Role", lazy="joined")
     zone = relationship("Zone", lazy="joined")
+    region = relationship("Region", lazy="joined")
     verification_logs: Mapped[list["VerificationLog"]] = relationship(
         back_populates="user"
     )  # noqa: F821
@@ -55,16 +62,11 @@ class User(Base):
         return ""
 
     @hybrid_property
-    def region_id(self) -> int | None:
-        """Region id from zone → region. None bo'lsa user ma'lum zonaga
-        biriktirilmagan yoki zone.region mavjud emas."""
-        if self.zone:
-            return int(self.zone.region_id)
-        return None
-
-    @hybrid_property
     def region_name(self) -> str:
-        """Region name from zone → region."""
+        """Region nomi — avval bevosita biriktirilgan `region`, u bo'lmasa
+        (eski akkaunt, region_id hali to'ldirilmagan) zona orqali aniqlanadi."""
+        if self.region:
+            return self.region.name
         if self.zone and self.zone.region:
             return self.zone.region.name
         return ""

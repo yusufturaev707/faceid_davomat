@@ -35,7 +35,8 @@ export default function UsersPage() {
     password: "",
     full_name: "",
     role_id: null as number | null,
-    region_id: null as number | null, // faqat UI uchun (cascade filter)
+    // region_id — asosiy bog'lanish, backendga yuboriladi. zone_id ixtiyoriy.
+    region_id: null as number | null,
     zone_id: null as number | null,
     telegram_id: "",
     is_active: true,
@@ -88,19 +89,20 @@ export default function UsersPage() {
     setEditId(user.id);
     const matchedRole = roles.find((r) => r.name === user.role);
 
-    // zone_id dan region_id ni topish
-    let regionId: number | null = null;
-    if (user.zone_id) {
+    // Region — bevosita user.region_id. Eski yozuvda bo'lmasa (region_id hali
+    // to'ldirilmagan) zaxira sifatida zonadan aniqlanadi.
+    let regionId: number | null = user.region_id ?? null;
+    if (!regionId && user.zone_id) {
       const zone = allZones.find((z) => z.id === user.zone_id);
-      if (zone) {
-        regionId = zone.region_id;
-        // Shu regiondagi zone larni yuklash
-        try {
-          const zones = await getZonesByRegionApi(regionId);
-          setFilteredZones(zones);
-        } catch {
-          setFilteredZones([]);
-        }
+      regionId = zone ? zone.region_id : null;
+    }
+    if (regionId) {
+      // Shu regiondagi zone larni yuklash (cascade dropdown uchun).
+      try {
+        const zones = await getZonesByRegionApi(regionId);
+        setFilteredZones(zones);
+      } catch {
+        setFilteredZones([]);
       }
     } else {
       setFilteredZones([]);
@@ -137,6 +139,7 @@ export default function UsersPage() {
           username: form.username,
           full_name: form.full_name || undefined,
           role_id: form.role_id,
+          region_id: form.region_id,
           zone_id: form.zone_id,
           telegram_id: form.telegram_id || undefined,
           is_active: form.is_active,
@@ -151,6 +154,7 @@ export default function UsersPage() {
           password: form.password,
           full_name: form.full_name || undefined,
           role_id: form.role_id,
+          region_id: form.region_id,
           zone_id: form.zone_id,
           telegram_id: form.telegram_id || undefined,
         };
@@ -294,8 +298,8 @@ export default function UsersPage() {
                     {user.role || "—"}
                   </span>
                 </td>
-                <td className="px-6 py-4 text-sm text-gray-600 dark:text-slate-300">{zoneRegionName(user.zone_id)}</td>
-                <td className="px-6 py-4 text-sm text-gray-600 dark:text-slate-300">{zoneName(user.zone_id)}</td>
+                <td className="px-6 py-4 text-sm text-gray-600 dark:text-slate-300">{user.region_name || zoneRegionName(user.zone_id)}</td>
+                <td className="px-6 py-4 text-sm text-gray-600 dark:text-slate-300">{user.zone_name || zoneName(user.zone_id)}</td>
                 <td className="px-6 py-4 text-sm text-gray-600 dark:text-slate-300 font-mono">{user.telegram_id || "—"}</td>
                 <td className="px-6 py-4">
                   <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${
@@ -458,7 +462,7 @@ export default function UsersPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Bino (Zone)</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Bino (uy zonasi — ixtiyoriy)</label>
                 <select
                   value={form.zone_id ?? ""}
                   onChange={(e) => setForm({ ...form, zone_id: e.target.value ? Number(e.target.value) : null })}

@@ -1,5 +1,5 @@
 [Unit]
-Description=FaceID Davomat Telegram Bot (aiogram 3, long polling)
+Description=FaceID Davomat Telegram Bot
 Documentation=https://docs.aiogram.dev/
 After=network-online.target faceid-api.service
 Wants=network-online.target

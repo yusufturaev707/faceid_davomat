@@ -41,7 +41,9 @@
       "Bash(pip install *)",
       "Bash(PYTHONUTF8=1 python *)",
       "Bash(Get-ChildItem -Path \"C:/FastApi/faceid/backend\" -Recurse -Name)",
-      "Bash(Select-Object -First 50)"
+      "Bash(Select-Object -First 50)",
+      "Bash(dir /s /b *.py)",
+      "Bash(findstr /v __pycache__)"
     ]
   }
 }

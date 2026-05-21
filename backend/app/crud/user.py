@@ -5,7 +5,16 @@ from sqlalchemy.orm import Session
 from app.core.security import hash_password
 from app.crud.refresh_token import revoke_all_user_tokens
 from app.models.user import User
+from app.models.zone import Zone
 from app.schemas.auth import CreateUserRequest, UpdateUserRequest
+
+
+def _region_from_zone(db: Session, zone_id: int | None) -> int | None:
+    """Zona orqali region id ni aniqlash (region_id berilmaganda zaxira)."""
+    if zone_id is None:
+        return None
+    zone = db.get(Zone, int(zone_id))
+    return int(zone.region_id) if zone else None
 
 
 def get_user_by_username(db: Session, username: str) -> User | None:
@@ -24,11 +33,17 @@ def create_user(db: Session, data: CreateUserRequest) -> User:
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Bu username allaqachon band",
         )
+    # region_id asosiy bog'lanish; berilmasa zona orqali aniqlanadi, shunda
+    # region'ga tayanadigan endpointlar (kelmaganlar ro'yxati, lookup) ishlaydi.
+    region_id = data.region_id
+    if region_id is None:
+        region_id = _region_from_zone(db, data.zone_id)
     user = User(
         username=data.username,
         hashed_password=hash_password(data.password),
         full_name=data.full_name,
         role_id=data.role_id,
+        region_id=region_id,
         zone_id=data.zone_id,
         telegram_id=data.telegram_id,
     )
@@ -70,6 +85,12 @@ def update_user(db: Session, user_id: int, data: UpdateUserRequest) -> User | No
 
     for key, val in update_data.items():
         setattr(user, key, val)
+
+    # region_id ochiq berilmagan, lekin zona bor bo'lsa — region'ni zonadan
+    # to'ldiramiz, shunda region'ga tayanadigan endpointlar uzilib qolmaydi.
+    if user.region_id is None and user.zone_id is not None:
+        user.region_id = _region_from_zone(db, user.zone_id)
+
     db.commit()
     db.refresh(user)
 

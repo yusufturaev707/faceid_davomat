@@ -356,30 +356,69 @@ def list_not_entered_students(
     ),
     zone_id: int | None = Query(
         None,
-        description="Bino (zone) id. Berilmasa — foydalanuvchining zone'i.",
+        description=(
+            "Tanlangan bino (zone). Berilsa — ro'yxat aynan shu binoga "
+            "tegishli talabalar bilan cheklanadi (bino foydalanuvchi "
+            "region'iga tegishli bo'lishi shart). Berilmasa — ro'yxat butun "
+            "region kesimida qaytariladi."
+        ),
     ),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
-    """Tanlangan test_session_smena + bino (zone) kesimida hali kelmagan
+    """Tanlangan test_session_smena kesimida hali kelmagan
     (`is_entered=False`) talabalar ro'yxati.
 
-    Desktop client "Kelmaganlar ro'yxati" uchun ishlatadi. `is_entered`
-    backend tomonida `/students/logs/bulk` sync paytida yangilanadi —
-    shuning uchun bu ro'yxat barcha operatorlar sync qilgan davomatni
-    hisobga oladi.
+    `zone_id` berilsa — ro'yxat aynan shu binoga tegishli talabalar bilan
+    cheklanadi (desktop yuklab olgan test sessiyasining binosi). Berilmasa —
+    foydalanuvchining butun region'i (bir nechta bino) qamraladi. `is_entered`
+    backend tomonida `/students/logs/bulk` sync paytida yangilanadi, ya'ni
+    ro'yxat barcha operatorlar sync qilgan davomatni hisobga oladi.
     """
+    from sqlalchemy import func
     from sqlalchemy import select as sa_select
 
     from app.models.student import Student as StudentModel
     from app.models.test_session_smena import TestSessionSmena
+    from app.models.zone import Zone
 
-    target_zone_id = zone_id or current_user.zone_id
-    if not target_zone_id:
-        raise HTTPException(status_code=400, detail="Bino (zone) aniqlanmadi")
+    # Region — avval foydalanuvchiga bevosita biriktirilgan `region_id`.
+    # Eski akkauntlarda (region_id hali to'ldirilmagan) zaxira sifatida
+    # uzatilgan `zone_id` yoki user zonasi orqali region aniqlanadi.
+    target_region_id = current_user.region_id
+    if not target_region_id:
+        fallback_zone = zone_id or current_user.zone_id
+        if fallback_zone:
+            zone = db.get(Zone, int(fallback_zone))
+            target_region_id = int(zone.region_id) if zone else None
+    if not target_region_id:
+        raise HTTPException(status_code=400, detail="Region aniqlanmadi")
+
+    # `zone_id` berilsa — ro'yxat shu bino bilan cheklanadi. Bino
+    # foydalanuvchi region'iga tegishli ekani tekshiriladi (boshqa region
+    # binosini so'rash bloklanadi).
+    target_zone_id: int | None = None
+    if zone_id:
+        zone = db.get(Zone, int(zone_id))
+        if not zone:
+            raise HTTPException(status_code=404, detail="Bino topilmadi")
+        if int(zone.region_id) != int(target_region_id):
+            raise HTTPException(
+                status_code=403,
+                detail="Tanlangan bino foydalanuvchi region'iga tegishli emas",
+            )
+        target_zone_id = int(zone_id)
 
     if db.get(TestSessionSmena, session_smena_id) is None:
         raise HTTPException(status_code=404, detail="Test sessiya smena topilmadi")
+
+    list_filters = [
+        StudentModel.session_smena_id == session_smena_id,
+        Zone.region_id == int(target_region_id),
+        StudentModel.is_entered.is_(False),
+    ]
+    if target_zone_id is not None:
+        list_filters.append(StudentModel.zone_id == target_zone_id)
 
     stmt = (
         sa_select(
@@ -388,14 +427,14 @@ def list_not_entered_students(
             StudentModel.middle_name,
             StudentModel.imei,
             StudentModel.gr_n,
+            Zone.name.label("zone_name"),
         )
-        .where(
-            StudentModel.session_smena_id == session_smena_id,
-            StudentModel.zone_id == int(target_zone_id),
-            StudentModel.is_entered.is_(False),
-        )
-        # Guruh raqami bo'yicha, guruh ichida familiya/ism bo'yicha.
+        .join(Zone, Zone.id == StudentModel.zone_id)
+        .where(*list_filters)
+        # Bino raqami → guruh → familiya/ism bo'yicha tartiblanadi.
         .order_by(
+            Zone.number,
+            Zone.name,
             StudentModel.gr_n,
             StudentModel.last_name,
             StudentModel.first_name,
@@ -409,10 +448,30 @@ def list_not_entered_students(
             middle_name=r.middle_name,
             imei=r.imei,
             gr_n=r.gr_n or 0,
+            zone_name=r.zone_name or "",
         )
         for r in rows
     ]
-    return NotEnteredStudentsResponse(items=items, total=len(items))
+
+    # roster_total — shu smena (+ tanlangan bino, bo'lmasa region) kesimidagi
+    # JAMI talaba soni. Client bo'sh ro'yxatni "hammasi kirgan" va "roster
+    # bo'sh" holatlariga ajratadi.
+    roster_filters = [
+        StudentModel.session_smena_id == session_smena_id,
+        Zone.region_id == int(target_region_id),
+    ]
+    if target_zone_id is not None:
+        roster_filters.append(StudentModel.zone_id == target_zone_id)
+    roster_total = db.scalar(
+        sa_select(func.count(StudentModel.id))
+        .select_from(StudentModel)
+        .join(Zone, Zone.id == StudentModel.zone_id)
+        .where(*roster_filters)
+    ) or 0
+
+    return NotEnteredStudentsResponse(
+        items=items, total=len(items), roster_total=int(roster_total)
+    )
 
 
 @router.get("", response_model=StudentListResponse)
