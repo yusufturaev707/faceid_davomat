@@ -55,6 +55,8 @@ from app.schemas.student import (
     AppliedStudentsResponse,
     NotEnteredStudentItem,
     NotEnteredStudentsResponse,
+    RejectedStudentItem,
+    RejectedStudentsResponse,
     CheatingLogCreate,
     CheatingLogListResponse,
     CheatingLogResponse,
@@ -209,11 +211,42 @@ def list_cheating_logs(
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=100),
     student_id: int | None = None,
+    search: str | None = Query(
+        None,
+        description="FIO yoki JShShIR (imei) bo'yicha qidiruv (case-insensitive).",
+    ),
+    test_id: int | None = None,
+    region_id: int | None = None,
+    zone_id: int | None = None,
+    smena_id: int | None = Query(
+        None,
+        description="Smena.id (TestSessionSmena.test_smena_id bo'yicha filter).",
+    ),
+    reason_id: int | None = None,
+    reason_type_id: int | None = None,
+    date_from: str | None = Query(
+        None, description="Smena sanasi (YYYY-MM-DD) — boshlanish."
+    ),
+    date_to: str | None = Query(
+        None, description="Smena sanasi (YYYY-MM-DD) — tugash (inclusive)."
+    ),
     db: Session = Depends(get_db),
     _: User = Depends(PermissionChecker(P.CHEATING_LOG_READ.code)),
 ):
     items, total = get_cheating_logs_paginated(
-        db, page=page, per_page=per_page, student_id=student_id
+        db,
+        page=page,
+        per_page=per_page,
+        student_id=student_id,
+        search=search,
+        test_id=test_id,
+        region_id=region_id,
+        zone_id=zone_id,
+        smena_id=smena_id,
+        reason_id=reason_id,
+        reason_type_id=reason_type_id,
+        date_from=date_from,
+        date_to=date_to,
     )
     return CheatingLogListResponse(
         items=items,
@@ -470,6 +503,257 @@ def list_not_entered_students(
     ) or 0
 
     return NotEnteredStudentsResponse(
+        items=items, total=len(items), roster_total=int(roster_total)
+    )
+
+
+@router.get("/entered", response_model=NotEnteredStudentsResponse)
+def list_entered_students(
+    session_smena_id: int = Query(
+        ...,
+        description=(
+            "Joriy test_session_smena.id — shu test/sana/smena kesimida "
+            "kelgan (is_entered=True) talabalar qaytariladi. Chetlatilganlar "
+            "ham kiradi (yangi semantika: chetlatilgan = binoga kelgan)."
+        ),
+    ),
+    zone_id: int | None = Query(
+        None,
+        description=(
+            "Tanlangan bino (zone). Berilsa — ro'yxat aynan shu binoga "
+            "cheklanadi (bino foydalanuvchi region'iga tegishli bo'lishi shart). "
+            "Berilmasa — ro'yxat butun region kesimida qaytariladi."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Tanlangan test_session_smena kesimida kelgan (`is_entered=True`)
+    talabalar ro'yxati. Chetlatilganlar ham kiradi (yangi semantika).
+
+    Javob shakli `/not-entered` bilan bir xil — desktop tabli modal'da
+    bir xil jadval modelini ishlatishi uchun.
+    """
+    from sqlalchemy import func
+    from sqlalchemy import select as sa_select
+
+    from app.models.student import Student as StudentModel
+    from app.models.test_session_smena import TestSessionSmena
+    from app.models.zone import Zone
+
+    target_region_id = current_user.region_id
+    if not target_region_id:
+        fallback_zone = zone_id or current_user.zone_id
+        if fallback_zone:
+            zone = db.get(Zone, int(fallback_zone))
+            target_region_id = int(zone.region_id) if zone else None
+    if not target_region_id:
+        raise HTTPException(status_code=400, detail="Region aniqlanmadi")
+
+    target_zone_id: int | None = None
+    if zone_id:
+        zone = db.get(Zone, int(zone_id))
+        if not zone:
+            raise HTTPException(status_code=404, detail="Bino topilmadi")
+        if int(zone.region_id) != int(target_region_id):
+            raise HTTPException(
+                status_code=403,
+                detail="Tanlangan bino foydalanuvchi region'iga tegishli emas",
+            )
+        target_zone_id = int(zone_id)
+
+    if db.get(TestSessionSmena, session_smena_id) is None:
+        raise HTTPException(status_code=404, detail="Test sessiya smena topilmadi")
+
+    list_filters = [
+        StudentModel.session_smena_id == session_smena_id,
+        Zone.region_id == int(target_region_id),
+        StudentModel.is_entered.is_(True),
+    ]
+    if target_zone_id is not None:
+        list_filters.append(StudentModel.zone_id == target_zone_id)
+
+    stmt = (
+        sa_select(
+            StudentModel.last_name,
+            StudentModel.first_name,
+            StudentModel.middle_name,
+            StudentModel.imei,
+            StudentModel.gr_n,
+            Zone.name.label("zone_name"),
+        )
+        .join(Zone, Zone.id == StudentModel.zone_id)
+        .where(*list_filters)
+        .order_by(
+            Zone.number,
+            Zone.name,
+            StudentModel.gr_n,
+            StudentModel.last_name,
+            StudentModel.first_name,
+        )
+    )
+    rows = db.execute(stmt).all()
+    items = [
+        NotEnteredStudentItem(
+            last_name=r.last_name,
+            first_name=r.first_name,
+            middle_name=r.middle_name,
+            imei=r.imei,
+            gr_n=r.gr_n or 0,
+            zone_name=r.zone_name or "",
+        )
+        for r in rows
+    ]
+
+    roster_filters = [
+        StudentModel.session_smena_id == session_smena_id,
+        Zone.region_id == int(target_region_id),
+    ]
+    if target_zone_id is not None:
+        roster_filters.append(StudentModel.zone_id == target_zone_id)
+    roster_total = db.scalar(
+        sa_select(func.count(StudentModel.id))
+        .select_from(StudentModel)
+        .join(Zone, Zone.id == StudentModel.zone_id)
+        .where(*roster_filters)
+    ) or 0
+
+    return NotEnteredStudentsResponse(
+        items=items, total=len(items), roster_total=int(roster_total)
+    )
+
+
+# ── Chetlatilganlar (is_cheating=True, CheatingLog ulanadi) ──
+@router.get("/rejected", response_model=RejectedStudentsResponse)
+def list_rejected_students(
+    session_smena_id: int = Query(
+        ...,
+        description=(
+            "Joriy test_session_smena.id — shu test/sana/smena kesimida "
+            "chetlatilgan (is_cheating=True) talabalar qaytariladi."
+        ),
+    ),
+    zone_id: int | None = Query(
+        None,
+        description=(
+            "Tanlangan bino (zone). Berilsa — ro'yxat aynan shu binoga "
+            "cheklanadi. Berilmasa — region kesimida."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Tanlangan test_session_smena + zone kesimida chetlatilgan
+    (`is_cheating=True`) talabalar ro'yxati.
+
+    `CheatingLog → Reason → ReasonType` LEFT JOIN orqali har bir talaba uchun
+    chetlatish turi (`rejection_type` = ReasonType.name) va sababi
+    (`rejection_reason` = Reason.name) qaytariladi. Eski yozuvlarda
+    CheatingLog yo'q bo'lsa, bu maydonlar bo'sh string bo'ladi.
+    """
+    from sqlalchemy import func
+    from sqlalchemy import select as sa_select
+    from sqlalchemy.orm import aliased
+
+    from app.models.cheating_log import CheatingLog
+    from app.models.reason import Reason
+    from app.models.reason_type import ReasonType
+    from app.models.student import Student as StudentModel
+    from app.models.test_session_smena import TestSessionSmena
+    from app.models.zone import Zone
+
+    # Region + zone validatsiyasi /entered bilan bir xil mantiq
+    target_region_id = current_user.region_id
+    if not target_region_id:
+        fallback_zone = zone_id or current_user.zone_id
+        if fallback_zone:
+            zone = db.get(Zone, int(fallback_zone))
+            target_region_id = int(zone.region_id) if zone else None
+    if not target_region_id:
+        raise HTTPException(status_code=400, detail="Region aniqlanmadi")
+
+    target_zone_id: int | None = None
+    if zone_id:
+        zone = db.get(Zone, int(zone_id))
+        if not zone:
+            raise HTTPException(status_code=404, detail="Bino topilmadi")
+        if int(zone.region_id) != int(target_region_id):
+            raise HTTPException(
+                status_code=403,
+                detail="Tanlangan bino foydalanuvchi region'iga tegishli emas",
+            )
+        target_zone_id = int(zone_id)
+
+    if db.get(TestSessionSmena, session_smena_id) is None:
+        raise HTTPException(status_code=404, detail="Test sessiya smena topilmadi")
+
+    list_filters = [
+        StudentModel.session_smena_id == session_smena_id,
+        Zone.region_id == int(target_region_id),
+        StudentModel.is_cheating.is_(True),
+    ]
+    if target_zone_id is not None:
+        list_filters.append(StudentModel.zone_id == target_zone_id)
+
+    # LEFT OUTER JOIN — eski yozuvlarda CheatingLog yo'q bo'lishi mumkin,
+    # bunday talabalar ham ro'yxatda chiqishi kerak (rejection maydonlari
+    # bo'sh string).
+    stmt = (
+        sa_select(
+            StudentModel.last_name,
+            StudentModel.first_name,
+            StudentModel.middle_name,
+            StudentModel.imei,
+            StudentModel.gr_n,
+            Zone.name.label("zone_name"),
+            ReasonType.name.label("rejection_type"),
+            Reason.name.label("rejection_reason"),
+            CheatingLog.created_at.label("rejected_at"),
+        )
+        .join(Zone, Zone.id == StudentModel.zone_id)
+        .outerjoin(CheatingLog, CheatingLog.student_id == StudentModel.id)
+        .outerjoin(Reason, Reason.id == CheatingLog.reason_id)
+        .outerjoin(ReasonType, ReasonType.id == Reason.reason_type_id)
+        .where(*list_filters)
+        # Eng oxirgi chetlatilganlar yuqorida; CheatingLog yo'q bo'lsa
+        # zone/guruh tartibida.
+        .order_by(
+            CheatingLog.created_at.desc().nulls_last(),
+            Zone.number,
+            StudentModel.gr_n,
+            StudentModel.last_name,
+            StudentModel.first_name,
+        )
+    )
+    rows = db.execute(stmt).all()
+    items = [
+        RejectedStudentItem(
+            last_name=r.last_name,
+            first_name=r.first_name,
+            middle_name=r.middle_name,
+            imei=r.imei,
+            gr_n=r.gr_n or 0,
+            zone_name=r.zone_name or "",
+            rejection_type=r.rejection_type or "",
+            rejection_reason=r.rejection_reason or "",
+        )
+        for r in rows
+    ]
+
+    roster_filters = [
+        StudentModel.session_smena_id == session_smena_id,
+        Zone.region_id == int(target_region_id),
+    ]
+    if target_zone_id is not None:
+        roster_filters.append(StudentModel.zone_id == target_zone_id)
+    roster_total = db.scalar(
+        sa_select(func.count(StudentModel.id))
+        .select_from(StudentModel)
+        .join(Zone, Zone.id == StudentModel.zone_id)
+        .where(*roster_filters)
+    ) or 0
+
+    return RejectedStudentsResponse(
         items=items, total=len(items), roster_total=int(roster_total)
     )
 

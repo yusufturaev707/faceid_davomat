@@ -22,9 +22,15 @@ class GenderStat(BaseModel):
 class CheatingStat(BaseModel):
     """Chetlatilganlar — joy bo'yicha va gender bo'yicha bo'linish.
 
-    at_entry — `reason_type.key == 1` (binoga kirishda)
-    during_test — `reason_type.key == 2` (test jarayonida)
-    other — boshqa yoki reason_type biriktirilmagan
+    total = barcha `is_cheating` (kirishda + test jarayonida).
+    Chetlatilganlar `attended` (Keldi) ichida ham hisoblanadi — bu yerda
+    alohida informativ ko'rinishda chiqariladi.
+
+    Reason_type breakdown:
+      at_entry    — `reason_type.key == 1` (binoga kirishda)
+      during_test — `reason_type.key == 2` (test jarayonida)
+      other       — boshqa yoki reason_type biriktirilmagan
+    Tenglik: `total == at_entry + during_test + other`.
     """
 
     total: int
@@ -37,12 +43,26 @@ class CheatingStat(BaseModel):
 
 
 class StatGroup(BaseModel):
-    """4 ta dashboard cardini qoplaydigan to'plamlash."""
+    """4 ta dashboard cardini qoplaydigan to'plamlash.
+
+    Tenglik: `total.total == attended.total + not_attended.total`
+    (cheating — attended ichidagi informativ qism)
+    """
 
     total: GenderStat
-    attended: GenderStat       # is_entered = True
-    not_attended: GenderStat   # is_entered = False
-    cheating: CheatingStat
+    attended: GenderStat       # Keldi — is_entered OR is_cheating (chetlatilganlar ham)
+    not_attended: GenderStat   # Kelmadi — NOT is_entered AND NOT is_cheating
+    cheating: CheatingStat     # Chetlatish — is_cheating (attended ichidagi qism, info)
+
+
+class ZoneStatItem(BaseModel):
+    """Bitta bino (zone) bo'yicha statistika — Region card bosilganda
+    modal ichida ko'rsatish uchun."""
+
+    zone_id: int
+    zone_number: int
+    zone_name: str
+    stats: StatGroup
 
 
 class RegionStatItem(BaseModel):
@@ -50,6 +70,9 @@ class RegionStatItem(BaseModel):
     region_number: int
     region_name: str
     stats: StatGroup
+    # Region ichidagi binolar — modal'da ko'rsatiladi (lozim bo'lganda).
+    # Tartibi: zone.number bo'yicha.
+    zones: list[ZoneStatItem] = []
 
 
 class DashboardStatsResponse(BaseModel):

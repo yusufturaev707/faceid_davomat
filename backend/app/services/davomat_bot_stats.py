@@ -4,6 +4,14 @@ Tanlangan kontekstda — bitta smena, bitta kun (barcha smenalar) yoki butun
 sessiya (barcha kun va smenalar) — foydalanuvchi biriktirilgan regionlar
 kesimida har bir region va uning zonalari bo'yicha umumiy/ kirgan/
 kirmagan/ chetlatilgan statistikasini qaytaradi.
+
+Hisoblash qoidasi (Jami = Keldi + Kelmadi):
+  entered      = is_entered OR is_cheating               — binoga kelganlar
+                                                           (kirishda yoki testda
+                                                           chetlatilganlar ham qo'shiladi)
+  not_entered  = NOT is_entered AND NOT is_cheating      — umuman kelmaganlar
+  cheating     = is_cheating                             — barcha chetlatishlar
+                                                           (entered ichidagi info qism)
 """
 
 from __future__ import annotations
@@ -167,6 +175,11 @@ def compute_bot_stats(
     # birlashtirib hisoblaymiz — multi-smena holatida ham bir kishi/yozuv
     # ikki marta sanalmaydi, chunki har bir Student yagona session_smena_id ga
     # bog'langan).
+    #
+    # Tenglik: total == entered + not_entered
+    #   entered   = is_entered OR is_cheating               (Keldi — binoga kelganlar)
+    #   not_entered = total - entered                       (Kelmadi — umuman kelmagan)
+    #   cheating  = is_cheating                             (Chetlatish — entered ichidagi info)
     zone_stats: dict[int, dict] = {
         zid: {"total": 0, "entered": 0, "cheating": 0} for zid in zone_ids
     }
@@ -176,7 +189,14 @@ def compute_bot_stats(
                 Student.zone_id,
                 func.count(Student.id).label("total"),
                 func.sum(
-                    case((Student.is_entered.is_(True), 1), else_=0)
+                    case(
+                        (
+                            (Student.is_entered.is_(True))
+                            | (Student.is_cheating.is_(True)),
+                            1,
+                        ),
+                        else_=0,
+                    )
                 ).label("entered"),
                 func.sum(
                     case((Student.is_cheating.is_(True), 1), else_=0)

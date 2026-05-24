@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type {
+  SessionStateResponse,
   SmenaResponse,
   TestResponse,
   TestSessionListResponse,
 } from "../interfaces";
 import {
   createTestSessionApi,
+  getSessionStatesLookupApi,
   getSmenasLookupApi,
   getTestSessionsApi,
   getTestsLookupApi,
@@ -27,6 +29,25 @@ export default function TestSessionsPage() {
   // Lookups
   const [tests, setTests] = useState<TestResponse[]>([]);
   const [smenas, setSmenas] = useState<SmenaResponse[]>([]);
+  const [sessionStates, setSessionStates] = useState<SessionStateResponse[]>([]);
+
+  // Filters
+  const [filterTestId, setFilterTestId] = useState("");
+  const [filterStateId, setFilterStateId] = useState("");
+  const [filterActive, setFilterActive] = useState("");
+  const [showFilters, setShowFilters] = useState(false);
+
+  const activeFilterCount =
+    (filterTestId ? 1 : 0) +
+    (filterStateId ? 1 : 0) +
+    (filterActive ? 1 : 0);
+  const hasFilters = activeFilterCount > 0;
+  const resetFilters = () => {
+    setFilterTestId("");
+    setFilterStateId("");
+    setFilterActive("");
+    setPage(1);
+  };
 
   // Form state
   const [formName, setFormName] = useState("");
@@ -43,16 +64,33 @@ export default function TestSessionsPage() {
   const fetchSessions = useCallback(async () => {
     setLoading(true);
     try {
-      const result = await getTestSessionsApi({ page, per_page: 20 });
+      const params: Record<string, string | number | boolean> = {
+        page,
+        per_page: 20,
+      };
+      if (filterTestId) params.test_id = Number(filterTestId);
+      if (filterStateId) params.test_state_id = Number(filterStateId);
+      if (filterActive === "true") params.is_active = true;
+      else if (filterActive === "false") params.is_active = false;
+      const result = await getTestSessionsApi(
+        params as Record<string, string | number>,
+      );
       setData(result);
     } finally {
       setLoading(false);
     }
-  }, [page]);
+  }, [page, filterTestId, filterStateId, filterActive]);
 
   useEffect(() => {
     fetchSessions();
   }, [fetchSessions]);
+
+  // Filter dropdownlari uchun lookup'lar — bir marta yuklab, qayta-qayta
+  // chiqarishlardan saqlanamiz.
+  useEffect(() => {
+    getTestsLookupApi().then(setTests).catch(() => {});
+    getSessionStatesLookupApi().then(setSessionStates).catch(() => {});
+  }, []);
 
   const openCreateModal = async () => {
     setError("");
@@ -63,13 +101,11 @@ export default function TestSessionsPage() {
     setFormSmPerDay(1);
     setFormSmenas([]);
     try {
-      const [t, s] = await Promise.all([
-        getTestsLookupApi(),
-        getSmenasLookupApi(),
-      ]);
-      setTests(t);
+      // Tests filter uchun mount'da yuklanadi; smena lookup faqat modal
+      // ochilganda kerak — bir martagina fetch qilamiz.
+      const s = smenas.length ? smenas : await getSmenasLookupApi();
       setSmenas(s);
-      if (t.length > 0) setFormTestId(t[0].id);
+      if (tests.length > 0) setFormTestId(tests[0].id);
     } catch (err) {
       setError(extractErrorMessage(err));
     }
@@ -156,6 +192,98 @@ export default function TestSessionsPage() {
             + Yangi sessiya
           </button>
         </PermissionGate>
+      </div>
+
+      {/* Filters */}
+      <div className="glass-card p-4 mb-4">
+        <div className="flex flex-wrap gap-3 items-end">
+          <button
+            onClick={() => setShowFilters(!showFilters)}
+            className={`btn-secondary !py-2 text-sm flex items-center gap-1.5 ${
+              showFilters ? "ring-2 ring-primary-300 dark:ring-primary-600" : ""
+            }`}
+          >
+            <svg
+              className="w-4 h-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
+              />
+            </svg>
+            Filterlar
+            {activeFilterCount > 0 && (
+              <span className="inline-flex items-center justify-center w-5 h-5 text-[10px] font-bold bg-primary-500 text-white rounded-full">
+                {activeFilterCount}
+              </span>
+            )}
+          </button>
+          {hasFilters && (
+            <button
+              onClick={resetFilters}
+              className="btn-secondary !py-2 text-sm"
+            >
+              Tozalash
+            </button>
+          )}
+          {data && (
+            <span className="ml-auto self-center text-xs text-gray-400 dark:text-slate-500">
+              Jami:{" "}
+              <span className="font-semibold text-gray-600 dark:text-slate-300">
+                {data.total}
+              </span>{" "}
+              ta
+            </span>
+          )}
+        </div>
+
+        {showFilters && (
+          <div className="mt-4 pt-4 border-t border-gray-100 dark:border-slate-700">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+              <FilterSelect
+                label="Test"
+                value={filterTestId}
+                onChange={(v) => {
+                  setFilterTestId(v);
+                  setPage(1);
+                }}
+                options={tests.map((t) => ({
+                  value: String(t.id),
+                  label: t.name,
+                }))}
+              />
+              <FilterSelect
+                label="Holat"
+                value={filterStateId}
+                onChange={(v) => {
+                  setFilterStateId(v);
+                  setPage(1);
+                }}
+                options={sessionStates.map((s) => ({
+                  value: String(s.id),
+                  label: s.name,
+                }))}
+              />
+              <FilterSelect
+                label="Faolligi"
+                value={filterActive}
+                onChange={(v) => {
+                  setFilterActive(v);
+                  setPage(1);
+                }}
+                options={[
+                  { value: "true", label: "Faol" },
+                  { value: "false", label: "Faol emas" },
+                ]}
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Table */}
@@ -425,6 +553,41 @@ export default function TestSessionsPage() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function FilterSelect({
+  label,
+  value,
+  onChange,
+  options,
+  disabled,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: { value: string; label: string }[];
+  disabled?: boolean;
+}) {
+  return (
+    <div>
+      <label className="block text-[10px] uppercase tracking-wider text-gray-500 dark:text-slate-400 mb-1 font-semibold">
+        {label}
+      </label>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={disabled}
+        className="input-field !py-1.5 !text-sm w-full disabled:opacity-50"
+      >
+        <option value="">Barchasi</option>
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
     </div>
   );
 }

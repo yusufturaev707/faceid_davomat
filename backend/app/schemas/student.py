@@ -1,6 +1,6 @@
 """Pydantic schemas for Student, StudentLog, CheatingLog."""
 
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import BaseModel, Field
 
@@ -174,6 +174,33 @@ class NotEnteredStudentsResponse(BaseModel):
     roster_total: int = 0
 
 
+class RejectedStudentItem(BaseModel):
+    """Chetlatilgan (`is_cheating=True`) talaba — ro'yxat formati.
+
+    Asosiy identifikatsiya maydonlari `NotEnteredStudentItem` bilan bir xil,
+    qo'shimcha sifatida `rejection_type` (ReasonType.name) va
+    `rejection_reason` (Reason.name) qaytariladi — bu ma'lumotlar
+    `CheatingLog` jadvalidagi `reason_id` orqali olinadi.
+    """
+
+    last_name: str
+    first_name: str
+    middle_name: str | None = None
+    imei: str | None = None
+    gr_n: int = 0
+    zone_name: str = ""
+    rejection_type: str = ""
+    rejection_reason: str = ""
+
+
+class RejectedStudentsResponse(BaseModel):
+    """Tanlangan test/sana/smena + zone kesimida chetlatilgan talabalar."""
+
+    items: list[RejectedStudentItem]
+    total: int
+    roster_total: int = 0
+
+
 # --- StudentLog ---
 
 
@@ -318,7 +345,11 @@ class CheatingLogUpdate(BaseModel):
 
 
 class CheatingLogResponse(BaseModel):
-    """Cheating log yozuvi."""
+    """Cheating log yozuvi.
+
+    `reason_name` — back-compat (eski mijozlar uchun). Yangi mijozlar
+    `rejection_reason`/`rejection_type`'ni ishlatishi tavsiya etiladi.
+    """
 
     id: int
     student_id: int
@@ -328,6 +359,16 @@ class CheatingLogResponse(BaseModel):
     student_full_name: str | None = None
     reason_name: str | None = None
     username: str | None = None
+    # Extended: chetlatish kontekst maydonlari
+    imei: str | None = None
+    rejection_type: str | None = None
+    rejection_reason: str | None = None
+    test_name: str | None = None
+    region_name: str | None = None
+    zone_name: str | None = None
+    smena_date: date | None = None
+    smena_name: str | None = None
+    rejected_at: datetime | None = None
 
     model_config = {"from_attributes": True}
 

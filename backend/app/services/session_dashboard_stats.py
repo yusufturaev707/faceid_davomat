@@ -3,6 +3,17 @@
 Bir bloklangan tarzda (single function) `(session, session_smena)` uchun
 4 ta asosiy summa va har bir region bo'yicha taqsimotni hisoblaydi.
 
+Asosiy hisoblash qoidasi (Jami = Keldi + Kelmadi):
+  Keldi (attended)         = is_entered OR is_cheating           — binoga kelganlar
+                                                                   (kirishda yoki test ichida
+                                                                   chetlatilganlar ham qo'shiladi)
+  Kelmadi (not_attended)   = NOT is_entered AND NOT is_cheating  — umuman kelmagan
+  Chetlatish (cheating)    = is_cheating                         — barcha chetlatilganlar
+                                                                   (Keldi'ning bir qismi, info)
+
+CheatingStat.at_entry/during_test/other — reason_type bo'yicha breakdown
+(cheating.total ga teng: at_entry + during_test + other).
+
 Tezlik: 2 ta SELECT (studentlar + cheating loglari). Python tarafida
 agregatsiya — ming-o'n minglab qatordan ortiq bo'lsa SQL `GROUP BY` ga
 ko'chirish kerak (kelajakda).
@@ -34,6 +45,7 @@ from app.schemas.dashboard_stats import (
     GenderStat,
     RegionStatItem,
     StatGroup,
+    ZoneStatItem,
 )
 
 logger = logging.getLogger("faceid.services.dashboard_stats")
@@ -100,21 +112,29 @@ def _add_student_to_tally(
     gender_key: int | None,
     cheating_reason_type_key: int | None,
 ) -> None:
+    # Tenglik: total = attended + not_attended
+    #   attended      = is_entered OR is_cheating               (Keldi — binoga kelgan,
+    #                                                            kirishda yoki testda
+    #                                                            chetlatilgan bo'lsa ham)
+    #   not_attended  = NOT is_entered AND NOT is_cheating      (Kelmadi — umuman kelmagan)
+    #   cheating_total= is_cheating                             (Chetlatish — Keldi'ning info qismi)
     gb = _gender_bucket(gender_key)
 
     # Total
     tally.total += 1
     setattr(tally, f"total_{gb}", getattr(tally, f"total_{gb}") + 1)
 
-    # Attended / not attended
-    if is_entered:
+    # Attended (Keldi) — kelganlar (verifydan o'tgan yoki chetlatilgan)
+    if is_entered or is_cheating:
         tally.attended += 1
         setattr(tally, f"attended_{gb}", getattr(tally, f"attended_{gb}") + 1)
-    else:
+
+    # Not attended (Kelmadi) — umuman kelmagan, chetlatilmagan
+    if not is_entered and not is_cheating:
         tally.not_attended += 1
         setattr(tally, f"not_attended_{gb}", getattr(tally, f"not_attended_{gb}") + 1)
 
-    # Cheating
+    # Cheating total — barcha chetlatilganlar (Keldi'ning bir qismi, info)
     if is_cheating:
         tally.cheating_total += 1
         setattr(tally, f"cheating_{gb}", getattr(tally, f"cheating_{gb}") + 1)
@@ -179,13 +199,16 @@ def get_dashboard_stats(
     state = db.get(SessionState, session.test_state_id) if session.test_state_id else None
     state_key = int(state.key) if state else 0
 
-    # 1) Studentlar — region/gender bilan birga
+    # 1) Studentlar — region/zone/gender bilan birga
     student_rows = db.execute(
         select(
             Student.id,
             Student.is_entered,
             Student.is_cheating,
+            Student.zone_id,
             Zone.region_id,
+            Zone.number.label("zone_number"),
+            Zone.name.label("zone_name"),
             Region.number.label("region_number"),
             Region.name.label("region_name"),
             Gender.key.label("gender_key"),
@@ -219,13 +242,25 @@ def get_dashboard_stats(
     # Agregatsiya
     summary = _Tally()
     by_region: dict[int, _Tally] = defaultdict(_Tally)
-    region_meta: dict[int, tuple[int, str]] = {}  # region_id → (number, name)
+    by_zone: dict[int, _Tally] = defaultdict(_Tally)
+    region_meta: dict[int, tuple[int, str]] = {}    # region_id → (number, name)
+    zone_meta: dict[int, tuple[int, str]] = {}      # zone_id → (number, name)
+    # Region → ichidagi zone ID'lari ro'yxati (unique, kelishi tartibida).
+    zones_by_region: dict[int, list[int]] = defaultdict(list)
+    seen_zones: set[int] = set()
 
     for row in student_rows:
         region_id = int(row.region_id)
+        zone_id = int(row.zone_id)
         region_meta.setdefault(
             region_id, (int(row.region_number or 0), str(row.region_name or ""))
         )
+        zone_meta.setdefault(
+            zone_id, (int(row.zone_number or 0), str(row.zone_name or ""))
+        )
+        if zone_id not in seen_zones:
+            seen_zones.add(zone_id)
+            zones_by_region[region_id].append(zone_id)
         rt_key = cheating_map.get(int(row.id)) if row.is_cheating else None
 
         _add_student_to_tally(
@@ -242,8 +277,16 @@ def get_dashboard_stats(
             gender_key=row.gender_key,
             cheating_reason_type_key=rt_key,
         )
+        _add_student_to_tally(
+            by_zone[zone_id],
+            is_entered=bool(row.is_entered),
+            is_cheating=bool(row.is_cheating),
+            gender_key=row.gender_key,
+            cheating_reason_type_key=rt_key,
+        )
 
-    # Region cardlari — region.number bo'yicha tartiblangan
+    # Region cardlari — region.number bo'yicha tartiblangan; har bir
+    # region ichidagi zonalar zone.number bo'yicha.
     region_items = sorted(
         by_region.items(),
         key=lambda kv: region_meta.get(kv[0], (0, ""))[0],
@@ -251,12 +294,26 @@ def get_dashboard_stats(
     regions: list[RegionStatItem] = []
     for region_id, tally in region_items:
         num, name = region_meta.get(region_id, (0, ""))
+        zone_ids = sorted(
+            zones_by_region.get(region_id, []),
+            key=lambda zid: zone_meta.get(zid, (0, ""))[0],
+        )
+        zones_list = [
+            ZoneStatItem(
+                zone_id=zid,
+                zone_number=zone_meta.get(zid, (0, ""))[0],
+                zone_name=zone_meta.get(zid, (0, ""))[1],
+                stats=_tally_to_stat_group(by_zone[zid]),
+            )
+            for zid in zone_ids
+        ]
         regions.append(
             RegionStatItem(
                 region_id=region_id,
                 region_number=num,
                 region_name=name,
                 stats=_tally_to_stat_group(tally),
+                zones=zones_list,
             )
         )
 

@@ -38,6 +38,8 @@ export default function BlacklistPage() {
       createPermission={PERM.LOOKUP_CREATE}
       updatePermission={PERM.LOOKUP_UPDATE}
       deletePermission={PERM.LOOKUP_DELETE}
+      searchKeys={["imei", "description"]}
+      searchPlaceholder="JSHSHIR yoki izoh bo'yicha qidirish..."
     />
   );
 }

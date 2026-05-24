@@ -43,7 +43,11 @@
       "Bash(Get-ChildItem -Path \"C:/FastApi/faceid/backend\" -Recurse -Name)",
       "Bash(Select-Object -First 50)",
       "Bash(dir /s /b *.py)",
-      "Bash(findstr /v __pycache__)"
+      "Bash(findstr /v __pycache__)",
+      "Bash(python)",
+      "Bash(python _apply_tabs_refactor.py)",
+      "Bash(rm _apply_tabs_refactor.py)",
+      "Bash(xargs grep -l \"test.session\\\\|test-session\")"
     ]
   }
 }

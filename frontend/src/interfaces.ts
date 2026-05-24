@@ -352,11 +352,19 @@ export interface StatGroup {
   cheating: CheatingStat;
 }
 
+export interface ZoneStatItem {
+  zone_id: number;
+  zone_number: number;
+  zone_name: string;
+  stats: StatGroup;
+}
+
 export interface RegionStatItem {
   region_id: number;
   region_number: number;
   region_name: string;
   stats: StatGroup;
+  zones: ZoneStatItem[];
 }
 
 export interface DashboardStatsResponse {
@@ -820,6 +828,15 @@ export interface CheatingLogResponse {
   student_full_name: string | null;
   reason_name: string | null;
   username: string | null;
+  imei: string | null;
+  rejection_type: string | null;
+  rejection_reason: string | null;
+  test_name: string | null;
+  region_name: string | null;
+  zone_name: string | null;
+  smena_date: string | null;
+  smena_name: string | null;
+  rejected_at: string | null;
 }
 
 export interface CheatingLogListResponse {

@@ -7,6 +7,7 @@ import type {
   StatGroup,
   TestSessionResponse,
   TestSessionSmenaResponse,
+  ZoneStatItem,
 } from "../interfaces";
 import {
   getSessionDashboardStatsApi,
@@ -101,6 +102,15 @@ export default function StatisticsPage() {
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Viloyat card bosilganda — shu region zonalari modal'da ko'rsatiladi.
+  // Polling natijasi bilan birga avtomatik yangilanishi uchun region_id'ni
+  // saqlaymiz, modal render bo'lganda `stats.regions`'dan freshini topadi.
+  const [openedRegionId, setOpenedRegionId] = useState<number | null>(null);
+  const openedRegion =
+    openedRegionId != null
+      ? stats?.regions.find((r) => r.region_id === openedRegionId) ?? null
+      : null;
 
   // === Statuslar (SessionState) ro'yxatini yuklash ===
   useEffect(() => {
@@ -356,13 +366,14 @@ export default function StatisticsPage() {
               </option>
               {sessions.map((s) => {
                 const c = getStateColor(s.test_state?.key);
+                const testName = s.test?.name || s.name;
                 return (
                   <option
                     key={s.id}
                     value={s.id}
                     style={{ color: c.hex, fontWeight: 600 }}
                   >
-                    #{s.number} · {s.name}
+                    {testName} · {s.start_date}
                   </option>
                 );
               })}
@@ -496,9 +507,20 @@ export default function StatisticsPage() {
           {stats.regions.length === 0 ? (
             <EmptyHint text="Bu sessiya/smena uchun talabgorlar topilmadi" />
           ) : (
-            <RegionGrid regions={stats.regions} />
+            <RegionGrid
+              regions={stats.regions}
+              onRegionClick={(r) => setOpenedRegionId(r.region_id)}
+            />
           )}
         </>
+      )}
+
+      {/* Region zone breakdown modali */}
+      {openedRegion && (
+        <RegionZonesModal
+          region={openedRegion}
+          onClose={() => setOpenedRegionId(null)}
+        />
       )}
     </div>
   );
@@ -673,7 +695,13 @@ function GenderChip({
  *
  * Mobile (<lg) da bitta ustun bo'ladi va tabiiy ravishda 1..N tartib saqlanadi.
  */
-function RegionGrid({ regions }: { regions: RegionStatItem[] }) {
+function RegionGrid({
+  regions,
+  onRegionClick,
+}: {
+  regions: RegionStatItem[];
+  onRegionClick: (r: RegionStatItem) => void;
+}) {
   const mid = Math.ceil(regions.length / 2);
   const leftCol = regions.slice(0, mid);
   const rightCol = regions.slice(mid);
@@ -681,7 +709,11 @@ function RegionGrid({ regions }: { regions: RegionStatItem[] }) {
   const renderColumn = (col: RegionStatItem[]) => (
     <div className="flex flex-col gap-2.5 sm:gap-3">
       {col.map((r) => (
-        <RegionCard key={r.region_id} item={r} />
+        <RegionCard
+          key={r.region_id}
+          item={r}
+          onClick={() => onRegionClick(r)}
+        />
       ))}
     </div>
   );
@@ -695,7 +727,13 @@ function RegionGrid({ regions }: { regions: RegionStatItem[] }) {
 }
 
 /** Material 3 uslubidagi region kartochkasi. */
-function RegionCard({ item }: { item: RegionStatItem }) {
+function RegionCard({
+  item,
+  onClick,
+}: {
+  item: RegionStatItem;
+  onClick?: () => void;
+}) {
   const total = item.stats.total.total;
   const attended = item.stats.attended.total;
   const attendancePercent =
@@ -715,10 +753,28 @@ function RegionCard({ item }: { item: RegionStatItem }) {
       ? "text-amber-700 dark:text-amber-300"
       : "text-red-700 dark:text-red-300";
 
+  const zoneCount = item.zones?.length ?? 0;
+
   return (
     <article
-      className="glass-card p-3 sm:p-3.5 hover:-translate-y-0.5 transition-transform duration-200 group"
-      aria-label={`Region ${item.region_number}: ${item.region_name}`}
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onClick={onClick}
+      onKeyDown={(e) => {
+        if (!onClick) return;
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick();
+        }
+      }}
+      className={`glass-card p-3 sm:p-3.5 hover:-translate-y-0.5 transition-all duration-200 group ${
+        onClick
+          ? "cursor-pointer hover:shadow-md hover:ring-1 hover:ring-primary-200 dark:hover:ring-primary-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400"
+          : ""
+      }`}
+      aria-label={`Region ${item.region_number}: ${item.region_name}${
+        onClick ? " — binolar bo'yicha taqsimotni ochish" : ""
+      }`}
     >
       {/* Header: badge + nom + davomat % */}
       <header className="flex items-center justify-between gap-2.5 mb-2.5">
@@ -778,6 +834,36 @@ function RegionCard({ item }: { item: RegionStatItem }) {
         <MiniStat label="Kelmagan" breakdown={item.stats.not_attended} accent="warning" />
         <MiniCheating cheating={item.stats.cheating} />
       </div>
+
+      {/* Footer — binolar soni + "ko'rsatish" affordance (faqat clickable bo'lsa) */}
+      {onClick && (
+        <div className="mt-2.5 flex items-center justify-between text-[11px] text-gray-500 dark:text-slate-400">
+          <span className="inline-flex items-center gap-1">
+            <BuildingIcon className="w-3.5 h-3.5" />
+            <span>
+              {zoneCount > 0
+                ? `${zoneCount} ta bino`
+                : "Bino ma'lumotsiz"}
+            </span>
+          </span>
+          <span className="inline-flex items-center gap-0.5 font-medium text-primary-600 dark:text-primary-400 opacity-0 group-hover:opacity-100 transition-opacity">
+            Batafsil
+            <svg
+              className="w-3 h-3"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2.5}
+                d="M9 5l7 7-7 7"
+              />
+            </svg>
+          </span>
+        </div>
+      )}
     </article>
   );
 }
@@ -868,6 +954,245 @@ function MiniCheating({ cheating }: { cheating: StatGroup["cheating"] }) {
         </span>
       </div>
     </div>
+  );
+}
+
+/* ============== Region Zones Modal ============== */
+
+/**
+ * Material Design 3 uslubidagi modal — viloyat ichidagi binolar bo'yicha
+ * statistika taqsimoti. RegionCard bosilganda ochiladi. Stats polling yangi
+ * ma'lumot kelganda parent `openedRegion`'ni `stats.regions`'dan qaytadan
+ * topadi, shuning uchun modal real-time'da ham yangilanadi.
+ */
+function RegionZonesModal({
+  region,
+  onClose,
+}: {
+  region: RegionStatItem;
+  onClose: () => void;
+}) {
+  // ESC bosilganda yopish
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", handler);
+    // Body scroll'ni vaqtincha to'xtatamiz — modal scrollida adashmaslik uchun
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", handler);
+      document.body.style.overflow = prev;
+    };
+  }, [onClose]);
+
+  const total = region.stats.total.total;
+  const attended = region.stats.attended.total;
+  const attendancePercent =
+    total > 0 ? Math.round((attended / total) * 1000) / 10 : 0;
+
+  const percentTone =
+    attendancePercent >= 75
+      ? "from-emerald-400 to-emerald-600"
+      : attendancePercent >= 50
+        ? "from-amber-400 to-amber-500"
+        : "from-red-400 to-red-500";
+  const percentText =
+    attendancePercent >= 75
+      ? "text-emerald-700 dark:text-emerald-300"
+      : attendancePercent >= 50
+        ? "text-amber-700 dark:text-amber-300"
+        : "text-red-700 dark:text-red-300";
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/45 dark:bg-black/65 backdrop-blur-[3px] animate-fade-in p-0 sm:p-4"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label={`${region.region_name} — binolar bo'yicha taqsimot`}
+    >
+      <div
+        className="md3-dialog w-full sm:max-w-4xl max-h-[92vh] overflow-hidden rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col safe-pb"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="px-5 sm:px-6 pt-5 pb-3 border-b border-gray-100 dark:border-slate-700/60">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-primary-500 to-primary-700 text-white font-bold flex items-center justify-center shadow-md shadow-primary-500/25 ring-1 ring-white/20 shrink-0">
+                <span className="text-base tabular-nums leading-none">
+                  {region.region_number}
+                </span>
+              </div>
+              <div className="min-w-0">
+                <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white truncate leading-tight">
+                  {region.region_name || `Region #${region.region_number}`}
+                </h3>
+                <p className="text-[11px] text-gray-500 dark:text-slate-400 leading-none mt-1">
+                  Binolar bo'yicha taqsimot · {region.zones.length} ta bino
+                </p>
+              </div>
+            </div>
+
+            <button
+              onClick={onClose}
+              className="p-2 rounded-full text-gray-400 hover:text-gray-700 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-slate-700/60 transition-colors shrink-0"
+              aria-label="Yopish"
+            >
+              <svg
+                className="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M6 18L18 6M6 6l12 12"
+                />
+              </svg>
+            </button>
+          </div>
+
+          {/* Region summary: davomat % + progress + 4 mini stat */}
+          <div className="mt-4">
+            <div className="flex items-end justify-between mb-1.5">
+              <span className="text-[11px] uppercase tracking-wider font-semibold text-gray-500 dark:text-slate-400">
+                Region davomati
+              </span>
+              <span
+                className={`text-xl font-bold tabular-nums leading-none ${percentText}`}
+              >
+                {attendancePercent}%
+              </span>
+            </div>
+            <div className="h-1.5 rounded-full bg-gray-100 dark:bg-slate-700/50 overflow-hidden">
+              <div
+                className={`h-full rounded-full bg-gradient-to-r ${percentTone} transition-[width] duration-500 ease-out`}
+                style={{ width: `${attendancePercent}%` }}
+              />
+            </div>
+            <div className="grid grid-cols-4 gap-1.5 sm:gap-2 mt-3">
+              <MiniStat
+                label="Umumiy"
+                breakdown={region.stats.total}
+                accent="primary"
+              />
+              <MiniStat
+                label="Kelgan"
+                breakdown={region.stats.attended}
+                accent="success"
+              />
+              <MiniStat
+                label="Kelmagan"
+                breakdown={region.stats.not_attended}
+                accent="warning"
+              />
+              <MiniCheating cheating={region.stats.cheating} />
+            </div>
+          </div>
+        </div>
+
+        {/* Body: zonalar */}
+        <div className="overflow-y-auto px-3 sm:px-4 py-3 sm:py-4">
+          {region.zones.length === 0 ? (
+            <div className="py-12 text-center text-gray-500 dark:text-slate-400 text-sm">
+              <BuildingIcon className="w-10 h-10 mx-auto mb-2 text-gray-300 dark:text-slate-600" />
+              Bu region uchun bino ma'lumotlari topilmadi
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 sm:gap-2.5">
+              {region.zones.map((z) => (
+                <ZoneCard key={z.zone_id} item={z} />
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Bino (zone) statistika kartasi — region kartasiga o'xshash, ammo kompaktroq. */
+function ZoneCard({ item }: { item: ZoneStatItem }) {
+  const total = item.stats.total.total;
+  const attended = item.stats.attended.total;
+  const attendancePercent =
+    total > 0 ? Math.round((attended / total) * 1000) / 10 : 0;
+
+  const percentTone =
+    attendancePercent >= 75
+      ? "from-emerald-400 to-emerald-600"
+      : attendancePercent >= 50
+        ? "from-amber-400 to-amber-500"
+        : "from-red-400 to-red-500";
+  const percentText =
+    attendancePercent >= 75
+      ? "text-emerald-700 dark:text-emerald-300"
+      : attendancePercent >= 50
+        ? "text-amber-700 dark:text-amber-300"
+        : "text-red-700 dark:text-red-300";
+
+  return (
+    <article
+      className="rounded-2xl bg-white dark:bg-slate-800/70 ring-1 ring-gray-100 dark:ring-slate-700/60 p-3 sm:p-3.5 hover:ring-primary-200 dark:hover:ring-primary-700/50 hover:shadow-sm transition-all duration-200"
+      aria-label={`Bino ${item.zone_number}: ${item.zone_name}`}
+    >
+      <header className="flex items-center justify-between gap-2.5 mb-2.5">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-sky-500 to-sky-700 text-white font-bold flex items-center justify-center shadow-sm shadow-sky-500/20 ring-1 ring-white/20 shrink-0">
+            <span className="text-[13px] tabular-nums leading-none">
+              {item.zone_number}
+            </span>
+          </div>
+          <div className="min-w-0">
+            <p
+              className="text-[13px] sm:text-sm font-semibold text-gray-900 dark:text-white truncate leading-tight"
+              title={item.zone_name || `Bino #${item.zone_number}`}
+            >
+              {item.zone_name || `Bino #${item.zone_number}`}
+            </p>
+            <p className="text-[10px] text-gray-500 dark:text-slate-400 leading-none mt-0.5">
+              Bino №{item.zone_number}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-col items-end shrink-0">
+          <span
+            className={`text-base font-bold tabular-nums leading-none ${percentText}`}
+          >
+            {attendancePercent}%
+          </span>
+          <span className="text-[9px] text-gray-500 dark:text-slate-400 uppercase tracking-wider leading-none mt-0.5">
+            davomat
+          </span>
+        </div>
+      </header>
+
+      <div
+        className="h-1 rounded-full bg-gray-100 dark:bg-slate-700/50 overflow-hidden mb-2.5"
+        role="progressbar"
+        aria-valuenow={attendancePercent}
+        aria-valuemin={0}
+        aria-valuemax={100}
+      >
+        <div
+          className={`h-full rounded-full bg-gradient-to-r ${percentTone} transition-[width] duration-500 ease-out`}
+          style={{ width: `${attendancePercent}%` }}
+        />
+      </div>
+
+      <div className="grid grid-cols-4 gap-1.5">
+        <MiniStat label="Umumiy" breakdown={item.stats.total} accent="primary" />
+        <MiniStat label="Kelgan" breakdown={item.stats.attended} accent="success" />
+        <MiniStat label="Kelmagan" breakdown={item.stats.not_attended} accent="warning" />
+        <MiniCheating cheating={item.stats.cheating} />
+      </div>
+    </article>
   );
 }
 
@@ -984,6 +1309,24 @@ function KeyIcon({ className = "w-4 h-4" }: { className?: string }) {
         strokeLinejoin="round"
         strokeWidth={2}
         d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"
+      />
+    </svg>
+  );
+}
+
+function BuildingIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={1.8}
+        d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0H5m14 0h2m-2 0v-5a1 1 0 00-1-1h-2a1 1 0 00-1 1v5M5 21H3m6-12h.01M9 13h.01M9 17h.01M13 9h.01M13 13h.01M13 17h.01"
       />
     </svg>
   );

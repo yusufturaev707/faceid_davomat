@@ -1172,7 +1172,9 @@ def bot_create_cheating(
     Desktop bulk endpoint bilan bir xil semantika:
       - `CheatingLog` yaratadi: `student_id` (UNIQUE), `reason_id`, `user_id`
         (= API key egasi). `image_path=None` — bot rasmsiz ishlaydi.
-      - `Student.is_cheating=True`, `Student.is_blacklist=True`.
+      - `Student.is_cheating=True`, `Student.is_blacklist=True`,
+        `Student.is_entered=True` (chetlatilgan ham binoga kelgan deb
+        hisoblanadi — statistikada Keldi'da turishi uchun).
       - `StudentBlacklist`ga (imei, description=reason.name) insert qilinadi
         (imei UNIQUE — faqat birinchi martagina, idempotent).
 
@@ -1237,6 +1239,10 @@ def bot_create_cheating(
         db.add(log)
         student.is_cheating = True
         student.is_blacklist = True
+        # Chetlatilgan ham binoga kelgan deb hisoblanadi — statistikada
+        # Keldi'da turishi uchun is_entered=True qilamiz.
+        if not student.is_entered:
+            student.is_entered = True
 
         # StudentBlacklist — imei UNIQUE; faqat birinchi martagina insert
         # qilinadi (keyingi chetlatishlarda tegilmaydi). Imei student'dan

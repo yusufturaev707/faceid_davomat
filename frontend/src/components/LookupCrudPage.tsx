@@ -56,6 +56,10 @@ interface Props<T extends { id: number }> {
   createPermission?: string;
   updatePermission?: string;
   deletePermission?: string;
+  /** If set, shows a search input that filters client-side on these item keys
+   *  (case-insensitive substring match). Pagination + total auto-update. */
+  searchKeys?: string[];
+  searchPlaceholder?: string;
 }
 
 export default function LookupCrudPage<T extends { id: number; is_active?: boolean }>({
@@ -70,10 +74,17 @@ export default function LookupCrudPage<T extends { id: number; is_active?: boole
   createPermission,
   updatePermission,
   deletePermission,
+  searchKeys,
+  searchPlaceholder,
 }: Props<T>) {
   const [items, setItems] = useState<T[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  // Search — faqat `searchKeys` prop berilgan sahifalarda yoqiladi.
+  // Client-side filter: lookup ro'yxatlari odatda kichik (1k atrofida),
+  // shuning uchun debounce yoki backend search shart emas.
+  const [search, setSearch] = useState("");
 
   // Modal
   const [showModal, setShowModal] = useState(false);
@@ -93,16 +104,33 @@ export default function LookupCrudPage<T extends { id: number; is_active?: boole
     load();
   }, []);
 
-  const totalPages = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
+  const filteredItems = useMemo(() => {
+    if (!searchKeys || searchKeys.length === 0) return items;
+    const q = search.trim().toLowerCase();
+    if (!q) return items;
+    return items.filter((it) =>
+      searchKeys.some((k) => {
+        const val = (it as any)[k];
+        return val != null && String(val).toLowerCase().includes(q);
+      }),
+    );
+  }, [items, search, searchKeys]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredItems.length / PAGE_SIZE));
 
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
   }, [page, totalPages]);
 
+  // Search o'zgarganda sahifa 1 ga qaytadi — natija ko'rinmay qolmasligi uchun.
+  useEffect(() => {
+    setPage(1);
+  }, [search]);
+
   const pagedItems = useMemo(() => {
     const start = (page - 1) * PAGE_SIZE;
-    return items.slice(start, start + PAGE_SIZE);
-  }, [items, page]);
+    return filteredItems.slice(start, start + PAGE_SIZE);
+  }, [filteredItems, page]);
 
   async function load() {
     try {
@@ -226,6 +254,55 @@ export default function LookupCrudPage<T extends { id: number; is_active?: boole
         </div>
       )}
 
+      {/* Search */}
+      {searchKeys && searchKeys.length > 0 && (
+        <div className="mb-4">
+          <div className="relative max-w-md">
+            <svg
+              className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+              />
+            </svg>
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={searchPlaceholder || "Qidirish..."}
+              className="input-field !py-2 !pl-9 !text-sm w-full"
+            />
+            {search && (
+              <button
+                onClick={() => setSearch("")}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600 dark:hover:text-slate-300"
+                title="Tozalash"
+              >
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Table */}
       <div className="glass-card overflow-hidden">
         <div className="overflow-x-auto" style={{ WebkitOverflowScrolling: "touch" }}>
@@ -314,10 +391,12 @@ export default function LookupCrudPage<T extends { id: number; is_active?: boole
                 </td>
               </tr>
             ))}
-            {items.length === 0 && (
+            {filteredItems.length === 0 && (
               <tr>
                 <td colSpan={columns.length + 2} className="px-5 py-12 text-center text-gray-400 dark:text-slate-500">
-                  Ma'lumot yo'q
+                  {search.trim()
+                    ? "Qidiruv bo'yicha topilmadi"
+                    : "Ma'lumot yo'q"}
                 </td>
               </tr>
             )}
@@ -328,7 +407,11 @@ export default function LookupCrudPage<T extends { id: number; is_active?: boole
 
       <Pagination page={page} pages={totalPages} onPageChange={setPage} />
 
-      <p className="mt-3 text-xs text-gray-400 dark:text-slate-500">Jami: {items.length}</p>
+      <p className="mt-3 text-xs text-gray-400 dark:text-slate-500">
+        {search.trim() && searchKeys && searchKeys.length > 0
+          ? `Topildi: ${filteredItems.length} / ${items.length}`
+          : `Jami: ${items.length}`}
+      </p>
 
       {/* Create / Edit Modal */}
       {showModal && (

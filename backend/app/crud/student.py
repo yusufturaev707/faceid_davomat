@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.models.cheating_log import CheatingLog
 from app.models.gender import Gender
 from app.models.reason import Reason
+from app.models.reason_type import ReasonType
 from app.models.region import Region
 from app.models.smena import Smena
 from app.models.student import Student
@@ -738,7 +739,9 @@ def bulk_create_student_logs(
       - StudentLog yozuvi yaratiladi yoki yangilanadi (student_id unique).
       - Agar is_rejected=True bo'lsa:
           * CheatingLog ga (student_id, reason_id, user_id) insert qilinadi.
-          * Student.is_cheating=True, is_blacklist=True.
+          * Student.is_cheating=True, is_blacklist=True, is_entered=True
+            (chetlatilgan ham binoga kelgan deb hisoblanadi — statistikada
+            Keldi'da turishi uchun).
           * StudentBlacklist jadvaliga (imei, description=reason_name) insert
             qilinadi. Bu jadval insert-only — hech qachon update qilinmaydi.
       - Aks holda Student.is_entered=True.
@@ -855,6 +858,10 @@ def bulk_create_student_logs(
                     student.is_cheating = True
                 if not student.is_blacklist:
                     student.is_blacklist = True
+                # Chetlatilgan bo'lsa ham binoga kelgan deb hisoblanadi —
+                # statistikada Keldi'da turishi uchun is_entered=True qilamiz.
+                if not student.is_entered:
+                    student.is_entered = True
             else:
                 if not student.is_entered:
                     student.is_entered = True
@@ -916,32 +923,108 @@ def get_cheating_logs_paginated(
     page: int = 1,
     per_page: int = 20,
     student_id: int | None = None,
+    search: str | None = None,
+    test_id: int | None = None,
+    region_id: int | None = None,
+    zone_id: int | None = None,
+    smena_id: int | None = None,
+    reason_id: int | None = None,
+    reason_type_id: int | None = None,
+    date_from: "str | None" = None,
+    date_to: "str | None" = None,
 ) -> tuple[list[dict], int]:
+    """Cheating loglar ro'yxati — search/filterlar bilan paginated.
+
+    JOIN'lar: Student → Zone → Region; Student → TestSessionSmena → TestSession
+    → Test; TestSessionSmena → Smena; Reason → ReasonType (optional).
+    """
     stmt = (
         select(
             CheatingLog,
-            func.concat(Student.last_name, " ", Student.first_name).label(
-                "student_full_name"
-            ),
+            func.concat(
+                Student.last_name, " ", Student.first_name, " ",
+                func.coalesce(Student.middle_name, ""),
+            ).label("student_full_name"),
+            Student.imei.label("imei"),
             Reason.name.label("reason_name"),
+            ReasonType.name.label("rejection_type"),
+            Test.name.label("test_name"),
+            Region.name.label("region_name"),
+            Zone.name.label("zone_name"),
+            TestSessionSmena.day.label("smena_date"),
+            Smena.name.label("smena_name"),
             User.username.label("username"),
         )
         .join(Student, CheatingLog.student_id == Student.id)
         .join(Reason, CheatingLog.reason_id == Reason.id)
+        .outerjoin(ReasonType, ReasonType.id == Reason.reason_type_id)
         .join(User, CheatingLog.user_id == User.id)
-        .order_by(CheatingLog.id.desc())
+        .outerjoin(Zone, Zone.id == Student.zone_id)
+        .outerjoin(Region, Region.id == Zone.region_id)
+        .outerjoin(
+            TestSessionSmena,
+            TestSessionSmena.id == Student.session_smena_id,
+        )
+        .outerjoin(TestSession, TestSession.id == TestSessionSmena.test_session_id)
+        .outerjoin(Test, Test.id == TestSession.test_id)
+        .outerjoin(Smena, Smena.id == TestSessionSmena.test_smena_id)
+        .order_by(CheatingLog.created_at.desc(), CheatingLog.id.desc())
     )
-    count_stmt = select(func.count(CheatingLog.id))
+    count_stmt = (
+        select(func.count(CheatingLog.id))
+        .select_from(CheatingLog)
+        .join(Student, CheatingLog.student_id == Student.id)
+        .join(Reason, CheatingLog.reason_id == Reason.id)
+        .outerjoin(Zone, Zone.id == Student.zone_id)
+        .outerjoin(
+            TestSessionSmena,
+            TestSessionSmena.id == Student.session_smena_id,
+        )
+        .outerjoin(TestSession, TestSession.id == TestSessionSmena.test_session_id)
+    )
 
-    if student_id is not None:
-        stmt = stmt.where(CheatingLog.student_id == student_id)
-        count_stmt = count_stmt.where(CheatingLog.student_id == student_id)
+    def _apply(s):
+        if student_id is not None:
+            s = s.where(CheatingLog.student_id == student_id)
+        if search:
+            like = f"%{search.strip().lower()}%"
+            s = s.where(
+                func.lower(
+                    func.concat(
+                        func.coalesce(Student.last_name, ""), " ",
+                        func.coalesce(Student.first_name, ""), " ",
+                        func.coalesce(Student.middle_name, ""), " ",
+                        func.coalesce(Student.imei, ""),
+                    )
+                ).like(like)
+            )
+        if test_id is not None:
+            s = s.where(TestSession.test_id == test_id)
+        if region_id is not None:
+            s = s.where(Zone.region_id == region_id)
+        if zone_id is not None:
+            s = s.where(Student.zone_id == zone_id)
+        if smena_id is not None:
+            s = s.where(TestSessionSmena.test_smena_id == smena_id)
+        if reason_id is not None:
+            s = s.where(CheatingLog.reason_id == reason_id)
+        if reason_type_id is not None:
+            s = s.where(Reason.reason_type_id == reason_type_id)
+        if date_from:
+            s = s.where(TestSessionSmena.day >= date_from)
+        if date_to:
+            s = s.where(TestSessionSmena.day <= date_to)
+        return s
+
+    stmt = _apply(stmt)
+    count_stmt = _apply(count_stmt)
 
     total = db.execute(count_stmt).scalar() or 0
     rows = db.execute(stmt.offset((page - 1) * per_page).limit(per_page)).all()
 
     items = []
-    for log, student_full_name, reason_name, username in rows:
+    for row in rows:
+        log = row.CheatingLog
         items.append(
             {
                 "id": log.id,
@@ -949,9 +1032,18 @@ def get_cheating_logs_paginated(
                 "reason_id": log.reason_id,
                 "user_id": log.user_id,
                 "image_path": log.image_path,
-                "student_full_name": student_full_name,
-                "reason_name": reason_name,
-                "username": username,
+                "student_full_name": (row.student_full_name or "").strip(),
+                "reason_name": row.reason_name,
+                "username": row.username,
+                "imei": row.imei,
+                "rejection_type": row.rejection_type,
+                "rejection_reason": row.reason_name,
+                "test_name": row.test_name,
+                "region_name": row.region_name,
+                "zone_name": row.zone_name,
+                "smena_date": row.smena_date,
+                "smena_name": row.smena_name,
+                "rejected_at": log.created_at,
             }
         )
 
