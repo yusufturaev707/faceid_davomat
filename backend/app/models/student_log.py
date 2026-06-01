@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import BigInteger, ForeignKey, LargeBinary, String, Text
+from sqlalchemy import BigInteger, ForeignKey, LargeBinary, String, TIMESTAMP, Text
 from sqlalchemy.dialects.postgresql import INET
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -16,8 +16,12 @@ class StudentLog(Base):
     )
     first_captured: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     last_captured: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
-    first_enter_time: Mapped[datetime | None] = mapped_column(nullable=True)
-    last_enter_time: Mapped[datetime | None] = mapped_column(nullable=True)
+    first_enter_time: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=True
+    )
+    last_enter_time: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=True
+    )
     score: Mapped[int] = mapped_column(default=0)
     max_score: Mapped[int] = mapped_column(default=0)
     is_check_hand: Mapped[bool] = mapped_column(default=False)

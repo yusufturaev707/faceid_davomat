@@ -12,10 +12,11 @@ from __future__ import annotations
 import base64
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from app.core.permissions import P
+from app.core.rate_limit import limiter
 from app.dependencies import PermissionChecker
 from app.models.user import User
 from app.services.gtsp_client import GtspError, GtspNotConfigured, fetch_gtsp_data
@@ -25,9 +26,13 @@ router = APIRouter()
 
 
 class PasportInfoRequest(BaseModel):
-    ps_ser: str = Field(..., min_length=1, max_length=5, description="Pasport seriyasi, masalan AD")
+    ps_ser: str = Field(
+        ..., min_length=1, max_length=5, description="Pasport seriyasi, masalan AD"
+    )
     ps_num: str = Field(..., min_length=1, max_length=10, description="Pasport raqami")
-    imei: str | None = Field(default=None, max_length=14, description="IMEI (ixtiyoriy)")
+    imei: str | None = Field(
+        default=None, max_length=14, description="IMEI (ixtiyoriy)"
+    )
 
 
 class PasportInfoResponse(BaseModel):
@@ -66,7 +71,9 @@ def _sex_label(sex: int | None) -> str | None:
     response_model=PasportInfoResponse,
     summary="Pasport ma'lumotlari (GTSP)",
 )
+@limiter.limit("60/minute")
 def get_pasport_info(
+    request: Request,
     body: PasportInfoRequest,
     _: User = Depends(PermissionChecker(P.PASPORT_INFO_READ.code)),
 ) -> PasportInfoResponse:
@@ -90,9 +97,9 @@ def get_pasport_info(
 
     photo_dataurl: str | None = None
     if result.photo:
-        photo_dataurl = (
-            "data:image/jpeg;base64," + base64.b64encode(result.photo).decode("ascii")
-        )
+        photo_dataurl = "data:image/jpeg;base64," + base64.b64encode(
+            result.photo
+        ).decode("ascii")
 
     return PasportInfoResponse(
         last_name=result.last_name,

@@ -97,8 +97,11 @@ def login(
     ip = get_remote_address(request)
     ua = request.headers.get("user-agent")
     user = authenticate_user(
-        db, form_data.username, form_data.password,
-        ip_address=ip, user_agent=ua,
+        db,
+        form_data.username,
+        form_data.password,
+        ip_address=ip,
+        user_agent=ua,
     )
     access_token, refresh_token, _jti = create_token_pair(db, user)
 
@@ -141,6 +144,7 @@ def refresh(
 
 
 @router.post("/logout", summary="Tizimdan chiqish")
+@limiter.limit("30/minute")
 def logout(
     request: Request,
     response: Response,

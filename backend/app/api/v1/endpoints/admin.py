@@ -84,7 +84,9 @@ def _safe_image_path(base_dir: str, filename: str, suffix: str) -> str:
 
 
 @router.get("/logs", response_model=PaginatedLogs, summary="Tekshiruv loglari")
+@limiter.limit("120/minute")
 def get_logs(
+    request: Request,
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=100),
     user_id: int | None = Query(None),
@@ -158,7 +160,9 @@ def get_log_image(
 
 
 @router.get("/stats", response_model=DashboardStats, summary="Dashboard statistikasi")
+@limiter.limit("60/minute")
 def get_stats(
+    request: Request,
     db: Session = Depends(get_db),
     _: User = Depends(PermissionChecker(P.DASHBOARD_STATS.code, P.DASHBOARD_READ.code)),
 ) -> DashboardStats:
@@ -169,7 +173,9 @@ def get_stats(
 @router.get(
     "/users", response_model=list[UserResponse], summary="Foydalanuvchilar ro'yxati"
 )
+@limiter.limit("60/minute")
 def list_users(
+    request: Request,
     db: Session = Depends(get_db),
     _: User = Depends(PermissionChecker(P.USER_READ.code)),
 ) -> list[UserResponse]:
@@ -194,10 +200,7 @@ def create_new_user(
 
     Xavfsizlik: admin (key=1) rolini biriktirish faqat super-admin (id=1) huquqida.
     """
-    if (
-        _is_admin_role(db, data.role_id)
-        and current_user.id != SUPER_ADMIN_USER_ID
-    ):
+    if _is_admin_role(db, data.role_id) and current_user.id != SUPER_ADMIN_USER_ID:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Admin rolini biriktirish faqat super-admin (id=1) huquqida",
@@ -249,9 +252,8 @@ def update_existing_user(
             target_is_admin = target.role_key == ADMIN_ROLE_KEY
             new_is_admin = _is_admin_role(db, provided["role_id"])
             if (
-                (target_is_admin or new_is_admin)
-                and current_user.id != SUPER_ADMIN_USER_ID
-            ):
+                target_is_admin or new_is_admin
+            ) and current_user.id != SUPER_ADMIN_USER_ID:
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail=(
@@ -291,7 +293,9 @@ def delete_existing_user(
 @router.get(
     "/face-logs", response_model=PaginatedFaceLogs, summary="Yuz solishtirish loglari"
 )
+@limiter.limit("120/minute")
 def get_face_logs(
+    request: Request,
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=100),
     user_id: int | None = Query(None),
@@ -381,7 +385,9 @@ def get_face_log_image(
     response_model=DashboardStats,
     summary="Yuz solishtirish statistikasi",
 )
+@limiter.limit("60/minute")
 def get_face_stats(
+    request: Request,
     db: Session = Depends(get_db),
     _: User = Depends(PermissionChecker(P.DASHBOARD_STATS.code, P.DASHBOARD_READ.code)),
 ) -> DashboardStats:
@@ -419,7 +425,9 @@ def create_new_api_key(
 @router.get(
     "/api-keys", response_model=list[ApiKeyResponse], summary="API kalitlar ro'yxati"
 )
+@limiter.limit("60/minute")
 def list_api_keys(
+    request: Request,
     db: Session = Depends(get_db),
     _: User = Depends(PermissionChecker(P.API_KEY_READ.code)),
 ) -> list[ApiKeyResponse]:
@@ -453,7 +461,9 @@ def delete_api_key(
     response_model=list[FailedLoginAttemptResponse],
     summary="Failed login urinishlari (audit)",
 )
+@limiter.limit("60/minute")
 def list_failed_logins(
+    request: Request,
     username: str | None = Query(None),
     since: datetime | None = Query(None),
     limit: int = Query(100, ge=1, le=500),
@@ -482,7 +492,9 @@ def list_failed_logins(
     "/failed-logins/count",
     summary="Failed login soni (audit)",
 )
+@limiter.limit("60/minute")
 def count_failed_logins(
+    request: Request,
     username: str | None = Query(None),
     since: datetime | None = Query(None),
     db: Session = Depends(get_db),

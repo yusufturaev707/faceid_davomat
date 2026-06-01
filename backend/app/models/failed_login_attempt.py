@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import String, func
+from sqlalchemy import String, TIMESTAMP, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -22,5 +22,5 @@ class FailedLoginAttempt(Base):
     # Sabab: 'no_user', 'wrong_password', 'inactive', 'locked'
     reason: Mapped[str] = mapped_column(String(20), index=True)
     attempted_at: Mapped[datetime] = mapped_column(
-        server_default=func.now(), index=True
+        TIMESTAMP(timezone=True), server_default=func.now(), index=True
     )

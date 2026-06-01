@@ -15,7 +15,7 @@ class StudentBlacklist(Base):
     )
     description: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP(timezone=False),
+        TIMESTAMP(timezone=True),
         server_default=func.current_timestamp(),
         nullable=False,
     )

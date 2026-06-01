@@ -99,7 +99,7 @@ def verify_jwt_token(token: str) -> dict:
 
 # === Password policy ===
 
-_PASSWORD_MIN_LEN = 3  # 8
+_PASSWORD_MIN_LEN = 8
 _PASSWORD_MAX_LEN = 128
 _LOWER_RE = re.compile(r"[a-z]")
 _UPPER_RE = re.compile(r"[A-Z]")
@@ -117,10 +117,10 @@ def validate_password_strength(password: str) -> str:
         raise ValueError(f"Parol kamida {_PASSWORD_MIN_LEN} belgidan iborat bo'lsin")
     if len(password) > _PASSWORD_MAX_LEN:
         raise ValueError(f"Parol {_PASSWORD_MAX_LEN} belgidan oshmasin")
-    # if not _LOWER_RE.search(password):
-    #     raise ValueError("Parolda kamida bitta kichik harf bo'lsin")
-    # if not _UPPER_RE.search(password):
-    #     raise ValueError("Parolda kamida bitta katta harf bo'lsin")
+    if not _LOWER_RE.search(password):
+        raise ValueError("Parolda kamida bitta kichik harf bo'lsin")
+    if not _UPPER_RE.search(password):
+        raise ValueError("Parolda kamida bitta katta harf bo'lsin")
     if not _DIGIT_RE.search(password):
         raise ValueError("Parolda kamida bitta raqam bo'lsin")
     return password

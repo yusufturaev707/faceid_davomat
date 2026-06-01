@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import ForeignKey, String, Text, func
+from sqlalchemy import ForeignKey, String, TIMESTAMP, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -15,7 +15,11 @@ class ApiKey(Base):
     prefix: Mapped[str] = mapped_column(String(12))  # "sk-a1b2c3..." — identifikatsiya uchun
     name: Mapped[str] = mapped_column(String(100))  # "Tashqi tizim nomi"
     is_active: Mapped[bool] = mapped_column(default=True)
-    last_used_at: Mapped[datetime | None] = mapped_column(default=None)
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    last_used_at: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP(timezone=True), default=None
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), server_default=func.now()
+    )
 
     user: Mapped["User"] = relationship(back_populates="api_keys")  # noqa: F821

@@ -30,7 +30,7 @@ from __future__ import annotations
 
 import base64
 import logging
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
@@ -783,7 +783,7 @@ def bot_mark_attendance(
         )
 
     selfie_bytes = _b64_to_bytes(body.selfie_b64)
-    now = datetime.now()
+    now = datetime.now(timezone.utc)
     # Bot identification — `score`ga 0-100 foiz yoziladi, `max_score=0`
     # bo'lib qoladi (desktop client test bali bilan ishlatadigan field
     # bilan to'qnash kelmaslik uchun atayin teglamayapmiz).
