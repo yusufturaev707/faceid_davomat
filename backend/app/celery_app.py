@@ -22,6 +22,7 @@ celery_app = Celery(
         "app.tasks.verify_task",
         "app.tasks.cleanup_task",
         "app.tasks.student_loader_task",
+        "app.tasks.excel_loader_task",
     ],
 )
 

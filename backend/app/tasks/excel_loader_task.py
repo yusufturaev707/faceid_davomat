@@ -76,6 +76,42 @@ def excel_load_and_enrich_task(
             _rollback_state(db, session_id, previous_state_id)
             return {"status": "error", "message": f"Kutilmagan xatolik: {e}"}
 
+        # 0 student bo'lsa state'ni Yaratilgan (key=1) da qoldiramiz —
+        # foydalanuvchi Excel'ni tekshirib qayta yuborishi uchun.
+        if result["inserted"] == 0:
+            logger.warning(
+                "Session #%d: 0 ta student yuklandi — state Yaratilgan'da qoldi",
+                session_id,
+            )
+            _rollback_state(db, session_id, previous_state_id)
+            # Redis progress'ni "completed" emas, "error" sifatida belgilaymiz —
+            # frontend mavjud xato bannerini ko'rsatadi.
+            try:
+                from app.services.excel_student_loader import _get_redis, _set_progress
+
+                _set_progress(
+                    _get_redis(),
+                    session_id,
+                    current=0,
+                    total=0,
+                    status="error",
+                    message=(
+                        "Hech qanday student yuklanmadi — Excel'ni tekshiring "
+                        "(majburiy ustunlar, smena raqami va sana mos kelishi kerak)"
+                    ),
+                )
+            except Exception:
+                logger.exception(
+                    "Session #%d: progress yozishda xato", session_id
+                )
+            return {
+                "status": "completed",
+                "inserted": 0,
+                "enriched": result["enriched"],
+                "failed": result["failed"],
+                "message": "0 ta student — sessiya boshlang'ich holatda qoldi",
+            }
+
         # Muvaffaqiyat — state.key=2 (Yuklab olindi) ga o'tkazamiz.
         target_state = db.execute(
             select(SessionState).where(SessionState.key == STATE_KEY_LOADING)

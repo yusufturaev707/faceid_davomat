@@ -3,8 +3,10 @@
 import base64
 import logging
 import math
+from io import BytesIO
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import select as sa_select
 from sqlalchemy.orm import Session
@@ -181,6 +183,100 @@ def list_session_states(
 ):
     """Barcha faol sessiya holatlari."""
     return get_session_states(db)
+
+
+# --- Excel shabloni: static GET — /{session_id} wildcard'idan OLDIN ---
+# Aks holda FastAPI "excel-template" ni session_id (int) sifatida talqin
+# qiladi va 422 "Kiritilgan ma'lumotlar noto'g'ri" qaytaradi.
+
+_TEMPLATE_HEADERS: tuple[tuple[str, str], ...] = (
+    ("last_name", "Familiya"),
+    ("first_name", "Ism"),
+    ("middle_name", "Otasining ismi"),
+    ("imei", "JShShIR (14 ta raqam)"),
+    ("ps_ser", "Pasport seriyasi"),
+    ("ps_num", "Pasport raqami"),
+    ("region_number", "Region raqami"),
+    ("zone_number", "Zona raqami (ixtiyoriy)"),
+    ("smena_number", "Smena raqami"),
+    ("gr_n", "Guruh (ixtiyoriy)"),
+    ("e_date", "Sana (YYYY-MM-DD)"),
+    ("subject_name", "Fan (ixtiyoriy)"),
+)
+_TEMPLATE_REQUIRED = {
+    "last_name", "first_name", "imei", "ps_ser", "ps_num",
+    "region_number", "smena_number", "e_date",
+}
+
+
+def _build_excel_template() -> bytes:
+    """Foydalanuvchi uchun bo'sh shablon: sarlavhalar + 2 ta misol qator."""
+    from openpyxl import Workbook
+    from openpyxl.comments import Comment
+    from openpyxl.styles import Alignment, Font, PatternFill
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Studentlar"
+
+    required_fill = PatternFill("solid", fgColor="FFE7C2")  # och sariq
+    optional_fill = PatternFill("solid", fgColor="E8F0FE")  # och ko'k
+    header_font = Font(bold=True, color="1F2937")
+    center = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+    for col_idx, (key, label) in enumerate(_TEMPLATE_HEADERS, start=1):
+        cell = ws.cell(row=1, column=col_idx, value=key)
+        cell.font = header_font
+        cell.alignment = center
+        cell.fill = required_fill if key in _TEMPLATE_REQUIRED else optional_fill
+        suffix = " (majburiy)" if key in _TEMPLATE_REQUIRED else " (ixtiyoriy)"
+        cell.comment = Comment(label + suffix, "FaceID")
+
+    examples = (
+        ("ALIYEV", "AKMAL", "OYBEKOVICH", "32401200012345",
+         "AA", "1234567", 1, 1, 1, 101, "2026-06-15", "MATEMATIKA"),
+        ("KARIMOVA", "NODIRA", None, "33301200067890",
+         "AB", "7654321", 1, None, 2, None, "2026-06-15", None),
+    )
+    for row_idx, row in enumerate(examples, start=2):
+        for col_idx, value in enumerate(row, start=1):
+            ws.cell(row=row_idx, column=col_idx, value=value)
+
+    widths = (14, 14, 18, 18, 8, 12, 10, 12, 10, 8, 14, 18)
+    for col_idx, width in enumerate(widths, start=1):
+        ws.column_dimensions[ws.cell(row=1, column=col_idx).column_letter].width = width
+
+    ws.freeze_panes = "A2"
+
+    buf = BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+@router.get(
+    "/excel-template",
+    summary="Excel shablonini yuklab olish",
+    description=(
+        "Studentlar ro'yxati uchun bo'sh shablon (.xlsx). "
+        "Sarlavha + 2 ta misol qator. Sariq ustunlar — majburiy, "
+        "ko'k ustunlar — ixtiyoriy."
+    ),
+)
+def download_excel_template(
+    _: User = Depends(PermissionChecker(P.TEST_SESSION_UPDATE.code)),
+):
+    content = _build_excel_template()
+    headers = {
+        "Content-Disposition": 'attachment; filename="students_template.xlsx"',
+        "Cache-Control": "no-store",
+    }
+    return StreamingResponse(
+        BytesIO(content),
+        media_type=(
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        ),
+        headers=headers,
+    )
 
 
 # --- TestSession CRUD ---

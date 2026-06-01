@@ -24,6 +24,7 @@ import {
   updateTestSessionApi,
   uploadStudentImageApi,
   uploadStudentsExcelApi,
+  downloadStudentsExcelTemplate,
   fileToBase64,
 } from "../api";
 import PageLoader from "../components/PageLoader";
@@ -95,6 +96,7 @@ export default function TestSessionDetailPage() {
   const [excelFile, setExcelFile] = useState<File | null>(null);
   const [excelError, setExcelError] = useState<string | null>(null);
   const [excelSubmitting, setExcelSubmitting] = useState(false);
+  const [templateDownloading, setTemplateDownloading] = useState(false);
 
   const fetchSession = useCallback(async () => {
     if (!id) return;
@@ -509,6 +511,18 @@ export default function TestSessionDetailPage() {
     setExcelFile(null);
     setExcelError(null);
     setShowExcelUpload(true);
+  };
+
+  const handleDownloadTemplate = async () => {
+    setTemplateDownloading(true);
+    setExcelError(null);
+    try {
+      await downloadStudentsExcelTemplate();
+    } catch (err) {
+      setExcelError(extractErrorMessage(err));
+    } finally {
+      setTemplateDownloading(false);
+    }
   };
 
   const handleExcelUpload = async () => {
@@ -1402,6 +1416,18 @@ export default function TestSessionDetailPage() {
               </ul>
             </div>
 
+            <button
+              type="button"
+              onClick={handleDownloadTemplate}
+              disabled={templateDownloading || excelSubmitting}
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-primary-700 dark:text-primary-200 bg-primary-50 dark:bg-primary-900/30 hover:bg-primary-100 dark:hover:bg-primary-900/50 border border-primary-200/70 dark:border-primary-800/40 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V4" />
+              </svg>
+              {templateDownloading ? "Yuklab olinmoqda..." : "Shablonni yuklab olish (.xlsx)"}
+            </button>
+
             <Field label="Excel fayl (.xlsx)">
               <input
                 type="file"
@@ -1451,28 +1477,85 @@ export default function TestSessionDetailPage() {
       )}
 
       {/* Remove Smena Confirm */}
-      {removeSmenaTarget && (
-        <Modal
-          title="Smenani o'chirish"
-          onClose={() => setRemoveSmenaTarget(null)}
-        >
-          <div className="py-2">
-            <p className="text-sm text-gray-600 dark:text-slate-400">
-              <strong className="text-gray-800 dark:text-slate-200">
-                "{removeSmenaTarget.name}"
-              </strong>{" "}
-              smenasini sessiyadan olib tashlashni tasdiqlaysizmi?
-            </p>
-          </div>
-          <ModalFooter
-            onCancel={() => setRemoveSmenaTarget(null)}
-            onConfirm={handleRemoveSmena}
-            confirmText={removingSmena ? "O'chirilmoqda..." : "Ha, o'chirish"}
-            disabled={removingSmena}
-            danger
-          />
-        </Modal>
-      )}
+      {removeSmenaTarget && (() => {
+        const isLastSmena = session.smenas.length === 1;
+        const willResetState = isLastSmena && currentStateKey > 1;
+        const isActiveSession = isLastSmena && currentStateKey === 4;
+        return (
+          <Modal
+            title="Smenani o'chirish"
+            onClose={() => setRemoveSmenaTarget(null)}
+          >
+            <div className="py-2 space-y-3">
+              <p className="text-sm text-gray-600 dark:text-slate-400">
+                <strong className="text-gray-800 dark:text-slate-200">
+                  "{removeSmenaTarget.name}"
+                </strong>{" "}
+                smenasini sessiyadan olib tashlashni tasdiqlaysizmi?
+              </p>
+
+              {/* Faol imtihon — eng kuchli ogohlantirish */}
+              {isActiveSession && (
+                <div className="p-3 rounded-xl bg-red-50 dark:bg-red-900/30 border border-red-300 dark:border-red-800/60 text-[13px] text-red-900 dark:text-red-200 space-y-1.5">
+                  <p className="font-bold flex items-center gap-2">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                    DIQQAT! Faol imtihon sessiyasi
+                  </p>
+                  <p>
+                    Bu sessiya hozir <strong>faol holatda</strong> (imtihon davom etmoqda).
+                    Oxirgi smenani o'chirish quyidagilarga olib keladi:
+                  </p>
+                  <ul className="list-disc pl-5 space-y-0.5">
+                    <li>Barcha {session.count_total_student.toLocaleString()} ta talaba o'chiriladi</li>
+                    <li>Sessiya <strong>"Yaratilgan"</strong> holatiga qaytariladi</li>
+                    <li>Davomat ma'lumotlari yo'qoladi</li>
+                  </ul>
+                  <p className="font-semibold mt-1">
+                    Imtihon paytida bu harakatni faqat zarurat bo'lganda bajaring!
+                  </p>
+                </div>
+              )}
+
+              {/* Faol bo'lmagan, lekin oxirgi smena — o'rta darajadagi ogohlantirish */}
+              {willResetState && !isActiveSession && (
+                <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/40 text-[13px] text-amber-900 dark:text-amber-200 space-y-1.5">
+                  <p className="font-semibold flex items-center gap-2">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Bu oxirgi smena
+                  </p>
+                  <p>
+                    O'chirgandan keyin sessiyada hech qanday smena qolmaydi va sessiya
+                    avtomatik <strong>"Yaratilgan"</strong> holatiga qaytariladi.
+                  </p>
+                  {session.count_total_student > 0 && (
+                    <p>
+                      Bundan tashqari <strong>{session.count_total_student.toLocaleString()} ta talaba</strong>{" "}
+                      ma'lumotlari ham o'chiriladi.
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+            <ModalFooter
+              onCancel={() => setRemoveSmenaTarget(null)}
+              onConfirm={handleRemoveSmena}
+              confirmText={
+                removingSmena
+                  ? "O'chirilmoqda..."
+                  : isActiveSession
+                    ? "Ha, baribir o'chirish"
+                    : "Ha, o'chirish"
+              }
+              disabled={removingSmena}
+              danger
+            />
+          </Modal>
+        );
+      })()}
     </div>
   );
 }

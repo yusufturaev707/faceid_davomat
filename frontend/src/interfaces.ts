@@ -246,6 +246,8 @@ export interface EmbeddingResponse {
   detection: boolean;
   embedding: number[];
   embedding_size: number;
+  embedding_b64: string | null;
+  embedding_bytes_size: number;
   file_size_byte: number;
   image_width: number;
   image_height: number;

@@ -418,5 +418,26 @@ def remove_smena_from_session(db: Session, smena_id: int) -> bool:
         )
         test_session.count_total_student = actual_count
 
+        # Hech qanday smena qolmadi → sessiyani boshlang'ich (Yaratilgan)
+        # holatga qaytaramiz. Foydalanuvchi qayta smena qo'shib
+        # studentlarni yuklashi uchun.
+        if not smena_ids:
+            current_state = db.get(SessionState, test_session.test_state_id)
+            if current_state and current_state.key != STATE_KEY_CREATED:
+                created_state = db.execute(
+                    select(SessionState).where(
+                        SessionState.key == STATE_KEY_CREATED
+                    )
+                ).scalar()
+                if created_state:
+                    test_session.test_state_id = int(created_state.id)
+                    test_session.is_active = False
+                    logger.info(
+                        "Session #%d: barcha smenalar o'chirildi — "
+                        "state Yaratilgan (key=%d) ga qaytarildi",
+                        test_session_id,
+                        STATE_KEY_CREATED,
+                    )
+
     db.commit()
     return True

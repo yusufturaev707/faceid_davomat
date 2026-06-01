@@ -23,7 +23,7 @@ from app.schemas.photo import (
     PhotoVerifyResponse,
     TwoFaceVerifyResponse,
 )
-from app.services.image_decoder import decode_base64_image
+from app.services.image_decoder import decode_base64_image, decode_image_bytes
 
 logger = logging.getLogger("faceid.face_service")
 
@@ -361,6 +361,8 @@ def extract_embedding(img_b64: str) -> EmbeddingResponse:
     errors: list[str] = []
     embedding: list[float] = []
     embedding_size = 0
+    embedding_b64: str | None = None
+    embedding_bytes_size = 0
 
     if not detection:
         errors.append("Rasmda yuz aniqlanmadi")
@@ -368,6 +370,14 @@ def extract_embedding(img_b64: str) -> EmbeddingResponse:
         face = faces[0]
         embedding = face.embedding.tolist()
         embedding_size = len(embedding)
+        # DB ga yoziladigan format bilan bir xil (float32 little-endian).
+        # base64 — JSON orqali binary'ni xavfsiz uzatish standarti.
+        import base64 as _b64
+
+        blob = embedding_to_bytes(face.embedding)
+        if blob is not None:
+            embedding_b64 = _b64.b64encode(blob).decode("ascii")
+            embedding_bytes_size = len(blob)
 
     logger.info("Embedding: detection=%s, embedding_size=%d", detection, embedding_size)
 
@@ -375,11 +385,88 @@ def extract_embedding(img_b64: str) -> EmbeddingResponse:
         detection=detection,
         embedding=embedding,
         embedding_size=embedding_size,
+        embedding_b64=embedding_b64,
+        embedding_bytes_size=embedding_bytes_size,
         file_size_byte=file_size,
         image_width=w,
         image_height=h,
         error_messages=errors,
     )
+
+
+# === Embedding binary serialization ==================================
+#
+# DB da embedding `LargeBinary` (PostgreSQL BYTEA) sifatida saqlanadi —
+# `student_ps_data.embedding`. Format: float32 little-endian, InsightFace
+# `buffalo_l` modeli uchun 512-dim → 2048 bayt.
+#
+# Bu pattern `embedding_extractor.py:_process_chunk` da o'rnatilgan (sessiya
+# studentlari uchun bulk embedding). Yangi yozish/o'qish joylarida bir xil
+# format ishlatilishi uchun shu yerda umumiy helperlar.
+
+
+def embedding_to_bytes(
+    embedding: np.ndarray | list[float] | None,
+) -> bytes | None:
+    """Embedding vektorini binary blob (float32) ga aylantirish.
+
+    `embedding_extractor._process_chunk` bilan bir xil format:
+        `np.asarray(emb, dtype=np.float32).tobytes()`
+
+    Args:
+        embedding: numpy array, ro'yxat yoki None.
+
+    Returns:
+        Binary blob (DB ga `LargeBinary` sifatida yozish uchun) yoki None.
+    """
+    if embedding is None:
+        return None
+    arr = np.asarray(embedding, dtype=np.float32)
+    if arr.size == 0:
+        return None
+    return arr.tobytes()
+
+
+def bytes_to_embedding(blob: bytes | None) -> np.ndarray | None:
+    """Binary blob'dan numpy float32 embedding vektorini qayta tiklash.
+
+    DB dan `LargeBinary` ustun o'qilganda — solishtirish yoki retraining uchun.
+
+    Args:
+        blob: Float32 bytes (yoki bo'sh/None).
+
+    Returns:
+        1D numpy float32 array yoki None.
+    """
+    if not blob:
+        return None
+    return np.frombuffer(blob, dtype=np.float32)
+
+
+def extract_embedding_blob(image: str | bytes) -> bytes | None:
+    """Rasm fayldan (bytes) yoki base64 stringdan yuz embedding olib,
+    DB ga yozishga tayyor binary blob qaytarish.
+
+    Yuz aniqlanmasa — None. Foydalanish joylari:
+      - Excel/API student loader (ps_img blob bor — bytes yo'li)
+      - Davomat bot endpointlari (selfie b64 keladi — base64 yo'li)
+      - Test/admin tools
+
+    Args:
+        image: Base64 string yoki xom rasm baytlari.
+
+    Returns:
+        float32 little-endian bytes (DB `LargeBinary`) yoki yuz topilmasa None.
+    """
+    if isinstance(image, str):
+        img_bgr, _ = decode_base64_image(image)
+    else:
+        img_bgr, _ = decode_image_bytes(image)
+
+    faces = detect_faces(img_bgr)
+    if not faces:
+        return None
+    return embedding_to_bytes(faces[0].embedding)
 
 
 def verify_photo(img_b64: str, age: int) -> tuple[PhotoVerifyResponse, np.ndarray]:

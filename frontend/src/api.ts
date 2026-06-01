@@ -375,6 +375,24 @@ export async function uploadStudentsExcelApi(
   return res.data;
 }
 
+/**
+ * Studentlar ro'yxati uchun bo'sh Excel shablonini yuklab olish.
+ * Brauzer "students_template.xlsx" sifatida saqlaydi.
+ */
+export async function downloadStudentsExcelTemplate(): Promise<void> {
+  const res = await apiClient.get("/test-sessions/excel-template", {
+    responseType: "blob",
+  });
+  const url = URL.createObjectURL(res.data);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "students_template.xlsx";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 export async function deleteTestSessionApi(sessionId: number): Promise<void> {
   await apiClient.delete(`/test-sessions/${sessionId}`);
 }

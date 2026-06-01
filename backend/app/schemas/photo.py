@@ -127,6 +127,18 @@ class EmbeddingResponse(BaseModel):
     detection: bool = Field(..., description="Yuz aniqlangan yoki yo'q")
     embedding: list[float] = Field(default_factory=list, description="Yuz embedding vektori")
     embedding_size: int = Field(0, description="Embedding vektor o'lchami")
+    embedding_b64: str | None = Field(
+        default=None,
+        description=(
+            "Embedding binary blob (float32 little-endian) base64'da. "
+            "DB ga `LargeBinary` sifatida yozish yoki tashqi tizim bilan "
+            "almashish uchun ishlatiladi."
+        ),
+    )
+    embedding_bytes_size: int = Field(
+        0,
+        description="Binary blob hajmi (bayt) — float32 → embedding_size*4",
+    )
     file_size_byte: float = Field(..., description="Fayl hajmi baytlarda")
     image_width: int = Field(..., description="Rasm kengligi")
     image_height: int = Field(..., description="Rasm balandligi")

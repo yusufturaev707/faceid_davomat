@@ -15,6 +15,8 @@ export default function EmbeddingPage() {
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [b64Copied, setB64Copied] = useState(false);
+  const [bytesCopied, setBytesCopied] = useState(false);
+  const [bytesHexCopied, setBytesHexCopied] = useState(false);
   const [imgBase64, setImgBase64] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
 
@@ -333,6 +335,84 @@ export default function EmbeddingPage() {
                     </span>
                   ))}
                   <span className="text-gray-300 dark:text-slate-600">]</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Binary blob (bytes) — DB ga yoziladigan format */}
+          {result.detection && result.embedding_b64 && (
+            <div className="rounded-2xl bg-white dark:bg-slate-800 ring-1 ring-gray-200/70 dark:ring-slate-700/60 shadow-sm overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-slate-700/40">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-7 h-7 rounded-lg bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center">
+                    <svg className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
+                    </svg>
+                  </div>
+                  <span className="text-sm font-semibold text-gray-800 dark:text-slate-200">
+                    Binary blob (bytes)
+                  </span>
+                  <span className="text-xs text-gray-400 dark:text-slate-500">
+                    ({result.embedding_bytes_size} bayt, float32 LE)
+                  </span>
+                </div>
+              </div>
+
+              {/* Izoh */}
+              <div className="px-4 pt-3 text-[12px] text-gray-600 dark:text-slate-400 leading-relaxed">
+                Bu DB <code className="font-mono bg-gray-100 dark:bg-slate-700/50 px-1.5 py-0.5 rounded">student_ps_data.embedding</code>{" "}
+                (<code className="font-mono">LargeBinary</code>) ustuniga yoziladigan format bilan
+                <strong> aynan bir xil</strong>. Tashqi tizim bilan almashish yoki to'g'ridan-to'g'ri SQL{" "}
+                <code className="font-mono">INSERT</code> uchun ishlatish mumkin.
+              </div>
+
+              {/* Base64 */}
+              <div className="px-4 pt-3 pb-2">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">
+                    Base64
+                  </span>
+                  <CopyBtn
+                    active={bytesCopied}
+                    onClick={() => copyText(result.embedding_b64 ?? "", setBytesCopied)}
+                  />
+                </div>
+                <div className="max-h-32 overflow-y-auto bg-gray-50 dark:bg-slate-900/40 rounded-xl p-3 font-mono text-[11px] leading-relaxed break-all ring-1 ring-gray-100 dark:ring-slate-700/40 text-indigo-700 dark:text-indigo-300">
+                  {result.embedding_b64}
+                </div>
+              </div>
+
+              {/* Hex (frontend'da convert qilamiz) */}
+              <div className="px-4 pb-4">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">
+                    Hex
+                  </span>
+                  <CopyBtn
+                    active={bytesHexCopied}
+                    onClick={() => {
+                      const bin = atob(result.embedding_b64 ?? "");
+                      let hex = "";
+                      for (let i = 0; i < bin.length; i++) {
+                        hex += bin.charCodeAt(i).toString(16).padStart(2, "0");
+                      }
+                      copyText(hex, setBytesHexCopied);
+                    }}
+                  />
+                </div>
+                <div className="max-h-24 overflow-y-auto bg-gray-50 dark:bg-slate-900/40 rounded-xl p-3 font-mono text-[11px] leading-relaxed break-all ring-1 ring-gray-100 dark:ring-slate-700/40 text-gray-600 dark:text-slate-400">
+                  {(() => {
+                    const bin = atob(result.embedding_b64);
+                    let hex = "";
+                    for (let i = 0; i < bin.length; i++) {
+                      hex += bin.charCodeAt(i).toString(16).padStart(2, "0");
+                    }
+                    // Faqat boshlang'ich 256 belgi ko'rsatamiz — qolganini "..."
+                    return hex.length > 256
+                      ? hex.slice(0, 256) + " …"
+                      : hex;
+                  })()}
                 </div>
               </div>
             </div>

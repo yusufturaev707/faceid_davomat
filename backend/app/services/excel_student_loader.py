@@ -673,6 +673,11 @@ def load_students_from_excel(
 
     enrich_stats = _enrich_via_gtsp(db, session.id, inserted_ids, r)
 
+    # Sessiya total count yangilash (tashqi API loader bilan bir xil pattern).
+    # Bu UI dagi "studentlar soni" ko'rsatkichi uchun manba.
+    session.count_total_student = inserted
+    db.commit()
+
     _set_progress(
         r,
         session.id,

@@ -75,6 +75,43 @@ def load_students_task(
                 "message": f"Kutilmagan xatolik: {e}",
             }
 
+        # 0 talaba bo'lsa state'ni boshlang'ich holatga qaytaramiz.
+        # Endpoint state'ni allaqachon key=2 ga o'zgartirgan — uni key=1 ga
+        # qaytarish foydalanuvchi konfiguratsiyani tekshirib qayta urinishi uchun.
+        if count == 0:
+            logger.warning(
+                "Session #%d: 0 ta talaba yuklandi — state %d ga qaytarilmoqda",
+                session_id, previous_state_id,
+            )
+            _rollback_state(db, session_id, previous_state_id)
+            # Redis progress'ni xato sifatida belgilaymiz (frontend xato banner ko'rsatadi)
+            try:
+                from app.services.student_loader import _get_redis, _set_progress
+
+                _set_progress(
+                    _get_redis(),
+                    session_id,
+                    current=0,
+                    total=0,
+                    pages_done=0,
+                    pages_total=0,
+                    skipped=0,
+                    status="error",
+                    message=(
+                        "Tashqi API'dan 0 ta talaba qaytdi — sessiya parametrlarini "
+                        "(test, smena, sana, region) tekshiring"
+                    ),
+                )
+            except Exception:
+                logger.exception(
+                    "Session #%d: progress yozishda xato", session_id
+                )
+            return {
+                "loaded": 0,
+                "status": "completed",
+                "message": "0 ta talaba — sessiya boshlang'ich holatda qoldi",
+            }
+
         logger.info(
             "Session #%d: %d ta talaba muvaffaqiyatli yuklandi", session_id, count
         )
