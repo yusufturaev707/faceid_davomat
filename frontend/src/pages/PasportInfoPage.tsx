@@ -11,7 +11,12 @@ export default function PasportInfoPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const canSubmit = psSer.trim().length > 0 && psNum.trim().length > 0 && !loading;
+  // GTSP pasportni JShShIR (PINFL) bilan tekshirgani uchun u majburiy (14 xona).
+  const canSubmit =
+    psSer.trim().length > 0 &&
+    psNum.trim().length > 0 &&
+    imei.trim().length === 14 &&
+    !loading;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -23,7 +28,7 @@ export default function PasportInfoPage() {
       const data = await getPasportInfoApi({
         ps_ser: psSer.trim().toUpperCase(),
         ps_num: psNum.trim(),
-        imei: imei.trim() || null,
+        imei: imei.trim(),
       });
       setResult(data);
     } catch (err) {
@@ -92,7 +97,7 @@ export default function PasportInfoPage() {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
-              IMEI <span className="text-xs text-gray-400">(ixtiyoriy)</span>
+              JShShIR (PINFL) *
             </label>
             <input
               type="text"
@@ -103,6 +108,11 @@ export default function PasportInfoPage() {
               placeholder="14 ta raqam"
               className="input-field w-full font-mono"
             />
+            {imei.length > 0 && imei.length < 14 && (
+              <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+                JShShIR 14 ta raqamdan iborat bo'lishi kerak ({imei.length}/14)
+              </p>
+            )}
           </div>
         </div>
 

@@ -732,7 +732,7 @@ export async function assignPermissionsToRoleApi(roleId: number, data: import(".
 export interface PasportInfoRequest {
   ps_ser: string;
   ps_num: string;
-  imei?: string | null;
+  imei: string; // JShShIR (PINFL) — GTSP uchun majburiy
 }
 
 export interface PasportInfoResponse {

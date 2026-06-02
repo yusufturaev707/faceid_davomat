@@ -7,8 +7,6 @@ Bu endpoint mavjud `gtsp_client.fetch_gtsp_data` xizmatidan foydalanadi —
 boshqa biror logika o'zgartirilmaydi.
 """
 
-from __future__ import annotations
-
 import base64
 import logging
 
@@ -19,7 +17,12 @@ from app.core.permissions import P
 from app.core.rate_limit import limiter
 from app.dependencies import PermissionChecker
 from app.models.user import User
-from app.services.gtsp_client import GtspError, GtspNotConfigured, fetch_gtsp_data
+from app.services.gtsp_client import (
+    GtspError,
+    GtspNotConfigured,
+    build_ps_value,
+    fetch_gtsp_data,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -30,8 +33,10 @@ class PasportInfoRequest(BaseModel):
         ..., min_length=1, max_length=5, description="Pasport seriyasi, masalan AD"
     )
     ps_num: str = Field(..., min_length=1, max_length=10, description="Pasport raqami")
-    imei: str | None = Field(
-        default=None, max_length=14, description="IMEI (ixtiyoriy)"
+    # GTSP pasportni JShShIR (PINFL) bilan solishtirib tekshiradi — bu maydon
+    # bo'sh bo'lsa GTSP "Validatsiya xatoligi" qaytaradi, shuning uchun majburiy.
+    imei: str = Field(
+        ..., min_length=1, max_length=14, description="JShShIR (PINFL) — majburiy"
     )
 
 
@@ -80,12 +85,19 @@ def get_pasport_info(
     """Pasport ma'lumotlari va rasmini GTSP API orqali olish.
 
     `ps_ser` + `ps_num` birlashtirilib GTSP API ga so'rov yuboriladi.
-    `imei` ixtiyoriy — bo'sh bo'lsa bo'sh satr sifatida uzatiladi.
+    `imei` (JShShIR/PINFL) majburiy — GTSP pasportni shu raqam bilan
+    solishtirib tekshiradi, bo'sh bo'lsa "Validatsiya xatoligi" qaytaradi.
     """
-    ps_value = f"{body.ps_ser.strip().upper()}{body.ps_num.strip()}"
+    # ps_num GTSP uchun 7 xonali bo'lishi shart — kam bo'lsa oldiga 0 qo'shamiz.
+    # (build_ps_value("", num) → faqat 0 bilan to'ldirilgan raqamni qaytaradi.)
+    ps_ser = body.ps_ser.strip().upper()
+    ps_num = build_ps_value("", body.ps_num)
+    ps_value = f"{ps_ser}{ps_num}"
     imei = (body.imei or "").strip()
+    if not imei:
+        raise HTTPException(status_code=400, detail="JShShIR (PINFL) kiritilishi shart")
 
-    logger.info("Pasport info so'rovi: ps=%s, imei=%s", ps_value, imei or "-")
+    logger.info("Pasport info so'rovi: ps=%s, imei=%s", ps_value, imei)
 
     try:
         result = fetch_gtsp_data(imei or None, ps_value, timeout=15.0)
@@ -107,8 +119,8 @@ def get_pasport_info(
         middle_name=result.middle_name,
         sex=result.sex,
         sex_label=_sex_label(result.sex),
-        ps_ser=body.ps_ser.strip().upper(),
-        ps_num=body.ps_num.strip(),
+        ps_ser=ps_ser,
+        ps_num=ps_num,
         imei=imei or None,
         photo=photo_dataurl,
         birth_place=result.birth_place,

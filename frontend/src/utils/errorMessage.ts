@@ -26,8 +26,12 @@ export function extractErrorMessage(error: unknown): string {
         .join("; ");
     }
 
-    // Backend oddiy xato xabari
+    // Backend oddiy xato xabari. Maxsus 422 formati: { detail, errors: [...] } —
+    // bunda detail umumiy ("Validatsiya xatoligi"), aniq sabab errors ichida.
     if (data?.detail && typeof data.detail === "string") {
+      if (Array.isArray(data.errors) && data.errors.length > 0) {
+        return `${data.detail}: ${data.errors.join("; ")}`;
+      }
       return data.detail;
     }
 
