@@ -734,6 +734,14 @@ export interface StudentListResponse {
   pages: number;
 }
 
+// Filtrlangan studentlar uchun GTSP bulk rasm yuklash natijasi
+export interface GtspBulkResult {
+  total: number;
+  succeeded: number;
+  failed: number;
+  skipped: number;
+}
+
 // === StudentLog ===
 export interface StudentLogCreate {
   student_id: number;

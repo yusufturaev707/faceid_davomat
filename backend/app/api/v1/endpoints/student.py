@@ -920,6 +920,7 @@ def fetch_gtsp_image(
     from app.services.gtsp_client import (
         GtspError,
         GtspNotConfigured,
+        build_ps_value,
         fetch_gtsp_data,
     )
 
@@ -935,7 +936,7 @@ def fetch_gtsp_image(
             status_code=404, detail="Talaba passport ma'lumotlari topilmadi"
         )
 
-    ps_value = f"{ps_data.ps_ser}{ps_data.ps_num}"
+    ps_value = build_ps_value(ps_data.ps_ser, ps_data.ps_num)
     logger.info("GTSP API chaqirilmoqda: student_id=%d, ps=%s", student_id, ps_value)
 
     try:
@@ -969,6 +970,130 @@ def fetch_gtsp_image(
     db.commit()
     logger.info("GTSP: student_id=%d muvaffaqiyatli yangilandi", student_id)
     return get_student(db, student_id)
+
+
+class BulkGtspResponse(BaseModel):
+    """Filtrlangan studentlar uchun GTSP rasm yuklash natijasi."""
+
+    total: int  # filtr/qidiruvga mos jami studentlar
+    succeeded: int  # GTSP'dan muvaffaqiyatli yangilandi
+    failed: int  # GTSP xatosi (raqam topilmadi, tarmoq va h.k.)
+    skipped: int  # passport ma'lumotlari yo'q — chetlab o'tildi
+
+
+@router.post("/fetch-gtsp-bulk", response_model=BulkGtspResponse)
+def fetch_gtsp_bulk(
+    session_smena_id: int | None = None,
+    zone_id: int | None = None,
+    test_id: int | None = None,
+    region_id: int | None = None,
+    smena_id: int | None = None,
+    gr_n: int | None = None,
+    e_date_from: str | None = None,
+    e_date_to: str | None = None,
+    is_entered: bool | None = None,
+    is_cheating: bool | None = None,
+    is_blacklist: bool | None = None,
+    is_face: bool | None = None,
+    is_image: bool | None = None,
+    is_ready: bool | None = None,
+    is_applied: bool | None = None,
+    search: str | None = None,
+    db: Session = Depends(get_db),
+    _: User = Depends(PermissionChecker(P.STUDENT_UPDATE.code)),
+):
+    """Filtr/qidiruvga mos BARCHA studentlarning rasmini GTSP'dan yuklash.
+
+    `list_students` bilan bir xil filtr parametrlarini qabul qiladi va
+    har bir student uchun imei + (ps_ser + ps_num) bo'yicha GTSP'ni
+    chaqiradi. ps_num 7 xonaga 0 bilan to'ldiriladi (`build_ps_value`).
+    GTSP chaqiruvlari parallel (ThreadPoolExecutor), DB yozish ketma-ket.
+    """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    from sqlalchemy import select
+
+    from app.crud.student import get_filtered_student_ids
+    from app.models.student import Student as StudentModel
+    from app.models.student_ps_data import StudentPsData
+    from app.services.excel_student_loader import (
+        GTSP_WORKERS,
+        _apply_gtsp_result,
+        _build_gender_lookup,
+        _enrich_one,
+    )
+
+    student_ids = get_filtered_student_ids(
+        db,
+        session_smena_id=session_smena_id,
+        zone_id=zone_id,
+        test_id=test_id,
+        region_id=region_id,
+        smena_id=smena_id,
+        gr_n=gr_n,
+        e_date_from=e_date_from,
+        e_date_to=e_date_to,
+        is_entered=is_entered,
+        is_cheating=is_cheating,
+        is_blacklist=is_blacklist,
+        is_face=is_face,
+        is_image=is_image,
+        is_ready=is_ready,
+        is_applied=is_applied,
+        search=search,
+    )
+    total = len(student_ids)
+    if not student_ids:
+        return BulkGtspResponse(total=0, succeeded=0, failed=0, skipped=0)
+
+    # Faqat passport ma'lumotlari bor studentlar GTSP'ga yuboriladi.
+    rows = db.execute(
+        select(
+            StudentModel.id,
+            StudentModel.imei,
+            StudentPsData.ps_ser,
+            StudentPsData.ps_num,
+        )
+        .join(StudentPsData, StudentPsData.student_id == StudentModel.id)
+        .where(StudentModel.id.in_(student_ids))
+    ).all()
+    work_items: list[tuple[int, str | None, str, str]] = [
+        (int(sid), imei, ps_ser, ps_num) for sid, imei, ps_ser, ps_num in rows
+    ]
+    skipped = total - len(work_items)
+
+    gender_map = _build_gender_lookup(db)
+    succeeded = 0
+    failed = 0
+    processed = len(work_items)
+
+    logger.info("GTSP bulk: %d student (skipped=%d) ishlanmoqda", processed, skipped)
+    with ThreadPoolExecutor(max_workers=GTSP_WORKERS) as ex:
+        future_map = {ex.submit(_enrich_one, item): item[0] for item in work_items}
+        for i, fut in enumerate(as_completed(future_map), start=1):
+            student_id, result = fut.result()
+            if _apply_gtsp_result(db, student_id, result, gender_map):
+                succeeded += 1
+            else:
+                failed += 1
+            # Har 20 ta da commit — uzilib qolsa ham ishlangan qismi saqlanadi.
+            if i % 20 == 0 or i == processed:
+                try:
+                    db.commit()
+                except Exception:
+                    db.rollback()
+                    logger.exception("GTSP bulk commit xatosi")
+
+    logger.info(
+        "GTSP bulk yakunlandi: total=%d, ok=%d, xato=%d, skip=%d",
+        total,
+        succeeded,
+        failed,
+        skipped,
+    )
+    return BulkGtspResponse(
+        total=total, succeeded=succeeded, failed=failed, skipped=skipped
+    )
 
 
 # ===================== Check FaceID via GTSP =====================

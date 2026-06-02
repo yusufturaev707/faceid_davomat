@@ -649,6 +649,15 @@ export async function fetchGtspImageApi(studentId: number): Promise<import("./in
   return res.data;
 }
 
+// Filtr/qidiruvga mos barcha studentlar uchun GTSP rasm yuklash (bulk).
+// Parametrlar getStudentsApi bilan bir xil (sahifalashsiz).
+export async function fetchGtspBulkApi(
+  params?: Record<string, unknown>
+): Promise<import("./interfaces").GtspBulkResult> {
+  const res = await apiClient.post("/students/fetch-gtsp-bulk", null, { params });
+  return res.data;
+}
+
 // === Student Logs API ===
 export async function getStudentLogsApi(
   params: Record<string, string | number | boolean | undefined | null>

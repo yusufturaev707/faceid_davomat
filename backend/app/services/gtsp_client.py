@@ -51,6 +51,20 @@ class GtspResult:
     matches_date_end_document: str | None = None
 
 
+def build_ps_value(ps_ser: str | None, ps_num: str | None) -> str:
+    """ps_ser + ps_num ni GTSP so'rovi uchun birlashtiradi.
+
+    GTSP pasport raqamini 7 xonali kutadi. ps_num 7 xonadan kam bo'lsa,
+    oldiga 0 qo'shib to'ldiriladi (masalan "1234" -> "0001234"). 7 yoki
+    undan ko'p xonali bo'lsa o'zgartirmaydi.
+    """
+    ser = (ps_ser or "").strip()
+    num = (ps_num or "").strip()
+    if num:
+        num = num.zfill(7)
+    return f"{ser}{num}"
+
+
 def _decode_photo(val: object) -> bytes | None:
     """base64 string (yoki data URI) → bytes. Xato bo'lsa None."""
     if not val:

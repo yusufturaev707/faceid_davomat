@@ -39,7 +39,12 @@ from app.models.student_ps_data import StudentPsData
 from app.models.test_session import TestSession
 from app.models.test_session_smena import TestSessionSmena
 from app.models.zone import Zone
-from app.services.gtsp_client import GtspError, GtspNotConfigured, fetch_gtsp_data
+from app.services.gtsp_client import (
+    GtspError,
+    GtspNotConfigured,
+    build_ps_value,
+    fetch_gtsp_data,
+)
 
 logger = logging.getLogger("faceid.services.excel_student_loader")
 
@@ -478,7 +483,7 @@ def _enrich_one(
     Returns: (student_id, GtspResult | Exception | None).
     """
     student_id, imei, ps_ser, ps_num = args
-    ps_value = f"{ps_ser}{ps_num}"
+    ps_value = build_ps_value(ps_ser, ps_num)
     try:
         return student_id, fetch_gtsp_data(imei, ps_value, timeout=GTSP_TIMEOUT)
     except GtspNotConfigured:

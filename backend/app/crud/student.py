@@ -150,6 +150,130 @@ def _apply_filter(stmt, count_stmt, condition):
     return stmt.where(condition), count_stmt.where(condition)
 
 
+def _student_filter_conditions(
+    *,
+    session_smena_id: int | None = None,
+    zone_id: int | None = None,
+    test_id: int | None = None,
+    region_id: int | None = None,
+    smena_id: int | None = None,
+    gr_n: int | None = None,
+    e_date_from: str | None = None,
+    e_date_to: str | None = None,
+    is_entered: bool | None = None,
+    is_cheating: bool | None = None,
+    is_blacklist: bool | None = None,
+    is_face: bool | None = None,
+    is_image: bool | None = None,
+    is_ready: bool | None = None,
+    is_applied: bool | None = None,
+    search: str | None = None,
+) -> list:
+    """Build the list of WHERE conditions shared by list / bulk queries.
+
+    Conditions referencing Test/Region/Smena require the joins from
+    `_build_student_query` (or an equivalent join chain) to be present.
+    """
+    conditions = []
+    if session_smena_id is not None:
+        conditions.append(Student.session_smena_id == session_smena_id)
+    if zone_id is not None:
+        conditions.append(Student.zone_id == zone_id)
+    if test_id is not None:
+        conditions.append(Test.id == test_id)
+    if region_id is not None:
+        conditions.append(Region.id == region_id)
+    if smena_id is not None:
+        conditions.append(Smena.id == smena_id)
+    if gr_n is not None:
+        conditions.append(Student.gr_n == gr_n)
+    if e_date_from is not None:
+        conditions.append(Student.e_date >= e_date_from)
+    if e_date_to is not None:
+        conditions.append(Student.e_date <= e_date_to)
+    if is_entered is not None:
+        conditions.append(Student.is_entered == is_entered)
+    if is_cheating is not None:
+        conditions.append(Student.is_cheating == is_cheating)
+    if is_blacklist is not None:
+        conditions.append(Student.is_blacklist == is_blacklist)
+    if is_face is not None:
+        conditions.append(Student.is_face == is_face)
+    if is_image is not None:
+        conditions.append(Student.is_image == is_image)
+    if is_ready is not None:
+        conditions.append(Student.is_ready == is_ready)
+    if is_applied is not None:
+        conditions.append(Student.is_applied == is_applied)
+    if search:
+        pattern = f"%{search}%"
+        conditions.append(
+            Student.last_name.ilike(pattern)
+            | Student.first_name.ilike(pattern)
+            | Student.imei.ilike(pattern)
+        )
+    return conditions
+
+
+def get_filtered_student_ids(
+    db: Session,
+    *,
+    session_smena_id: int | None = None,
+    zone_id: int | None = None,
+    test_id: int | None = None,
+    region_id: int | None = None,
+    smena_id: int | None = None,
+    gr_n: int | None = None,
+    e_date_from: str | None = None,
+    e_date_to: str | None = None,
+    is_entered: bool | None = None,
+    is_cheating: bool | None = None,
+    is_blacklist: bool | None = None,
+    is_face: bool | None = None,
+    is_image: bool | None = None,
+    is_ready: bool | None = None,
+    is_applied: bool | None = None,
+    search: str | None = None,
+) -> list[int]:
+    """Filtr/qidiruv shartlariga mos BARCHA student id'larini qaytaradi.
+
+    Sahifalashsiz — bulk amallar (masalan GTSP rasm yuklash) uchun.
+    """
+    conditions = _student_filter_conditions(
+        session_smena_id=session_smena_id,
+        zone_id=zone_id,
+        test_id=test_id,
+        region_id=region_id,
+        smena_id=smena_id,
+        gr_n=gr_n,
+        e_date_from=e_date_from,
+        e_date_to=e_date_to,
+        is_entered=is_entered,
+        is_cheating=is_cheating,
+        is_blacklist=is_blacklist,
+        is_face=is_face,
+        is_image=is_image,
+        is_ready=is_ready,
+        is_applied=is_applied,
+        search=search,
+    )
+    stmt = (
+        select(Student.id)
+        .outerjoin(Zone, Student.zone_id == Zone.id)
+        .outerjoin(Region, Zone.region_id == Region.id)
+        .outerjoin(
+            TestSessionSmena, Student.session_smena_id == TestSessionSmena.id
+        )
+        .outerjoin(Smena, TestSessionSmena.test_smena_id == Smena.id)
+        .outerjoin(TestSession, TestSessionSmena.test_session_id == TestSession.id)
+        .outerjoin(Test, TestSession.test_id == Test.id)
+        .order_by(Student.id.desc())
+    )
+    for condition in conditions:
+        stmt = stmt.where(condition)
+    return [int(sid) for sid in db.execute(stmt).scalars().all()]
+
+
 def get_students_paginated(
     db: Session,
     *,
@@ -190,71 +314,26 @@ def get_students_paginated(
             .outerjoin(Test, TestSession.test_id == Test.id)
         )
 
-    if session_smena_id is not None:
-        stmt, count_stmt = _apply_filter(
-            stmt, count_stmt, Student.session_smena_id == session_smena_id
-        )
-
-    if zone_id is not None:
-        stmt, count_stmt = _apply_filter(stmt, count_stmt, Student.zone_id == zone_id)
-
-    if test_id is not None:
-        stmt, count_stmt = _apply_filter(stmt, count_stmt, Test.id == test_id)
-
-    if region_id is not None:
-        stmt, count_stmt = _apply_filter(stmt, count_stmt, Region.id == region_id)
-
-    if smena_id is not None:
-        stmt, count_stmt = _apply_filter(stmt, count_stmt, Smena.id == smena_id)
-
-    if gr_n is not None:
-        stmt, count_stmt = _apply_filter(stmt, count_stmt, Student.gr_n == gr_n)
-
-    if e_date_from is not None:
-        stmt, count_stmt = _apply_filter(
-            stmt, count_stmt, Student.e_date >= e_date_from
-        )
-
-    if e_date_to is not None:
-        stmt, count_stmt = _apply_filter(stmt, count_stmt, Student.e_date <= e_date_to)
-
-    if is_entered is not None:
-        stmt, count_stmt = _apply_filter(
-            stmt, count_stmt, Student.is_entered == is_entered
-        )
-
-    if is_cheating is not None:
-        stmt, count_stmt = _apply_filter(
-            stmt, count_stmt, Student.is_cheating == is_cheating
-        )
-
-    if is_blacklist is not None:
-        stmt, count_stmt = _apply_filter(
-            stmt, count_stmt, Student.is_blacklist == is_blacklist
-        )
-
-    if is_face is not None:
-        stmt, count_stmt = _apply_filter(stmt, count_stmt, Student.is_face == is_face)
-
-    if is_image is not None:
-        stmt, count_stmt = _apply_filter(stmt, count_stmt, Student.is_image == is_image)
-
-    if is_ready is not None:
-        stmt, count_stmt = _apply_filter(stmt, count_stmt, Student.is_ready == is_ready)
-
-    if is_applied is not None:
-        stmt, count_stmt = _apply_filter(
-            stmt, count_stmt, Student.is_applied == is_applied
-        )
-
-    if search:
-        search_pattern = f"%{search}%"
-        search_filter = (
-            Student.last_name.ilike(search_pattern)
-            | Student.first_name.ilike(search_pattern)
-            | Student.imei.ilike(search_pattern)
-        )
-        stmt, count_stmt = _apply_filter(stmt, count_stmt, search_filter)
+    conditions = _student_filter_conditions(
+        session_smena_id=session_smena_id,
+        zone_id=zone_id,
+        test_id=test_id,
+        region_id=region_id,
+        smena_id=smena_id,
+        gr_n=gr_n,
+        e_date_from=e_date_from,
+        e_date_to=e_date_to,
+        is_entered=is_entered,
+        is_cheating=is_cheating,
+        is_blacklist=is_blacklist,
+        is_face=is_face,
+        is_image=is_image,
+        is_ready=is_ready,
+        is_applied=is_applied,
+        search=search,
+    )
+    for condition in conditions:
+        stmt, count_stmt = _apply_filter(stmt, count_stmt, condition)
 
     total = db.execute(count_stmt).scalar() or 0
     rows = db.execute(stmt.offset((page - 1) * per_page).limit(per_page)).all()

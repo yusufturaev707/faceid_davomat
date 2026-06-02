@@ -17,6 +17,7 @@ import {
   updateStudentApi,
   deleteStudentApi,
   fetchGtspImageApi,
+  fetchGtspBulkApi,
   getTestsLookupApi,
   getTestSessionsApi,
   getRegionsListApi,
@@ -80,6 +81,10 @@ export default function StudentsPage() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [fetchingGtsp, setFetchingGtsp] = useState(false);
 
+  // Bulk GTSP (filtrlangan studentlar uchun)
+  const [bulkGtspLoading, setBulkGtspLoading] = useState(false);
+  const [bulkMsg, setBulkMsg] = useState("");
+
   // Modal
   const [showModal, setShowModal] = useState(false);
   const [editId, setEditId] = useState<number | null>(null);
@@ -132,43 +137,33 @@ export default function StudentsPage() {
       .finally(() => setModalZonesLoading(false));
   }, [modalRegionId]);
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const params: Record<string, string | number | boolean> = {
-        page,
-        per_page: 20,
-      };
-      if (search) params.search = search;
-      if (filterTestId) params.test_id = Number(filterTestId);
-      if (filterRegionId) params.region_id = Number(filterRegionId);
-      if (filterSmenaId) params.smena_id = Number(filterSmenaId);
-      if (filterGrN) params.gr_n = Number(filterGrN);
-      if (filterDateFrom) params.e_date_from = filterDateFrom;
-      if (filterDateTo) params.e_date_to = filterDateTo;
-      if (filterEntered === "true") params.is_entered = true;
-      if (filterEntered === "false") params.is_entered = false;
-      if (filterCheating === "true") params.is_cheating = true;
-      if (filterCheating === "false") params.is_cheating = false;
-      if (filterBlacklist === "true") params.is_blacklist = true;
-      if (filterBlacklist === "false") params.is_blacklist = false;
-      if (filterFace === "true") params.is_face = true;
-      if (filterFace === "false") params.is_face = false;
-      if (filterImage === "true") params.is_image = true;
-      if (filterImage === "false") params.is_image = false;
-      if (filterReady === "true") params.is_ready = true;
-      if (filterReady === "false") params.is_ready = false;
-      if (filterApplied === "true") params.is_applied = true;
-      if (filterApplied === "false") params.is_applied = false;
-      const result = await getStudentsApi(params);
-      setData(result);
-    } catch (err) {
-      setError(extractErrorMessage(err));
-    } finally {
-      setLoading(false);
-    }
+  // Joriy qidiruv + filtrlardan so'rov parametrlarini yig'adi (sahifalashsiz).
+  // Ham ro'yxat (getStudentsApi), ham GTSP bulk uchun ishlatiladi.
+  const buildFilterParams = useCallback(() => {
+    const params: Record<string, string | number | boolean> = {};
+    if (search) params.search = search;
+    if (filterTestId) params.test_id = Number(filterTestId);
+    if (filterRegionId) params.region_id = Number(filterRegionId);
+    if (filterSmenaId) params.smena_id = Number(filterSmenaId);
+    if (filterGrN) params.gr_n = Number(filterGrN);
+    if (filterDateFrom) params.e_date_from = filterDateFrom;
+    if (filterDateTo) params.e_date_to = filterDateTo;
+    if (filterEntered === "true") params.is_entered = true;
+    if (filterEntered === "false") params.is_entered = false;
+    if (filterCheating === "true") params.is_cheating = true;
+    if (filterCheating === "false") params.is_cheating = false;
+    if (filterBlacklist === "true") params.is_blacklist = true;
+    if (filterBlacklist === "false") params.is_blacklist = false;
+    if (filterFace === "true") params.is_face = true;
+    if (filterFace === "false") params.is_face = false;
+    if (filterImage === "true") params.is_image = true;
+    if (filterImage === "false") params.is_image = false;
+    if (filterReady === "true") params.is_ready = true;
+    if (filterReady === "false") params.is_ready = false;
+    if (filterApplied === "true") params.is_applied = true;
+    if (filterApplied === "false") params.is_applied = false;
+    return params;
   }, [
-    page,
     search,
     filterTestId,
     filterRegionId,
@@ -185,6 +180,22 @@ export default function StudentsPage() {
     filterApplied,
   ]);
 
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const result = await getStudentsApi({
+        ...buildFilterParams(),
+        page,
+        per_page: 20,
+      });
+      setData(result);
+    } catch (err) {
+      setError(extractErrorMessage(err));
+    } finally {
+      setLoading(false);
+    }
+  }, [page, buildFilterParams]);
+
   useEffect(() => {
     fetchData();
   }, [fetchData]);
@@ -192,6 +203,42 @@ export default function StudentsPage() {
   const handleSearch = () => {
     setPage(1);
     setSearch(searchInput);
+  };
+
+  // Joriy filtr/qidiruvga mos BARCHA studentlar rasmini GTSP'dan yuklash.
+  const handleBulkGtsp = async () => {
+    if (!hasFilters) return;
+    const count = data?.total ?? 0;
+    if (count === 0) return;
+    const ok = window.confirm(
+      `Filtrlangan ${count} ta talabgorning rasmi GTSP'dan yuklab olinadi. ` +
+        `Bu biroz vaqt olishi mumkin. Davom etilsinmi?`,
+    );
+    if (!ok) return;
+    setBulkGtspLoading(true);
+    setBulkMsg("");
+    setError("");
+    try {
+      const res = await fetchGtspBulkApi(buildFilterParams());
+      setBulkMsg(
+        `GTSP yakunlandi: ${res.succeeded} ta muvaffaqiyatli, ` +
+          `${res.failed} ta xato, ${res.skipped} ta o'tkazib yuborildi ` +
+          `(jami ${res.total}).`,
+      );
+      await fetchData();
+      // Ochiq detail panelni ham yangilash
+      if (selected) {
+        try {
+          setSelected(await getStudentApi(selected.id));
+        } catch {
+          /* ignore */
+        }
+      }
+    } catch (err) {
+      setError(extractErrorMessage(err));
+    } finally {
+      setBulkGtspLoading(false);
+    }
   };
 
   const resetFilters = () => {
@@ -491,6 +538,18 @@ export default function StudentsPage() {
           </div>
         )}
 
+        {bulkMsg && (
+          <div className="mb-4 flex items-center gap-2 bg-teal-50 dark:bg-teal-900/20 border border-teal-200 dark:border-teal-800 text-teal-700 dark:text-teal-400 px-4 py-3 rounded-xl text-sm">
+            {bulkMsg}
+            <button
+              onClick={() => setBulkMsg("")}
+              className="ml-auto underline text-xs"
+            >
+              Yopish
+            </button>
+          </div>
+        )}
+
         {/* Search + Filters */}
         <div className="glass-card p-4 mb-4">
           <div className="flex flex-wrap gap-3 items-end">
@@ -560,6 +619,59 @@ export default function StudentsPage() {
                 Tozalash
               </button>
             )}
+            <PermissionGate permission={PERM.STUDENT_UPDATE}>
+              <button
+                onClick={handleBulkGtsp}
+                disabled={
+                  bulkGtspLoading || !hasFilters || !data || data.total === 0
+                }
+                title={
+                  hasFilters
+                    ? "Filtrlangan barcha talabgorlarning rasmini GTSP'dan yuklash"
+                    : "Avval qidiruv yoki filtr qo'llang"
+                }
+                className="inline-flex items-center gap-2 px-4 !py-2 text-sm font-medium text-white bg-teal-600 hover:bg-teal-700 active:bg-teal-800 rounded-full shadow-md hover:shadow-lg active:shadow active:scale-[0.98] transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-teal-300 dark:focus:ring-teal-700 focus:ring-offset-1 disabled:opacity-50 disabled:shadow-none disabled:pointer-events-none"
+              >
+                {bulkGtspLoading ? (
+                  <svg
+                    className="w-4 h-4 animate-spin"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth={4}
+                    />
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                    />
+                  </svg>
+                ) : (
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                    />
+                  </svg>
+                )}
+                {bulkGtspLoading
+                  ? "Yuklanmoqda..."
+                  : `Rasm tortish${data ? ` (${data.total})` : ""}`}
+              </button>
+            </PermissionGate>
             {data && (
               <span className="text-xs text-gray-400 dark:text-slate-500 ml-auto self-center">
                 Jami:{" "}
