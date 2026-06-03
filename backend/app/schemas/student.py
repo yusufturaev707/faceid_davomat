@@ -55,6 +55,35 @@ class StudentPsDataUpdate(BaseModel):
     gender_id: int | None = None
 
 
+class PassportUpdateRow(BaseModel):
+    """Ommaviy passport yangilash uchun bitta qator (paste yoki Excel'dan)."""
+
+    jshshir: str = Field(..., max_length=20)
+    ps_ser: str = Field(..., max_length=10)
+    ps_num: str = Field(..., max_length=15)
+
+
+class PassportUpdateRequest(BaseModel):
+    """Paste qilingan qatorlardan passportlarni yangilash so'rovi."""
+
+    rows: list[PassportUpdateRow] = Field(..., min_length=1, max_length=20000)
+
+
+class PassportInvalidItem(BaseModel):
+    row: int
+    jshshir: str
+    error: str
+
+
+class PassportUpdateResult(BaseModel):
+    """Ommaviy passport yangilash natijasi (summary)."""
+
+    total: int
+    updated: int
+    not_found: list[str] = []
+    invalid: list[PassportInvalidItem] = []
+
+
 class StudentUpdate(BaseModel):
     session_smena_id: int | None = None
     zone_id: int | None = None

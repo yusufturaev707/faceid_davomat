@@ -389,6 +389,26 @@ export interface TestSessionListResponse {
   pages: number;
 }
 
+// --- Passport (ps_ser/ps_num) ommaviy yangilash ---
+export interface PassportUpdateRow {
+  jshshir: string;
+  ps_ser: string;
+  ps_num: string;
+}
+
+export interface PassportInvalidItem {
+  row: number;
+  jshshir: string;
+  error: string;
+}
+
+export interface PassportUpdateResult {
+  total: number;
+  updated: number;
+  not_found: string[];
+  invalid: PassportInvalidItem[];
+}
+
 export interface TestSessionCreateRequest {
   test_id: number;
   name: string;

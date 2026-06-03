@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import type {
+  PassportUpdateResult,
+  PassportUpdateRow,
   SessionStateResponse,
   SmenaResponse,
   StudentResponse,
@@ -25,6 +27,9 @@ import {
   uploadStudentImageApi,
   uploadStudentsExcelApi,
   downloadStudentsExcelTemplate,
+  updateSessionPassportsApi,
+  uploadSessionPassportsExcelApi,
+  downloadPassportTemplate,
   fileToBase64,
 } from "../api";
 import PageLoader from "../components/PageLoader";
@@ -97,6 +102,16 @@ export default function TestSessionDetailPage() {
   const [excelError, setExcelError] = useState<string | null>(null);
   const [excelSubmitting, setExcelSubmitting] = useState(false);
   const [templateDownloading, setTemplateDownloading] = useState(false);
+
+  // === Passport (ps_ser/ps_num) ommaviy yangilash ===
+  const [showPassportUpdate, setShowPassportUpdate] = useState(false);
+  const [passportMode, setPassportMode] = useState<"paste" | "excel">("paste");
+  const [passportPaste, setPassportPaste] = useState("");
+  const [passportFile, setPassportFile] = useState<File | null>(null);
+  const [passportSubmitting, setPassportSubmitting] = useState(false);
+  const [passportError, setPassportError] = useState<string | null>(null);
+  const [passportResult, setPassportResult] = useState<PassportUpdateResult | null>(null);
+  const [passportTplDownloading, setPassportTplDownloading] = useState(false);
 
   const fetchSession = useCallback(async () => {
     if (!id) return;
@@ -547,6 +562,58 @@ export default function TestSessionDetailPage() {
     }
   };
 
+  // --- Passport ommaviy yangilash ---
+  const openPassportUpdate = () => {
+    setPassportMode("paste");
+    setPassportPaste("");
+    setPassportFile(null);
+    setPassportError(null);
+    setPassportResult(null);
+    setShowPassportUpdate(true);
+  };
+
+  const handlePassportTemplate = async () => {
+    setPassportTplDownloading(true);
+    setPassportError(null);
+    try {
+      await downloadPassportTemplate();
+    } catch (err) {
+      setPassportError(extractErrorMessage(err));
+    } finally {
+      setPassportTplDownloading(false);
+    }
+  };
+
+  const handlePassportSubmit = async () => {
+    if (!session) return;
+    setPassportSubmitting(true);
+    setPassportError(null);
+    setPassportResult(null);
+    try {
+      let result: PassportUpdateResult;
+      if (passportMode === "excel") {
+        if (!passportFile) return;
+        result = await uploadSessionPassportsExcelApi(session.id, passportFile);
+      } else {
+        const rows = parsePastedPassports(passportPaste);
+        if (rows.length === 0) {
+          setPassportError(
+            "Qatorlar topilmadi. Excel'dan jshshir, ps_ser, ps_num ustunlarini nusxalab joylashtiring.",
+          );
+          return;
+        }
+        result = await updateSessionPassportsApi(session.id, rows);
+      }
+      setPassportResult(result);
+      // Passport o'zgargach student statistikasi yangilanishi mumkin
+      await fetchStudentStats();
+    } catch (err) {
+      setPassportError(extractErrorMessage(err));
+    } finally {
+      setPassportSubmitting(false);
+    }
+  };
+
   const handlePrevStep = async () => {
     if (!session || currentStateKey !== 5) return;
     const prevState = sortedStates.find((s) => s.key === 4);
@@ -759,6 +826,19 @@ export default function TestSessionDetailPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <PermissionGate permission={PERM.TEST_SESSION_UPDATE}>
+            <button
+              onClick={openPassportUpdate}
+              className="btn-secondary text-sm inline-flex items-center gap-1.5"
+              title="Talabalar passport seriyasi/raqamini Excel yoki nusxa orqali yangilash"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7a2 2 0 012-2h14a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 9h4M7 13h2m4-1.5a2 2 0 11-4 0 2 2 0 014 0zM13 16.5c0-1.1 1.12-2 2.5-2s2.5.9 2.5 2" />
+              </svg>
+              Pasport yangilash
+            </button>
+          </PermissionGate>
           <PermissionGate permission={PERM.TEST_SESSION_UPDATE}>
             <button onClick={openEditModal} className="btn-secondary text-sm">
               Tahrirlash
@@ -1476,6 +1556,270 @@ export default function TestSessionDetailPage() {
         </Modal>
       )}
 
+      {/* Passport (ps_ser/ps_num) ommaviy yangilash modali */}
+      {showPassportUpdate && (() => {
+        const parsed =
+          passportMode === "paste" ? parsePastedPassports(passportPaste) : [];
+        const invalidCount = parsed.filter(
+          (r) => validatePassportRowClient(r) !== null,
+        ).length;
+        const canSubmit =
+          !passportSubmitting &&
+          (passportMode === "excel"
+            ? !!passportFile
+            : parsed.length > 0 && invalidCount < parsed.length);
+
+        return (
+          <Modal
+            title="Pasport ma'lumotlarini yangilash"
+            onClose={() =>
+              passportSubmitting ? undefined : setShowPassportUpdate(false)
+            }
+          >
+            <div className="space-y-4">
+              {passportError && <ErrorBox message={passportError} />}
+
+              {/* Natija ko'rsatkichi */}
+              {passportResult ? (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-3 gap-3">
+                    <ResultStat
+                      value={passportResult.updated}
+                      label="Yangilandi"
+                      tone="emerald"
+                    />
+                    <ResultStat
+                      value={passportResult.not_found.length}
+                      label="Topilmadi"
+                      tone="amber"
+                    />
+                    <ResultStat
+                      value={passportResult.invalid.length}
+                      label="Xato qator"
+                      tone="rose"
+                    />
+                  </div>
+
+                  {passportResult.not_found.length > 0 && (
+                    <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200/60 dark:border-amber-800/40">
+                      <p className="text-[12px] font-semibold text-amber-800 dark:text-amber-200 mb-1">
+                        Sessiyada topilmagan JSHSHIR'lar ({passportResult.not_found.length})
+                      </p>
+                      <p className="text-[12px] font-mono text-amber-700 dark:text-amber-300 max-h-24 overflow-y-auto break-all">
+                        {passportResult.not_found.join(", ")}
+                      </p>
+                    </div>
+                  )}
+
+                  {passportResult.invalid.length > 0 && (
+                    <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-900/20 border border-rose-200/60 dark:border-rose-800/40 max-h-32 overflow-y-auto">
+                      <p className="text-[12px] font-semibold text-rose-800 dark:text-rose-200 mb-1">
+                        Xato qatorlar ({passportResult.invalid.length})
+                      </p>
+                      <ul className="text-[12px] text-rose-700 dark:text-rose-300 space-y-0.5">
+                        {passportResult.invalid.slice(0, 50).map((it) => (
+                          <li key={it.row}>
+                            <span className="font-mono">#{it.row}</span>{" "}
+                            {it.jshshir && <span className="font-mono">{it.jshshir}</span>} — {it.error}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  <div className="flex justify-end gap-3 mt-2">
+                    <button
+                      onClick={() => {
+                        setPassportResult(null);
+                        setPassportPaste("");
+                        setPassportFile(null);
+                      }}
+                      className="btn-secondary"
+                    >
+                      Yana yangilash
+                    </button>
+                    <button
+                      onClick={() => setShowPassportUpdate(false)}
+                      className="btn-primary"
+                    >
+                      Yopish
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {/* Rejim tablari */}
+                  <div className="flex p-1 gap-1 rounded-xl bg-gray-100 dark:bg-slate-700/40">
+                    {([
+                      ["paste", "Nusxa joylash"],
+                      ["excel", "Excel fayl"],
+                    ] as const).map(([key, label]) => (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => {
+                          setPassportMode(key);
+                          setPassportError(null);
+                        }}
+                        disabled={passportSubmitting}
+                        className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${
+                          passportMode === key
+                            ? "bg-white dark:bg-slate-800 text-primary-700 dark:text-primary-200 shadow-sm"
+                            : "text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200"
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Yo'riqnoma */}
+                  <div className="p-4 rounded-xl bg-sky-50 dark:bg-sky-900/20 border border-sky-200/60 dark:border-sky-800/40 text-[13px] text-sky-900 dark:text-sky-200 space-y-1.5">
+                    <p className="font-semibold flex items-center gap-2">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      Ustunlar: <code className="font-mono">jshshir</code>,{" "}
+                      <code className="font-mono">ps_ser</code>,{" "}
+                      <code className="font-mono">ps_num</code>
+                    </p>
+                    <p className="text-[12px] leading-relaxed">
+                      <strong>jshshir</strong> bo'yicha shu sessiyadagi talaba topiladi
+                      va passport seriyasi/raqami yangilanadi. Topilmagan JSHSHIR'lar
+                      o'tkazib yuboriladi.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handlePassportTemplate}
+                    disabled={passportTplDownloading || passportSubmitting}
+                    className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-primary-700 dark:text-primary-200 bg-primary-50 dark:bg-primary-900/30 hover:bg-primary-100 dark:hover:bg-primary-900/50 border border-primary-200/70 dark:border-primary-800/40 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V4" />
+                    </svg>
+                    {passportTplDownloading ? "Yuklab olinmoqda..." : "Shablonni yuklab olish (.xlsx)"}
+                  </button>
+
+                  {passportMode === "paste" ? (
+                    <div className="space-y-2">
+                      <Field label="Excel'dan nusxalab joylashtiring (jshshir, ps_ser, ps_num)">
+                        <textarea
+                          value={passportPaste}
+                          onChange={(e) => {
+                            setPassportPaste(e.target.value);
+                            setPassportError(null);
+                          }}
+                          disabled={passportSubmitting}
+                          rows={6}
+                          placeholder={"32401200012345\tAA\t1234567\n33301200067890\tAB\t7654321"}
+                          className="input-field w-full font-mono text-[13px] resize-y"
+                        />
+                      </Field>
+
+                      {/* Jonli ko'rinish (preview) */}
+                      {parsed.length > 0 && (
+                        <div className="rounded-xl border border-gray-200 dark:border-slate-700 overflow-hidden">
+                          <div className="flex items-center justify-between px-3 py-2 bg-gray-50 dark:bg-slate-700/40 text-[12px]">
+                            <span className="font-medium text-gray-600 dark:text-slate-300">
+                              {parsed.length} qator aniqlandi
+                            </span>
+                            {invalidCount > 0 && (
+                              <span className="text-rose-600 dark:text-rose-400 font-medium">
+                                {invalidCount} ta xato
+                              </span>
+                            )}
+                          </div>
+                          <div className="max-h-44 overflow-y-auto">
+                            <table className="w-full text-[12px]">
+                              <thead className="sticky top-0 bg-white dark:bg-slate-800">
+                                <tr className="text-left text-gray-400 dark:text-slate-500">
+                                  <th className="px-3 py-1.5 font-medium">#</th>
+                                  <th className="px-3 py-1.5 font-medium">jshshir</th>
+                                  <th className="px-3 py-1.5 font-medium">ps_ser</th>
+                                  <th className="px-3 py-1.5 font-medium">ps_num</th>
+                                </tr>
+                              </thead>
+                              <tbody className="font-mono">
+                                {parsed.slice(0, 100).map((r, i) => {
+                                  const err = validatePassportRowClient(r);
+                                  return (
+                                    <tr
+                                      key={i}
+                                      className={`border-t border-gray-100 dark:border-slate-700/60 ${
+                                        err
+                                          ? "bg-rose-50/60 dark:bg-rose-900/10"
+                                          : ""
+                                      }`}
+                                      title={err ?? ""}
+                                    >
+                                      <td className="px-3 py-1 text-gray-400">{i + 1}</td>
+                                      <td className="px-3 py-1 text-gray-700 dark:text-slate-200">
+                                        {r.jshshir || <span className="text-rose-500">—</span>}
+                                      </td>
+                                      <td className="px-3 py-1 text-gray-700 dark:text-slate-200">
+                                        {r.ps_ser || <span className="text-rose-500">—</span>}
+                                      </td>
+                                      <td className="px-3 py-1 text-gray-700 dark:text-slate-200">
+                                        {r.ps_num || <span className="text-rose-500">—</span>}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <Field label="Excel fayl (.xlsx)">
+                      <input
+                        type="file"
+                        accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        onChange={(e) => {
+                          setPassportFile(e.target.files?.[0] ?? null);
+                          setPassportError(null);
+                        }}
+                        disabled={passportSubmitting}
+                        className="block w-full text-sm text-gray-600 dark:text-slate-300
+                          file:mr-3 file:py-2.5 file:px-4 file:rounded-full file:border-0
+                          file:text-sm file:font-medium file:bg-primary-50 file:text-primary-700
+                          dark:file:bg-primary-900/40 dark:file:text-primary-200
+                          hover:file:bg-primary-100 dark:hover:file:bg-primary-900/60
+                          file:cursor-pointer cursor-pointer
+                          disabled:opacity-50 disabled:cursor-not-allowed"
+                      />
+                      {passportFile && (
+                        <p className="mt-2 text-[12px] text-gray-500 dark:text-slate-400">
+                          Tanlandi:{" "}
+                          <span className="font-medium text-gray-700 dark:text-slate-300">
+                            {passportFile.name}
+                          </span>{" "}
+                          <span className="text-gray-400 dark:text-slate-500">
+                            ({Math.ceil(passportFile.size / 1024)} KB)
+                          </span>
+                        </p>
+                      )}
+                    </Field>
+                  )}
+                </>
+              )}
+            </div>
+
+            {!passportResult && (
+              <ModalFooter
+                onCancel={() => setShowPassportUpdate(false)}
+                onConfirm={handlePassportSubmit}
+                confirmText={passportSubmitting ? "Yangilanmoqda..." : "Yangilash"}
+                disabled={!canSubmit}
+              />
+            )}
+          </Modal>
+        );
+      })()}
+
       {/* Remove Smena Confirm */}
       {removeSmenaTarget && (() => {
         const isLastSmena = session.smenas.length === 1;
@@ -1596,6 +1940,73 @@ function ErrorBox({ message }: { message: string }) {
       {message}
     </div>
   );
+}
+
+// Passport yangilash natijasi uchun statistika katakchasi
+function ResultStat({
+  value,
+  label,
+  tone,
+}: {
+  value: number;
+  label: string;
+  tone: "emerald" | "amber" | "rose";
+}) {
+  const tones = {
+    emerald: "bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 border-emerald-200/60 dark:border-emerald-800/40",
+    amber: "bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 border-amber-200/60 dark:border-amber-800/40",
+    rose: "bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-300 border-rose-200/60 dark:border-rose-800/40",
+  } as const;
+  return (
+    <div className={`flex flex-col items-center justify-center py-3 rounded-xl border ${tones[tone]}`}>
+      <span className="text-2xl font-bold tabular-nums">{value}</span>
+      <span className="text-[12px] font-medium mt-0.5">{label}</span>
+    </div>
+  );
+}
+
+/**
+ * Excel'dan nusxalab joylashtirilgan matnni `{jshshir, ps_ser, ps_num}`
+ * qatorlariga ajratadi. Ustunlar tab (Excel paste), ; , yoki 2+ bo'shliq
+ * bilan ajratilishi mumkin. Sarlavha qatori (jshshir/ps_ser/...) o'tkaziladi.
+ */
+function parsePastedPassports(text: string): PassportUpdateRow[] {
+  const rows: PassportUpdateRow[] = [];
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    if (/jshshir|ps_?ser|ps_?num|seriya|raqam/i.test(line)) continue; // sarlavha
+    const cols = line.split(/\t|;|,|\s{2,}/).map((c) => c.trim());
+    const jshshir = cols[0] ?? "";
+    let ps_ser = (cols[1] ?? "").toUpperCase();
+    let ps_num = cols[2] ?? "";
+    // Seriya+raqam bitta ustunda birlashib kelgan bo'lsa — ajratamiz.
+    [ps_ser, ps_num] = splitCombinedPassport(ps_ser, ps_num);
+    if (!jshshir && !ps_ser && !ps_num) continue;
+    rows.push({ jshshir, ps_ser, ps_num });
+  }
+  return rows;
+}
+
+// "AA1234567" / "AA 1234567" / "AA-1234567" -> ["AA", "1234567"].
+// ps_num to'lgan bo'lsa yoki naqshga mos kelmasa — o'zgarishsiz qaytaradi.
+const COMBINED_PASSPORT_RE = /^([A-Za-z]{1,5})[\s-]*(\d{1,10})$/;
+function splitCombinedPassport(ps_ser: string, ps_num: string): [string, string] {
+  if (ps_num || !ps_ser) return [ps_ser, ps_num];
+  const m = COMBINED_PASSPORT_RE.exec(ps_ser.trim());
+  if (!m) return [ps_ser, ps_num];
+  return [m[1].toUpperCase(), m[2]];
+}
+
+/** Bitta qatorni client tomonda tekshiradi (backend bilan bir xil qoidalar). */
+function validatePassportRowClient(r: PassportUpdateRow): string | null {
+  if (!r.jshshir) return "JSHSHIR bo'sh";
+  if (!/^\d{1,14}$/.test(r.jshshir)) return "JSHSHIR 14 ta raqamgacha bo'lishi kerak";
+  if (!r.ps_ser) return "Seriya bo'sh";
+  if (r.ps_ser.length > 5) return "Seriya 5 belgidan oshmasin";
+  if (!r.ps_num) return "Raqam bo'sh";
+  if (r.ps_num.length > 10) return "Raqam 10 belgidan oshmasin";
+  return null;
 }
 
 function Modal({

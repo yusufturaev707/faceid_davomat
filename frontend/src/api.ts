@@ -393,6 +393,54 @@ export async function downloadStudentsExcelTemplate(): Promise<void> {
   URL.revokeObjectURL(url);
 }
 
+/**
+ * Paste qilingan qatorlar (jshshir, ps_ser, ps_num) bo'yicha sessiyadagi
+ * talabalar passportini ommaviy yangilash. Sinxron — natija darhol qaytadi.
+ */
+export async function updateSessionPassportsApi(
+  sessionId: number,
+  rows: import("./interfaces").PassportUpdateRow[],
+): Promise<import("./interfaces").PassportUpdateResult> {
+  const res = await apiClient.post(
+    `/test-sessions/${sessionId}/passport-update`,
+    { rows },
+  );
+  return res.data;
+}
+
+/**
+ * `.xlsx` fayl (jshshir, ps_ser, ps_num) orqali passportlarni yangilash.
+ * Fayl serverda o'qiladi; natija sinxron qaytadi.
+ */
+export async function uploadSessionPassportsExcelApi(
+  sessionId: number,
+  file: File,
+): Promise<import("./interfaces").PassportUpdateResult> {
+  const formData = new FormData();
+  formData.append("file", file);
+  const res = await apiClient.post(
+    `/test-sessions/${sessionId}/passport-update/excel`,
+    formData,
+    { headers: { "Content-Type": "multipart/form-data" } },
+  );
+  return res.data;
+}
+
+/** Passport yangilash shabloni (.xlsx: jshshir, ps_ser, ps_num) yuklab olish. */
+export async function downloadPassportTemplate(): Promise<void> {
+  const res = await apiClient.get("/test-sessions/passport-template", {
+    responseType: "blob",
+  });
+  const url = URL.createObjectURL(res.data);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "passport_template.xlsx";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 export async function deleteTestSessionApi(sessionId: number): Promise<void> {
   await apiClient.delete(`/test-sessions/${sessionId}`);
 }

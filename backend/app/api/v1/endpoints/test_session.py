@@ -38,7 +38,15 @@ from app.models.session_state import SessionState
 from app.models.test_session import TestSession
 from app.models.user import User
 from app.models.zone import Zone
-from app.schemas.student import StudentResponse
+from app.schemas.student import (
+    PassportUpdateRequest,
+    PassportUpdateResult,
+    StudentResponse,
+)
+from app.services.passport_updater import (
+    parse_passport_excel,
+    update_session_passports,
+)
 from app.schemas.test_session import (
     ActiveSmenaResponse,
     ActiveTestSessionResponse,
@@ -268,6 +276,71 @@ def download_excel_template(
     content = _build_excel_template()
     headers = {
         "Content-Disposition": 'attachment; filename="students_template.xlsx"',
+        "Cache-Control": "no-store",
+    }
+    return StreamingResponse(
+        BytesIO(content),
+        media_type=(
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        ),
+        headers=headers,
+    )
+
+
+def _build_passport_template() -> bytes:
+    """Passport yangilash uchun bo'sh shablon: jshshir, ps_ser, ps_num."""
+    from openpyxl import Workbook
+    from openpyxl.comments import Comment
+    from openpyxl.styles import Alignment, Font, PatternFill
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Passportlar"
+
+    headers = (
+        ("jshshir", "JSHSHIR (14 ta raqam)"),
+        ("ps_ser", "Pasport seriyasi"),
+        ("ps_num", "Pasport raqami"),
+    )
+    fill = PatternFill("solid", fgColor="FFE7C2")
+    header_font = Font(bold=True, color="1F2937")
+    center = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+    for col_idx, (key, label) in enumerate(headers, start=1):
+        cell = ws.cell(row=1, column=col_idx, value=key)
+        cell.font = header_font
+        cell.alignment = center
+        cell.fill = fill
+        cell.comment = Comment(label + " (majburiy)", "FaceID")
+
+    examples = (
+        ("32401200012345", "AA", "1234567"),
+        ("33301200067890", "AB", "7654321"),
+    )
+    for row_idx, row in enumerate(examples, start=2):
+        for col_idx, value in enumerate(row, start=1):
+            ws.cell(row=row_idx, column=col_idx, value=value)
+
+    for col_idx, width in enumerate((20, 10, 14), start=1):
+        ws.column_dimensions[ws.cell(row=1, column=col_idx).column_letter].width = width
+    ws.freeze_panes = "A2"
+
+    buf = BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+@router.get(
+    "/passport-template",
+    summary="Passport yangilash shablonini yuklab olish",
+    description="Passport yangilash uchun bo'sh shablon (.xlsx): jshshir, ps_ser, ps_num.",
+)
+def download_passport_template(
+    _: User = Depends(PermissionChecker(P.TEST_SESSION_UPDATE.code)),
+):
+    content = _build_passport_template()
+    headers = {
+        "Content-Disposition": 'attachment; filename="passport_template.xlsx"',
         "Cache-Control": "no-store",
     }
     return StreamingResponse(
@@ -674,6 +747,78 @@ async def upload_students_excel(
         "status": "queued",
         "message": "Excel qayta ishlanmoqda — progress orqali kuzating",
     }
+
+
+def _require_session(db: Session, session_id: int) -> TestSession:
+    session = db.get(TestSession, session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Sessiya topilmadi")
+    return session
+
+
+@router.post(
+    "/{session_id}/passport-update",
+    response_model=PassportUpdateResult,
+    summary="Passport (ps_ser/ps_num) ma'lumotlarini ommaviy yangilash (paste)",
+)
+def update_passports_json(
+    session_id: int,
+    payload: PassportUpdateRequest,
+    db: Session = Depends(get_db),
+    _: User = Depends(PermissionChecker(P.TEST_SESSION_UPDATE.code)),
+):
+    """Excel'dan nusxalab qo'yilgan (paste) qatorlar bo'yicha passportlarni yangilash.
+
+    `jshshir` (= talaba IMEI) bo'yicha shu sessiyadagi talaba topiladi va uning
+    passport seriyasi/raqami yangilanadi. Jarayon sinxron — natija darhol qaytadi.
+    """
+    _require_session(db, session_id)
+    rows = [r.model_dump() for r in payload.rows]
+    return update_session_passports(db, session_id, rows)
+
+
+@router.post(
+    "/{session_id}/passport-update/excel",
+    response_model=PassportUpdateResult,
+    summary="Passport ma'lumotlarini Excel'dan ommaviy yangilash",
+)
+async def update_passports_excel(
+    session_id: int,
+    file: UploadFile = File(..., description=".xlsx fayl: jshshir, ps_ser, ps_num"),
+    db: Session = Depends(get_db),
+    _: User = Depends(PermissionChecker(P.TEST_SESSION_UPDATE.code)),
+):
+    """`.xlsx` fayl (`jshshir, ps_ser, ps_num`) orqali passportlarni yangilash.
+
+    Fayl serverda openpyxl bilan o'qiladi va `jshshir` bo'yicha shu sessiyadagi
+    talabalar passporti yangilanadi. Jarayon sinxron — natija darhol qaytadi.
+    """
+    _require_session(db, session_id)
+
+    filename = (file.filename or "").lower()
+    if not filename.endswith(".xlsx"):
+        raise HTTPException(
+            status_code=400, detail="Fayl `.xlsx` formatida bo'lishi kerak"
+        )
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Fayl bo'sh")
+    if len(content) > _MAX_EXCEL_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Fayl hajmi {_MAX_EXCEL_BYTES // (1024 * 1024)}MB dan oshmasin",
+        )
+
+    rows, errors = parse_passport_excel(content)
+    if errors:
+        raise HTTPException(status_code=400, detail="; ".join(errors))
+    if not rows:
+        raise HTTPException(
+            status_code=400, detail="Excel'da yangilanadigan qator topilmadi"
+        )
+
+    return update_session_passports(db, session_id, rows)
 
 
 @router.get("/{session_id}/student-load-progress")
