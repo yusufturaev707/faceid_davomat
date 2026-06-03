@@ -706,6 +706,47 @@ export async function fetchGtspBulkApi(
   return res.data;
 }
 
+/**
+ * Filtrlangan talabalar ro'yxatini Excel (.xlsx) yoki PDF qilib yuklab olish.
+ * Parametrlar getStudentsApi bilan bir xil (sahifalashsiz). Brauzer faylni saqlaydi.
+ */
+export async function exportStudentsApi(
+  params: Record<string, unknown>,
+  fmt: "xlsx" | "pdf",
+): Promise<void> {
+  try {
+    const res = await apiClient.get("/students/export", {
+      params: { ...params, fmt },
+      responseType: "blob",
+    });
+    // Fayl nomini Content-Disposition'dan olamiz (bo'lmasa — standart)
+    const cd = (res.headers["content-disposition"] as string | undefined) ?? "";
+    const match = /filename="?([^";]+)"?/.exec(cd);
+    const filename = match ? match[1] : `talabalar.${fmt}`;
+
+    const url = URL.createObjectURL(res.data);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    // Xato javob blob ko'rinishida keladi — ichidagi {detail} ni o'qib chiqaramiz
+    const data = (err as { response?: { data?: unknown } })?.response?.data;
+    if (data instanceof Blob) {
+      try {
+        const parsed = JSON.parse(await data.text());
+        throw new Error(parsed.detail || "Eksport amalga oshmadi");
+      } catch (e) {
+        if (e instanceof Error && e.message) throw e;
+      }
+    }
+    throw err;
+  }
+}
+
 // === Student Logs API ===
 export async function getStudentLogsApi(
   params: Record<string, string | number | boolean | undefined | null>

@@ -3,9 +3,11 @@
 import base64
 import logging
 import math
+from io import BytesIO
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -36,6 +38,7 @@ from app.crud.student import (
     delete_student,
     delete_student_log,
     get_cheating_logs_paginated,
+    get_filtered_students,
     get_student,
     get_student_log_detail,
     get_student_logs_paginated,
@@ -50,6 +53,7 @@ from app.dependencies import (
     get_db,
 )
 from app.models.user import User
+from app.services.student_export import build_students_pdf, build_students_xlsx
 from app.schemas.student import (
     AppliedStudentItem,
     AppliedStudentsResponse,
@@ -808,6 +812,102 @@ def list_students(
         page=page,
         per_page=per_page,
         pages=math.ceil(total / per_page) if total else 0,
+    )
+
+
+# Eksport uchun maksimal qator soni (xotira/hajmni cheklash uchun).
+_EXPORT_MAX_XLSX = 100_000
+_EXPORT_MAX_PDF = 10_000
+
+
+@router.get("/export")
+def export_students(
+    fmt: str = Query("xlsx", description="Format: 'xlsx' yoki 'pdf'"),
+    session_smena_id: int | None = None,
+    zone_id: int | None = None,
+    test_id: int | None = None,
+    region_id: int | None = None,
+    smena_id: int | None = None,
+    gr_n: int | None = None,
+    e_date_from: str | None = None,
+    e_date_to: str | None = None,
+    is_entered: bool | None = None,
+    is_cheating: bool | None = None,
+    is_blacklist: bool | None = None,
+    is_face: bool | None = None,
+    is_image: bool | None = None,
+    is_ready: bool | None = None,
+    is_applied: bool | None = None,
+    search: str | None = None,
+    db: Session = Depends(get_db),
+    _: User = Depends(PermissionChecker(P.STUDENT_READ.code)),
+):
+    """Filtrlangan talabalar ro'yxatini Excel (.xlsx) yoki PDF qilib yuklab olish.
+
+    `GET /students` bilan bir xil filtrlarni qabul qiladi (sahifalashsiz).
+    Ustunlar: Test, Hudud, Familiya, Ism, Otasining ismi, JSHSHIR, Seriya,
+    Raqam, Sana, Smena, Guruh.
+    """
+    from datetime import datetime
+
+    fmt = (fmt or "xlsx").lower()
+    if fmt not in ("xlsx", "pdf"):
+        raise HTTPException(
+            status_code=400, detail="Format 'xlsx' yoki 'pdf' bo'lishi kerak"
+        )
+
+    cap = _EXPORT_MAX_XLSX if fmt == "xlsx" else _EXPORT_MAX_PDF
+    rows = get_filtered_students(
+        db,
+        session_smena_id=session_smena_id,
+        zone_id=zone_id,
+        test_id=test_id,
+        region_id=region_id,
+        smena_id=smena_id,
+        gr_n=gr_n,
+        e_date_from=e_date_from,
+        e_date_to=e_date_to,
+        is_entered=is_entered,
+        is_cheating=is_cheating,
+        is_blacklist=is_blacklist,
+        is_face=is_face,
+        is_image=is_image,
+        is_ready=is_ready,
+        is_applied=is_applied,
+        search=search,
+        limit=cap + 1,
+    )
+    if not rows:
+        raise HTTPException(
+            status_code=404, detail="Tanlangan filtr bo'yicha talaba topilmadi"
+        )
+    if len(rows) > cap:
+        raise HTTPException(
+            status_code=413,
+            detail=(
+                f"Natija juda katta ({fmt.upper()} uchun {cap:,} qatordan ortiq). "
+                "Iltimos, filtrni aniqlashtiring."
+            ),
+        )
+
+    generated_at = datetime.now()
+    stamp = generated_at.strftime("%Y%m%d_%H%M")
+    if fmt == "xlsx":
+        content = build_students_xlsx(rows, generated_at)
+        media = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        filename = f"talabalar_{stamp}.xlsx"
+    else:
+        content = build_students_pdf(rows, generated_at)
+        media = "application/pdf"
+        filename = f"talabalar_{stamp}.pdf"
+
+    return StreamingResponse(
+        BytesIO(content),
+        media_type=media,
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Cache-Control": "no-store",
+        },
     )
 
 

@@ -274,6 +274,79 @@ def get_filtered_student_ids(
     return [int(sid) for sid in db.execute(stmt).scalars().all()]
 
 
+def get_filtered_students(
+    db: Session,
+    *,
+    session_smena_id: int | None = None,
+    zone_id: int | None = None,
+    test_id: int | None = None,
+    region_id: int | None = None,
+    smena_id: int | None = None,
+    gr_n: int | None = None,
+    e_date_from: str | None = None,
+    e_date_to: str | None = None,
+    is_entered: bool | None = None,
+    is_cheating: bool | None = None,
+    is_blacklist: bool | None = None,
+    is_face: bool | None = None,
+    is_image: bool | None = None,
+    is_ready: bool | None = None,
+    is_applied: bool | None = None,
+    search: str | None = None,
+    limit: int | None = None,
+) -> list[dict]:
+    """Filtr/qidiruv shartlariga mos BARCHA talabalarni qaytaradi (sahifalashsiz).
+
+    Eksport (Excel/PDF) uchun. Hisobot uchun qulay tartibda saralanadi:
+    hudud → sana → smena → guruh → familiya.
+    """
+    stmt = _build_student_query()
+    conditions = _student_filter_conditions(
+        session_smena_id=session_smena_id,
+        zone_id=zone_id,
+        test_id=test_id,
+        region_id=region_id,
+        smena_id=smena_id,
+        gr_n=gr_n,
+        e_date_from=e_date_from,
+        e_date_to=e_date_to,
+        is_entered=is_entered,
+        is_cheating=is_cheating,
+        is_blacklist=is_blacklist,
+        is_face=is_face,
+        is_image=is_image,
+        is_ready=is_ready,
+        is_applied=is_applied,
+        search=search,
+    )
+    for condition in conditions:
+        stmt = stmt.where(condition)
+    stmt = stmt.order_by(
+        Region.name.asc(),
+        Student.e_date.asc(),
+        Smena.name.asc(),
+        Student.gr_n.asc(),
+        Student.last_name.asc(),
+        Student.first_name.asc(),
+    )
+    if limit is not None:
+        stmt = stmt.limit(limit)
+    rows = db.execute(stmt).all()
+    return [
+        _student_to_dict(
+            student,
+            ps_data,
+            zone_name=zn,
+            region_name=rn,
+            smena_name=sn,
+            test_session_id=tsid,
+            test_name=tn,
+            gender_name=gn,
+        )
+        for student, ps_data, zn, rn, sn, tsid, tn, gn in rows
+    ]
+
+
 def get_students_paginated(
     db: Session,
     *,

@@ -18,6 +18,7 @@ import {
   deleteStudentApi,
   fetchGtspImageApi,
   fetchGtspBulkApi,
+  exportStudentsApi,
   getTestsLookupApi,
   getTestSessionsApi,
   getRegionsListApi,
@@ -83,6 +84,7 @@ export default function StudentsPage() {
 
   // Bulk GTSP (filtrlangan studentlar uchun)
   const [bulkGtspLoading, setBulkGtspLoading] = useState(false);
+  const [exporting, setExporting] = useState<"xlsx" | "pdf" | null>(null);
   const [bulkMsg, setBulkMsg] = useState("");
 
   // Modal
@@ -238,6 +240,20 @@ export default function StudentsPage() {
       setError(extractErrorMessage(err));
     } finally {
       setBulkGtspLoading(false);
+    }
+  };
+
+  const handleExport = async (fmt: "xlsx" | "pdf") => {
+    if (exporting) return;
+    if (!data || data.total === 0) return;
+    setExporting(fmt);
+    setError("");
+    try {
+      await exportStudentsApi(buildFilterParams(), fmt);
+    } catch (err) {
+      setError(extractErrorMessage(err));
+    } finally {
+      setExporting(null);
     }
   };
 
@@ -671,6 +687,41 @@ export default function StudentsPage() {
                   ? "Yuklanmoqda..."
                   : `Rasm tortish${data ? ` (${data.total})` : ""}`}
               </button>
+            </PermissionGate>
+            <PermissionGate permission={PERM.STUDENT_READ}>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handleExport("xlsx")}
+                  disabled={!!exporting || !data || data.total === 0}
+                  title="Filtrlangan ro'yxatni Excel (.xlsx) qilib yuklab olish"
+                  className="inline-flex items-center gap-1.5 px-3.5 !py-2 text-sm font-medium text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-900/20 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 rounded-full transition-colors disabled:opacity-50 disabled:pointer-events-none"
+                >
+                  {exporting === "xlsx" ? (
+                    <Spinner />
+                  ) : (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 13h6m-6 4h6m2 4H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                  )}
+                  Excel
+                </button>
+                <button
+                  onClick={() => handleExport("pdf")}
+                  disabled={!!exporting || !data || data.total === 0}
+                  title="Filtrlangan ro'yxatni PDF qilib yuklab olish"
+                  className="inline-flex items-center gap-1.5 px-3.5 !py-2 text-sm font-medium text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-900/20 hover:bg-rose-100 dark:hover:bg-rose-900/30 rounded-full transition-colors disabled:opacity-50 disabled:pointer-events-none"
+                >
+                  {exporting === "pdf" ? (
+                    <Spinner />
+                  ) : (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 13h6m-6 3h4" />
+                    </svg>
+                  )}
+                  PDF
+                </button>
+              </div>
             </PermissionGate>
             {data && (
               <span className="text-xs text-gray-400 dark:text-slate-500 ml-auto self-center">
@@ -1795,6 +1846,15 @@ export default function StudentsPage() {
 }
 
 /* ---- Reusable components ---- */
+
+function Spinner() {
+  return (
+    <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth={4} />
+      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+    </svg>
+  );
+}
 
 function FilterSelect({
   label,
