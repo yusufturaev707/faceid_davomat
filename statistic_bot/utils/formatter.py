@@ -69,7 +69,7 @@ def format_summary(data: list[dict]) -> str:
 
     s = []
     s.append("📊 <b>ABITURIYENTLAR STATISTIKASI</b>")
-    s.append(f"🎓 <b>{PREV_YEAR}-{CURRENT_YEAR} o'quv yili qabuli</b>")
+    s.append(f"🎓 <b>{CURRENT_YEAR}-{CURRENT_YEAR + 1} o'quv yili qabuli</b>")
     s.append(LINE)
 
     s.append("🖥 <b>Ro'yxatdan o'tganlar</b>")
