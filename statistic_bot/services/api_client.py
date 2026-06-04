@@ -1,4 +1,6 @@
 """Tashqi statistika API bilan ishlovchi klient (kesh bilan)."""
+from __future__ import annotations
+
 import logging
 import time
 

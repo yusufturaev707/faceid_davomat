@@ -1,4 +1,6 @@
 """Statistika ma'lumotlarini chiroyli HTML matnga aylantiruvchi formatter."""
+from __future__ import annotations
+
 import datetime
 
 CURRENT_YEAR = 2026

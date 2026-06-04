@@ -1,4 +1,6 @@
 """Bot konfiguratsiyasi. Barcha sozlamalar .env faylidan o'qiladi."""
+from __future__ import annotations
+
 import os
 from dataclasses import dataclass, field
 

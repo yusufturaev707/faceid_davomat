@@ -1,4 +1,6 @@
 """Statistika buyruqlari va xabarlarini qayta ishlovchi handlerlar."""
+from __future__ import annotations
+
 import logging
 
 from aiogram import F, Router
