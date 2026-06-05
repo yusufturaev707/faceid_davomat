@@ -73,9 +73,9 @@ def format_summary(data: list[dict]) -> str:
     s.append(LINE)
 
     s.append("🖥 <b>Ro'yxatdan o'tganlar</b>")
-    s.append(f"      <b>{fmt(count_now)}</b> nafar")
-    s.append(f"      {_trend(count_now, count_prev)}")
-    s.append(f"      <i>{PREV_YEAR}-yil: {fmt(count_prev)} nafar</i>")
+    s.append(f"       <b>{fmt(count_now)}</b> nafar")
+    # s.append(f"      {_trend(count_now, count_prev)}")
+    # s.append(f"      <i>{PREV_YEAR}-yil: {fmt(count_prev)} nafar</i>")
     s.append("")
 
     s.append("👥 <b>Jinsi bo'yicha taqsimot</b>")
@@ -114,12 +114,12 @@ def format_summary(data: list[dict]) -> str:
         cnt = _int(r.get("count_2026"))
         share = pct(cnt, count_now)
         s.append(f"{marker} <b>{name}</b> — {fmt(cnt)} nafar ({share:.1f}%)")
-        s.append(
-            f"      🙎🏻‍♂️ {fmt(r.get('male_2026'))}  "
-            f"🙍🏻‍♀️ {fmt(r.get('female_2026'))}  |  "
-            f"🇺🇿 {fmt(r.get('uz_2026'))}  🇷🇺 {fmt(r.get('ru_2026'))}  "
-            f"📗 {fmt(r.get('qq_2026'))}"
-        )
+        # s.append(
+        #     f"      🙎🏻‍♂️ {fmt(r.get('male_2026'))}  "
+        #     f"🙍🏻‍♀️ {fmt(r.get('female_2026'))}  |  "
+        #     f"🇺🇿 {fmt(r.get('uz_2026'))}  🇷🇺 {fmt(r.get('ru_2026'))}  "
+        #     f"📗 {fmt(r.get('qq_2026'))}"
+        # )
 
     s.append("")
     s.append(f"🕔 <i>{now} holatiga</i>")
