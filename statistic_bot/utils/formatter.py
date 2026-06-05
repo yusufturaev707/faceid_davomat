@@ -113,7 +113,7 @@ def format_summary(data: list[dict]) -> str:
         name = r.get("region_name", "Noma'lum")
         cnt = _int(r.get("count_2026"))
         share = pct(cnt, count_now)
-        s.append(f"{marker} <b>{name}</b> — {fmt(cnt)} nafar ({share:.1f}%)")
+        s.append(f"{i + 1}. <b>{name}</b> — {fmt(cnt)} nafar ({share:.1f}%)")
         # s.append(
         #     f"      🙎🏻‍♂️ {fmt(r.get('male_2026'))}  "
         #     f"🙍🏻‍♀️ {fmt(r.get('female_2026'))}  |  "
