@@ -50,8 +50,38 @@ def _trend(now: int, prev: int) -> str:
     return text + "  <i>(o'tgan yilga nisbatan)</i>"
 
 
-def format_summary(data: list[dict]) -> str:
-    """Umumiy statistika + viloyatlar ro'yxati (bitta matn)."""
+def _format_2025_block(data: list[dict]) -> list[str]:
+    """Faqat xodimlar uchun: 2025-yil ma'lumotlari (alohida ajratilgan blok)."""
+    count = total(data, "count_2025")
+    male = total(data, "male_2025")
+    female = total(data, "female_2025")
+    graduated = total(data, "graduated_2025")
+    graduated_not = count - graduated
+    paid = total(data, "paid_2025")
+    unpaid = count - paid
+
+    block = []
+    block.append(f"📅 <b>{PREV_YEAR}-yil ma'lumotlari</b>")
+    block.append(f"🖥 Ro'yxatdan o'tganlar:  <b>{fmt(count)}</b> nafar")
+    block.append("")
+    block.append(f" <b>Shundan:</b>")
+    block.append(f"🎓 Joriy yil bitiruvchilari:  <b>{fmt(graduated)}</b>")
+    block.append(f"🔹 Avvalgi yil bitiruvchilari:  <b>{fmt(graduated_not)}</b>")
+    block.append("")
+    block.append(f"🙎🏻‍♂️ Erkaklar:  <b>{fmt(male)}</b>  ({pct(male, count):.1f}%)")
+    block.append(f"🙍🏻‍♀️ Ayollar:  <b>{fmt(female)}</b>  ({pct(female, count):.1f}%)")
+    block.append("")
+    block.append(f"✅ To'lov qilganlar:  <b>{fmt(paid)}</b>  ({pct(paid, count):.1f}%)")
+    block.append(f"❌ To'l qilmaganlar:  <b>{fmt(unpaid)}</b>")
+    block.append("")
+    return block
+
+
+def format_summary(data: list[dict], show_2025: bool = False) -> str:
+    """Umumiy statistika + viloyatlar ro'yxati (bitta matn).
+
+    show_2025=True bo'lsa (faqat xodimlar uchun) 2025-yil bloki ham qo'shiladi.
+    """
     count_now = total(data, "count_2026")
     count_prev = total(data, "count_2025")
     male = total(data, "male_2026")
@@ -78,21 +108,21 @@ def format_summary(data: list[dict]) -> str:
     s.append(f"      <i>{PREV_YEAR}-yil: {fmt(count_prev)} nafar</i>")
     s.append("")
 
-    s.append("👥 <b>Jinsi bo'yicha taqsimot</b>")
+    s.append("🎓 <b>Shundan:</b>")
+    s.append(f"🔹 Joriy yil bitiruvchilari:  <b>{fmt(graduated)}</b>")
+    s.append(f"🔹 Avvalgi yil bitiruvchilari:  <b>{fmt(graduated_not)}</b>")
+    s.append("")
+
+    s.append("👥 <b>Jins bo'yicha taqsimot</b>")
     s.append(f"🙎🏻‍♂️ Erkaklar:  <b>{fmt(male)}</b>  ({pct(male, count_now):.1f}%)")
     s.append(f"      {bar(male, count_now)}")
     s.append(f"🙍🏻‍♀️ Ayollar:  <b>{fmt(female)}</b>  ({pct(female, count_now):.1f}%)")
     s.append(f"      {bar(female, count_now)}")
     s.append("")
 
-    s.append("🎓 <b>Bitiruv yili bo'yicha</b>")
-    s.append(f"🔹 Joriy yil bitiruvchilari:  <b>{fmt(graduated)}</b>")
-    s.append(f"🔹 Avvalgi yillar:  <b>{fmt(graduated_not)}</b>")
-    s.append("")
-
     s.append("💳 <b>To'lov holati</b>")
     s.append(f"✅ To'lov qilganlar:  <b>{fmt(paid)}</b>  ({pct(paid, count_now):.1f}%)")
-    s.append(f"⏳ To'lanmaganlar:  <b>{fmt(unpaid)}</b>")
+    s.append(f"⏳ To'lov qilmaganlar:  <b>{fmt(unpaid)}</b>")
     s.append("")
 
     s.append("📚 <b>Ta'lim tili bo'yicha</b>")
@@ -120,6 +150,11 @@ def format_summary(data: list[dict]) -> str:
         #     f"🇺🇿 {fmt(r.get('uz_2026'))}  🇷🇺 {fmt(r.get('ru_2026'))}  "
         #     f"📗 {fmt(r.get('qq_2026'))}"
         # )
+
+    s.append("--------------------------------")
+    s.append("")
+    if show_2025:
+        s.extend(_format_2025_block(data))
 
     s.append("")
     s.append(f"🕔 <i>{now} holatiga</i>")

@@ -16,8 +16,14 @@ router = Router()
 logger = logging.getLogger(__name__)
 
 
+def is_staff(user_id: int) -> bool:
+    """Xodim — 2025-yil ma'lumotlarini ham ko'ra oladi."""
+    return user_id in config.staff_ids
+
+
 def is_admin(user_id: int) -> bool:
-    return user_id in config.admin_ids
+    """Admin yoki xodim — botdan foydalana oladi (xodim avtomatik admin)."""
+    return user_id in config.admin_ids or is_staff(user_id)
 
 
 async def _deny(message: Message) -> None:
@@ -73,7 +79,7 @@ async def _send_statistics(message: Message, force: bool) -> None:
         await status.edit_text("📭 Hozircha statistika ma'lumotlari mavjud emas.")
         return
 
-    text = format_summary(data)
+    text = format_summary(data, show_2025=is_staff(message.from_user.id))
     chunks = split_message(text)
 
     # Birinchi bo'lakni status xabarining o'zida yangilaymiz, qolganlarini ketma-ket yuboramiz.

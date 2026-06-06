@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
-def _parse_admin_ids(raw: str) -> set[int]:
+def _parse_ids(raw: str) -> set[int]:
     ids: set[int] = set()
     for part in raw.replace(" ", "").split(","):
         if part:
@@ -26,10 +26,13 @@ class Config:
     api_url: str = os.getenv("API_URL", "")
     api_token: str = os.getenv("API_TOKEN", "")
     cache_ttl: int = int(os.getenv("CACHE_TTL", "60"))
+    # Statistikani ko'ra oladigan oddiy adminlar
     admin_ids: set[int] = field(
-        default_factory=lambda: _parse_admin_ids(
-            os.getenv("ADMIN_IDS", "811104615")
-        )
+        default_factory=lambda: _parse_ids(os.getenv("ADMIN_IDS", "811104615"))
+    )
+    # Xodimlar — qo'shimcha 2025-yil ma'lumotlarini ham ko'ra oladi
+    staff_ids: set[int] = field(
+        default_factory=lambda: _parse_ids(os.getenv("STAFF_IDS", ""))
     )
 
 
