@@ -74,8 +74,8 @@ def format_summary(data: list[dict]) -> str:
 
     s.append("🖥 <b>Ro'yxatdan o'tganlar</b>")
     s.append(f"       <b>{fmt(count_now)}</b> nafar")
-    # s.append(f"      {_trend(count_now, count_prev)}")
-    # s.append(f"      <i>{PREV_YEAR}-yil: {fmt(count_prev)} nafar</i>")
+    s.append(f"      {_trend(count_now, count_prev)}")
+    s.append(f"      <i>{PREV_YEAR}-yil: {fmt(count_prev)} nafar</i>")
     s.append("")
 
     s.append("👥 <b>Jinsi bo'yicha taqsimot</b>")
