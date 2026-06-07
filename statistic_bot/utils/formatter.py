@@ -120,10 +120,11 @@ def format_summary(data: list[dict], show_2025: bool = False) -> str:
     s.append(f"      {bar(female, count_now)}")
     s.append("")
 
-    s.append("💳 <b>To'lov holati</b>")
-    s.append(f"✅ To'lov qilganlar:  <b>{fmt(paid)}</b>  ({pct(paid, count_now):.1f}%)")
-    s.append(f"⏳ To'lov qilmaganlar:  <b>{fmt(unpaid)}</b>")
-    s.append("")
+    if show_2025:
+        s.append("💳 <b>To'lov holati</b>")
+        s.append(f"✅ To'lov qilganlar:  <b>{fmt(paid)}</b>  ({pct(paid, count_now):.1f}%)")
+        s.append(f"⏳ To'lov qilmaganlar:  <b>{fmt(unpaid)}</b>")
+        s.append("")
 
     s.append("📚 <b>Ta'lim tili bo'yicha</b>")
     s.append(f"🇺🇿 O'zbek:  <b>{fmt(uz)}</b>  ({pct(uz, count_now):.1f}%)")
