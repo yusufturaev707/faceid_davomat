@@ -53,7 +53,6 @@ async def cmd_start(message: Message) -> None:
         return
     await message.answer(
         "👋 <b>Assalomu alaykum!</b>\n\n"
-        f"Rolingiz: <b>{user.get('role_name', '—')}</b>\n"
         "Bu botdan abituriyentlar ro'yxati bo'yicha statistikani olsa bo'ladi.\n"
         "Quyidagi tugma orqali eng so'nggi ma'lumotlarni oling 👇",
         reply_markup=main_menu(),
