@@ -2,6 +2,7 @@
 
 import base64
 import logging
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -33,6 +34,24 @@ from app.schemas.student import (
 )
 
 logger = logging.getLogger(__name__)
+
+# O'zbekiston vaqti (UZT) — UTC+5, yil davomida o'zgarmaydi (DST yo'q).
+UZ_TZ = timezone(timedelta(hours=5))
+
+
+def _enter_time_to_utc(dt: datetime | None) -> datetime | None:
+    """Desktop client'dan kelgan kirish vaqtini UTC'ga keltiradi.
+
+    Desktop naive (timezone'siz) lokal Toshkent vaqtini yuboradi —
+    uni UZT (UTC+5) deb talqin qilib UTC'ga o'tkazamiz, shunda `timestamptz`
+    ustunida haqiqiy absolyut vaqt saqlanadi va frontend to'g'ri ko'rsatadi.
+    Agar qiymat allaqachon timezone-aware bo'lsa — shunchaki UTC'ga normallashtiramiz.
+    """
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=UZ_TZ)
+    return dt.astimezone(timezone.utc)
 
 
 def _b64_to_bytes(val: str | None) -> bytes | None:
@@ -848,6 +867,9 @@ def create_student_log(db: Session, data: StudentLogCreate) -> StudentLog:
                 payload[field] = base64.b64decode(val)
             except Exception:
                 payload[field] = None
+    # Lokal (Toshkent) kirish vaqtlarini UTC'ga keltiramiz.
+    for field in ("first_enter_time", "last_enter_time"):
+        payload[field] = _enter_time_to_utc(payload.get(field))
 
     existing = db.execute(
         select(StudentLog).where(StudentLog.student_id == payload["student_id"])
@@ -924,6 +946,10 @@ def bulk_create_student_logs(
             # faqat last_* / score / max_score / network maydonlar yangilanadi.
             first_captured_bytes = _b64_to_bytes(item.first_captured)
             last_captured_bytes = _b64_to_bytes(item.last_captured)
+            # Desktop lokal (Toshkent) vaqtini UTC'ga keltiramiz — `timestamptz`
+            # ustunida absolyut vaqt saqlanishi va frontend to'g'ri ko'rsatishi uchun.
+            first_enter_utc = _enter_time_to_utc(item.first_enter_time)
+            last_enter_utc = _enter_time_to_utc(item.last_enter_time)
 
             log = db.execute(
                 select(StudentLog).where(StudentLog.student_id == item.student_id)
@@ -934,8 +960,8 @@ def bulk_create_student_logs(
                     student_id=item.student_id,
                     first_captured=first_captured_bytes,
                     last_captured=last_captured_bytes,
-                    first_enter_time=item.first_enter_time,
-                    last_enter_time=item.last_enter_time,
+                    first_enter_time=first_enter_utc,
+                    last_enter_time=last_enter_utc,
                     score=item.score,
                     max_score=item.max_score,
                     is_check_hand=item.is_check_hand,
@@ -946,8 +972,8 @@ def bulk_create_student_logs(
             else:
                 if last_captured_bytes is not None:
                     log.last_captured = last_captured_bytes
-                if item.last_enter_time is not None:
-                    log.last_enter_time = item.last_enter_time
+                if last_enter_utc is not None:
+                    log.last_enter_time = last_enter_utc
                 log.score = max(log.score or 0, item.score or 0)
                 log.max_score = max(log.max_score or 0, item.max_score or 0)
                 if item.is_check_hand:
@@ -959,8 +985,8 @@ def bulk_create_student_logs(
                 # first_* yozuvlari faqat bo'sh bo'lsagina to'ldiriladi
                 if log.first_captured is None and first_captured_bytes is not None:
                     log.first_captured = first_captured_bytes
-                if log.first_enter_time is None and item.first_enter_time is not None:
-                    log.first_enter_time = item.first_enter_time
+                if log.first_enter_time is None and first_enter_utc is not None:
+                    log.first_enter_time = first_enter_utc
 
             if item.is_rejected:
                 reason_name: str | None = None

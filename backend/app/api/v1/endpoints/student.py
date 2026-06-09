@@ -14,20 +14,6 @@ from sqlalchemy.orm import Session
 logger = logging.getLogger(__name__)
 
 
-def _b64_to_bytes(val: str | None) -> bytes | None:
-    """base64 string (data URL yoki sof base64) → bytes."""
-    if not val:
-        return None
-    if isinstance(val, (bytes, bytearray)):
-        return bytes(val)
-    try:
-        if "," in val and val.index(",") < 80:
-            val = val.split(",", 1)[1]
-        return base64.b64decode(val)
-    except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"Base64 dekodlash xatosi: {exc}")
-
-
 from app.core.permissions import P
 from app.crud.student import (
     bulk_create_student_logs,
@@ -53,18 +39,17 @@ from app.dependencies import (
     get_db,
 )
 from app.models.user import User
-from app.services.student_export import build_students_pdf, build_students_xlsx
 from app.schemas.student import (
     AppliedStudentItem,
     AppliedStudentsResponse,
-    NotEnteredStudentItem,
-    NotEnteredStudentsResponse,
-    RejectedStudentItem,
-    RejectedStudentsResponse,
     CheatingLogCreate,
     CheatingLogListResponse,
     CheatingLogResponse,
     CheatingLogUpdate,
+    NotEnteredStudentItem,
+    NotEnteredStudentsResponse,
+    RejectedStudentItem,
+    RejectedStudentsResponse,
     StudentCreate,
     StudentListResponse,
     StudentLogBulkRequest,
@@ -77,8 +62,23 @@ from app.schemas.student import (
     StudentResponse,
     StudentUpdate,
 )
+from app.services.student_export import build_students_pdf, build_students_xlsx
 
 router = APIRouter()
+
+
+def _b64_to_bytes(val: str | None) -> bytes | None:
+    """base64 string (data URL yoki sof base64) → bytes."""
+    if not val:
+        return None
+    if isinstance(val, (bytes, bytearray)):
+        return bytes(val)
+    try:
+        if "," in val and val.index(",") < 80:
+            val = val.split(",", 1)[1]
+        return base64.b64decode(val)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Base64 dekodlash xatosi: {exc}")
 
 
 # ===================== StudentLog =====================
@@ -499,12 +499,15 @@ def list_not_entered_students(
     ]
     if target_zone_id is not None:
         roster_filters.append(StudentModel.zone_id == target_zone_id)
-    roster_total = db.scalar(
-        sa_select(func.count(StudentModel.id))
-        .select_from(StudentModel)
-        .join(Zone, Zone.id == StudentModel.zone_id)
-        .where(*roster_filters)
-    ) or 0
+    roster_total = (
+        db.scalar(
+            sa_select(func.count(StudentModel.id))
+            .select_from(StudentModel)
+            .join(Zone, Zone.id == StudentModel.zone_id)
+            .where(*roster_filters)
+        )
+        or 0
+    )
 
     return NotEnteredStudentsResponse(
         items=items, total=len(items), roster_total=int(roster_total)
@@ -615,12 +618,15 @@ def list_entered_students(
     ]
     if target_zone_id is not None:
         roster_filters.append(StudentModel.zone_id == target_zone_id)
-    roster_total = db.scalar(
-        sa_select(func.count(StudentModel.id))
-        .select_from(StudentModel)
-        .join(Zone, Zone.id == StudentModel.zone_id)
-        .where(*roster_filters)
-    ) or 0
+    roster_total = (
+        db.scalar(
+            sa_select(func.count(StudentModel.id))
+            .select_from(StudentModel)
+            .join(Zone, Zone.id == StudentModel.zone_id)
+            .where(*roster_filters)
+        )
+        or 0
+    )
 
     return NotEnteredStudentsResponse(
         items=items, total=len(items), roster_total=int(roster_total)
@@ -750,12 +756,15 @@ def list_rejected_students(
     ]
     if target_zone_id is not None:
         roster_filters.append(StudentModel.zone_id == target_zone_id)
-    roster_total = db.scalar(
-        sa_select(func.count(StudentModel.id))
-        .select_from(StudentModel)
-        .join(Zone, Zone.id == StudentModel.zone_id)
-        .where(*roster_filters)
-    ) or 0
+    roster_total = (
+        db.scalar(
+            sa_select(func.count(StudentModel.id))
+            .select_from(StudentModel)
+            .join(Zone, Zone.id == StudentModel.zone_id)
+            .where(*roster_filters)
+        )
+        or 0
+    )
 
     return RejectedStudentsResponse(
         items=items, total=len(items), roster_total=int(roster_total)
