@@ -578,6 +578,67 @@ export interface DavomatBotUpdateRequest {
   region_ids?: number[];
 }
 
+// === Statistika bot (Telegram bot foydalanuvchilari) ===
+// role: 1=Admin, 2=Rahbar, 3=Xodim
+
+export interface StatisticBotAdminResponse {
+  id: number;
+  fio: string;
+  telegram_id: number;
+  role: number;
+  role_name: string;
+  status: boolean;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface StatisticBotCreateRequest {
+  fio: string;
+  telegram_id: number;
+  role: number;
+  status: boolean;
+}
+
+export interface StatisticBotUpdateRequest {
+  fio?: string;
+  telegram_id?: number;
+  role?: number;
+  status?: boolean;
+}
+
+// === Qabul realtime statistika (yil dinamik) ===
+
+export interface QabulRegionStat {
+  region_name: string;
+  count: number;
+  male: number;
+  female: number;
+  paid: number;
+  share: number;
+}
+
+export interface QabulStats {
+  year: number;
+  prev_year: number;
+  total: number;
+  male: number;
+  female: number;
+  graduated: number;
+  graduated_not: number;
+  paid: number;
+  unpaid: number;
+  uz: number;
+  ru: number;
+  qq: number;
+  lang_other: number;
+  total_prev: number;
+  paid_prev: number;
+  male_prev: number;
+  female_prev: number;
+  regions: QabulRegionStat[];
+  fetched_at: string | null;
+}
+
 export interface LookupReasonCreate {
   reason_type_id?: number | null;
   name: string;

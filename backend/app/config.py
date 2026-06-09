@@ -137,6 +137,16 @@ class Settings(BaseSettings):
     API_IIV_TOKEN: str = ""
     API_GTSP: str = ""
 
+    # Statistika bot — tashqi statistika API (qabul ko'rsatkichlari).
+    # Bot endi to'g'ridan-to'g'ri emas, shu backend orqali oladi.
+    API_STATISTIC_BOT: str = "https://api.uzbmb.uz/site/telegram-bot-statistics"
+    API_STATISTIC_BOT_TOKEN: str = ""
+    # Tashqi API javobini necha soniya kesh saqlash (so'rovlarni kamaytirish).
+    STATISTIC_BOT_CACHE_TTL: int = 60
+    # Qabul joriy yili. 0 = avtomatik (tashqi API kalitlaridan aniqlanadi).
+    # Faqat ma'lumot bo'sh bo'lganda fallback sifatida ishlatiladi.
+    QABUL_YEAR: int = 0
+
     @field_validator("SECRET_KEY", "API_KEY_PEPPER")
     @classmethod
     def _reject_insecure_secrets(cls, v: str, info) -> str:

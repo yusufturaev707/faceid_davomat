@@ -136,6 +136,35 @@ class P:
         "davomat_bot",
     )
 
+    # === Statistika bot foydalanuvchilari (Telegram bot) ===
+    STATISTIC_BOT_READ = _Perm(
+        "statistic_bot:read",
+        "Statistika bot foydalanuvchilarini ko'rish",
+        "statistic_bot",
+    )
+    STATISTIC_BOT_CREATE = _Perm(
+        "statistic_bot:create",
+        "Statistika bot foydalanuvchisi yaratish",
+        "statistic_bot",
+    )
+    STATISTIC_BOT_UPDATE = _Perm(
+        "statistic_bot:update",
+        "Statistika bot foydalanuvchisini tahrirlash",
+        "statistic_bot",
+    )
+    STATISTIC_BOT_DELETE = _Perm(
+        "statistic_bot:delete",
+        "Statistika bot foydalanuvchisini o'chirish",
+        "statistic_bot",
+    )
+
+    # === Qabul realtime statistika (yil dinamik) ===
+    QABUL_READ = _Perm(
+        "qabul:read",
+        "Qabul statistikasini ko'rish",
+        "qabul",
+    )
+
 
 ALL_PERMISSIONS: list[_Perm] = [
     value

@@ -1,39 +1,32 @@
-"""Bot konfiguratsiyasi. Barcha sozlamalar .env faylidan o'qiladi."""
+"""Bot konfiguratsiyasi. Barcha sozlamalar .env faylidan o'qiladi.
+
+Bot endi tashqi APIdan to'g'ridan-to'g'ri emas, FaceID backend (FastAPI)
+orqali ishlaydi:
+  - Foydalanuvchi dostupi/roli — backend DB dan (`/statistic-bot/check/...`).
+  - Statistika — backend tashqi APIdan oladi (`/statistic-bot/statistics`).
+
+Backendga `X-API-Key` orqali ulanadi (davomat_bot bilan bir xil pattern).
+"""
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from dotenv import load_dotenv
 
 load_dotenv()
 
 
-def _parse_ids(raw: str) -> set[int]:
-    ids: set[int] = set()
-    for part in raw.replace(" ", "").split(","):
-        if part:
-            try:
-                ids.add(int(part))
-            except ValueError:
-                continue
-    return ids
-
-
 @dataclass
 class Config:
     bot_token: str = os.getenv("BOT_TOKEN", "")
-    api_url: str = os.getenv("API_URL", "")
-    api_token: str = os.getenv("API_TOKEN", "")
-    cache_ttl: int = int(os.getenv("CACHE_TTL", "60"))
-    # Statistikani ko'ra oladigan oddiy adminlar
-    admin_ids: set[int] = field(
-        default_factory=lambda: _parse_ids(os.getenv("ADMIN_IDS", "811104615"))
-    )
-    # Xodimlar — qo'shimcha 2025-yil ma'lumotlarini ham ko'ra oladi
-    staff_ids: set[int] = field(
-        default_factory=lambda: _parse_ids(os.getenv("STAFF_IDS", ""))
-    )
+    # FaceID backend manzili (masalan: https://face-id.uzbmb.uz/api/v1).
+    api_base_url: str = os.getenv(
+        "API_BASE_URL", "http://localhost:8000/api/v1"
+    ).rstrip("/")
+    # Admin panelda yaratilgan API kalit (X-API-Key headerida yuboriladi).
+    api_key: str = os.getenv("API_KEY", "")
+    request_timeout: float = float(os.getenv("REQUEST_TIMEOUT", "30"))
 
 
 config = Config()

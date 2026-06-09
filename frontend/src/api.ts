@@ -876,3 +876,40 @@ export async function updateDavomatBotApi(
 export async function deleteDavomatBotApi(id: number): Promise<void> {
   await apiClient.delete(`/admin/davomat-bots/${id}`);
 }
+
+// === Statistika bot foydalanuvchilari (admin) ===
+
+export async function getStatisticBotsApi(): Promise<import("./interfaces").StatisticBotAdminResponse[]> {
+  const res = await apiClient.get("/admin/statistic-bots");
+  return res.data;
+}
+
+export async function createStatisticBotApi(
+  data: import("./interfaces").StatisticBotCreateRequest,
+): Promise<import("./interfaces").StatisticBotAdminResponse> {
+  const res = await apiClient.post("/admin/statistic-bots", data);
+  return res.data;
+}
+
+export async function updateStatisticBotApi(
+  id: number,
+  data: import("./interfaces").StatisticBotUpdateRequest,
+): Promise<import("./interfaces").StatisticBotAdminResponse> {
+  const res = await apiClient.patch(`/admin/statistic-bots/${id}`, data);
+  return res.data;
+}
+
+export async function deleteStatisticBotApi(id: number): Promise<void> {
+  await apiClient.delete(`/admin/statistic-bots/${id}`);
+}
+
+// === Qabul realtime statistika (yil dinamik) ===
+
+export async function getQabulStatsApi(
+  force = false,
+): Promise<import("./interfaces").QabulStats> {
+  const res = await apiClient.get("/statistic-bot/qabul", {
+    params: force ? { force: true } : undefined,
+  });
+  return res.data;
+}

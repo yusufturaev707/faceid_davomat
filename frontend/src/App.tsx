@@ -21,6 +21,8 @@ import TestSessionDetailPage from "./pages/TestSessionDetailPage";
 import TestDashboardPage from "./pages/TestDashboardPage";
 import UsersPage from "./pages/UsersPage";
 import DavomatBotsPage from "./pages/DavomatBotsPage";
+import StatisticBotsPage from "./pages/StatisticBotsPage";
+import QabulPage from "./pages/QabulPage";
 import TestsPage from "./pages/TestsPage";
 import SmenasPage from "./pages/SmenasPage";
 import SessionStatesPage from "./pages/SessionStatesPage";
@@ -103,6 +105,28 @@ export default function App() {
             }
           >
             <Route path="/pasport-info" element={<PasportInfoPage />} />
+          </Route>
+
+          <Route
+            element={
+              <PermissionRoute
+                permission={PERM.STATISTIC_BOT_READ}
+                redirectTo="/settings"
+              />
+            }
+          >
+            <Route path="/statistic-bots" element={<StatisticBotsPage />} />
+          </Route>
+
+          <Route
+            element={
+              <PermissionRoute
+                permission={PERM.QABUL_READ}
+                redirectTo="/settings"
+              />
+            }
+          >
+            <Route path="/qabul" element={<QabulPage />} />
           </Route>
 
           <Route path="/settings" element={<SettingsPage />} />

@@ -9,6 +9,7 @@ from aiogram.types import BotCommand
 
 from config import config
 from handlers import setup_routers
+from services.backend_client import backend
 
 logging.basicConfig(
     level=logging.INFO,
@@ -30,6 +31,10 @@ async def set_commands(bot: Bot) -> None:
 async def main() -> None:
     if not config.bot_token:
         raise RuntimeError("BOT_TOKEN .env faylida ko'rsatilmagan!")
+    if not config.api_key:
+        logger.warning(
+            "API_KEY .env da ko'rsatilmagan — backend so'rovlari 401 qaytarishi mumkin!"
+        )
 
     bot = Bot(
         token=config.bot_token,
@@ -38,10 +43,16 @@ async def main() -> None:
     dp = Dispatcher()
     setup_routers(dp)
 
+    # Backend HTTP klientini ishga tushirish (bot ishlash davomida qayta ishlatiladi).
+    await backend.start()
+
     await set_commands(bot)
-    logger.info("Bot ishga tushdi. Adminlar soni: %d", len(config.admin_ids))
+    logger.info("Bot ishga tushdi. Backend: %s", config.api_base_url)
     await bot.delete_webhook(drop_pending_updates=True)
-    await dp.start_polling(bot)
+    try:
+        await dp.start_polling(bot)
+    finally:
+        await backend.close()
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import admin, auth, davomat_bot, davomat_bot_admin, embedding, lookup, pasport_info, permission, photo, student, test_session
+from app.api.v1.endpoints import admin, auth, davomat_bot, davomat_bot_admin, embedding, lookup, pasport_info, permission, photo, statistic_bot, statistic_bot_admin, student, test_session
 
 api_router = APIRouter()
 api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
@@ -29,4 +29,12 @@ api_router.include_router(
 )
 api_router.include_router(
     pasport_info.router, prefix="/pasport-info", tags=["pasport-info"]
+)
+api_router.include_router(
+    statistic_bot.router, prefix="/statistic-bot", tags=["statistic-bot"]
+)
+api_router.include_router(
+    statistic_bot_admin.router,
+    prefix="/admin/statistic-bots",
+    tags=["admin", "statistic-bot"],
 )
