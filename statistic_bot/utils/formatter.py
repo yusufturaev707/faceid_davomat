@@ -82,7 +82,6 @@ def _format_prev_block(data: list[dict], prev_year: int) -> list[str]:
     graduated = total(data, f"graduated_{py}")
     graduated_not = count - graduated
     paid = total(data, f"paid_{py}")
-    unpaid = count - paid
 
     block = []
     block.append(f"📅 <b>{prev_year}-yil ma'lumotlari</b>")
@@ -96,7 +95,6 @@ def _format_prev_block(data: list[dict], prev_year: int) -> list[str]:
     block.append(f"🙍🏻‍♀️ Ayollar:  <b>{fmt(female)}</b>  ({pct(female, count):.1f}%)")
     block.append("")
     block.append(f"✅ To'lov qilganlar:  <b>{fmt(paid)}</b>  ({pct(paid, count):.1f}%)")
-    block.append(f"❌ To'l qilmaganlar:  <b>{fmt(unpaid)}</b>")
     block.append("")
     return block
 
@@ -117,7 +115,6 @@ def format_summary(data: list[dict], show_prev: bool = False) -> str:
     graduated = total(data, f"graduated_{cy}")
     graduated_not = total(data, f"graduated_not_{cy}")
     paid = total(data, f"paid_{cy}")
-    unpaid = count_now - paid
     uz = total(data, f"uz_{cy}")
     ru = total(data, f"ru_{cy}")
     qq = total(data, f"qq_{cy}")
@@ -151,7 +148,6 @@ def format_summary(data: list[dict], show_prev: bool = False) -> str:
     if show_prev:
         s.append("💳 <b>To'lov holati</b>")
         s.append(f"✅ To'lov qilganlar:  <b>{fmt(paid)}</b>  ({pct(paid, count_now):.1f}%)")
-        s.append(f"⏳ To'lov qilmaganlar:  <b>{fmt(unpaid)}</b>")
         s.append("")
 
     s.append("📚 <b>Ta'lim tili bo'yicha</b>")
