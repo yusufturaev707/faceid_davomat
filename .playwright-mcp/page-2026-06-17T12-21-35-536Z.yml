@@ -1,0 +1,23 @@
+- generic [ref=e6]:
+  - generic [ref=e7]:
+    - img [ref=e9]
+    - heading "FaceID" [level=1] [ref=e11]
+    - paragraph [ref=e12]: Identifikatsiya tizimiga kirish
+  - generic [ref=e13]:
+    - generic [ref=e14]:
+      - generic [ref=e15]: Login
+      - generic [ref=e16]:
+        - generic:
+          - img
+        - textbox "Username" [ref=e17]: admin
+    - generic [ref=e18]:
+      - generic [ref=e19]: Parol
+      - generic [ref=e20]:
+        - generic:
+          - img
+        - textbox "Parolni kiriting" [ref=e21]: Admin12345!
+    - generic [ref=e24]:
+      - img [ref=e25]
+      - text: Login yoki parol noto'g'ri
+    - button "Kirish" [ref=e22] [cursor=pointer]
+  - paragraph [ref=e23]: FaceID Verification System v2.0

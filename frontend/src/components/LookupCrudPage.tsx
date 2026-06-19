@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { extractErrorMessage } from "../utils/errorMessage";
 import PermissionGate from "./PermissionGate";
 import Pagination from "./Pagination";
+import Md3Select from "./Md3Select";
 
 const PAGE_SIZE = 20;
 
@@ -434,16 +435,15 @@ export default function LookupCrudPage<T extends { id: number; is_active?: boole
                     {f.label} {f.required && "*"}
                   </label>
                   {f.type === "select" ? (
-                    <select
-                      value={form[f.key] ?? ""}
-                      onChange={(e) => setForm({ ...form, [f.key]: e.target.value })}
-                      className="input-field w-full"
-                    >
-                      <option value="">Tanlang...</option>
-                      {f.options?.map((o) => (
-                        <option key={o.value} value={o.value}>{o.label}</option>
-                      ))}
-                    </select>
+                    <Md3Select
+                      value={form[f.key] != null ? String(form[f.key]) : ""}
+                      onChange={(v) => setForm({ ...form, [f.key]: v })}
+                      placeholder="Tanlang..."
+                      options={(f.options ?? []).map((o) => ({
+                        value: String(o.value),
+                        label: o.label,
+                      }))}
+                    />
                   ) : (
                     <input
                       type={f.type}

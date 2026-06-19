@@ -1,21 +1,24 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   DashboardStatsResponse,
   GenderStat,
   RegionStatItem,
   SessionStateResponse,
   StatGroup,
+  StatsScope,
   TestSessionResponse,
   TestSessionSmenaResponse,
   ZoneStatItem,
 } from "../interfaces";
 import {
+  exportSessionDashboardStatsApi,
   getSessionDashboardStatsApi,
   getSessionStatesLookupApi,
   getTestSessionApi,
   getTestSessionsApi,
 } from "../api";
 import PageLoader from "../components/PageLoader";
+import Md3Select from "../components/Md3Select";
 import { extractErrorMessage } from "../utils/errorMessage";
 
 // Real-time polling kechikishi (session ready / state.key=4)
@@ -91,16 +94,26 @@ export default function StatisticsPage() {
 
   const [sessions, setSessions] = useState<TestSessionResponse[]>([]);
   const [sessionsLoading, setSessionsLoading] = useState(false);
-  const [selectedSessionId, setSelectedSessionId] = useState<number | null>(null);
+  const [selectedSessionId, setSelectedSessionId] = useState<number | null>(
+    null,
+  );
   const [selectedSession, setSelectedSession] =
     useState<TestSessionResponse | null>(null);
   const [selectedSmenaId, setSelectedSmenaId] = useState<number | null>(null);
+  // Statistika ko'lami: bitta smena / bitta kun / butun sessiya
+  const [scope, setScope] = useState<StatsScope>("smena");
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
 
   // Stats holati
   const [stats, setStats] = useState<DashboardStatsResponse | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [exporting, setExporting] = useState(false);
+  // Excel hisobot alifbosi — krill (default) yoki o'zbek lotin
+  const [excelAlphabet, setExcelAlphabet] = useState<"cyrillic" | "latin">(
+    "cyrillic",
+  );
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Viloyat card bosilganda — shu region zonalari modal'da ko'rsatiladi.
@@ -109,8 +122,11 @@ export default function StatisticsPage() {
   const [openedRegionId, setOpenedRegionId] = useState<number | null>(null);
   const openedRegion =
     openedRegionId != null
-      ? stats?.regions.find((r) => r.region_id === openedRegionId) ?? null
+      ? (stats?.regions.find((r) => r.region_id === openedRegionId) ?? null)
       : null;
+
+  // Barcha viloyatlarni bitta jadval-modalda ko'rish
+  const [showAllRegions, setShowAllRegions] = useState(false);
 
   // === Statuslar (SessionState) ro'yxatini yuklash ===
   useEffect(() => {
@@ -182,6 +198,8 @@ export default function StatisticsPage() {
         setSelectedSession(data);
         // Avvalgi tanlovni reset qilish
         setSelectedSmenaId(null);
+        setSelectedDay(null);
+        setScope("smena");
         setStats(null);
       } catch (err) {
         if (!cancelled) setError(extractErrorMessage(err));
@@ -192,15 +210,21 @@ export default function StatisticsPage() {
     };
   }, [selectedSessionId]);
 
-  // === Stats fetcher (qayta ishlatiluvchi) ===
+  // === Stats fetcher (qayta ishlatiluvchi) — scope bo'yicha ===
   const fetchStats = useCallback(
-    async (sessionId: number, sessionSmenaId: number, silent = false) => {
+    async (
+      sessionId: number,
+      fetchScope: StatsScope,
+      opts: { sessionSmenaId?: number | null; day?: string | null },
+      silent = false,
+    ) => {
       if (!silent) setStatsLoading(true);
       try {
-        const data = await getSessionDashboardStatsApi(
-          sessionId,
-          sessionSmenaId,
-        );
+        const data = await getSessionDashboardStatsApi(sessionId, {
+          scope: fetchScope,
+          sessionSmenaId: opts.sessionSmenaId,
+          day: opts.day,
+        });
         setStats(data);
         setLastUpdated(new Date());
         setError(null);
@@ -213,7 +237,48 @@ export default function StatisticsPage() {
     [],
   );
 
-  // === Tanlov o'zgarganda statsni yuklash + polling ===
+  // === Tanlangan statistikani Excel (.xlsx) hisobotiga yuklab olish ===
+  const handleExport = useCallback(async () => {
+    if (!selectedSessionId || exporting) return;
+    setExporting(true);
+    try {
+      await exportSessionDashboardStatsApi(selectedSessionId, {
+        scope,
+        sessionSmenaId: selectedSmenaId,
+        day: selectedDay,
+        alphabet: excelAlphabet,
+      });
+    } catch (err) {
+      setError(extractErrorMessage(err));
+    } finally {
+      setExporting(false);
+    }
+  }, [
+    selectedSessionId,
+    exporting,
+    scope,
+    selectedSmenaId,
+    selectedDay,
+    excelAlphabet,
+  ]);
+
+  // === Smenalar va kunlar tanlovi uchun yordamchilar ===
+  const smenas = selectedSession?.smenas ?? [];
+  // Sessiyadagi noyob kunlar (sort qilingan) — "Kunlik" ko'rinish uchun
+  const dayOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const sm of smenas) set.add(sm.day);
+    return [...set].sort();
+  }, [smenas]);
+
+  // Tanlangan ko'lamga ko'ra so'rov yuborish mumkinmi (selektor to'liqmi)?
+  const scopeReady =
+    !!selectedSessionId &&
+    (scope === "overall" ||
+      (scope === "smena" && !!selectedSmenaId) ||
+      (scope === "day" && !!selectedDay));
+
+  // === Tanlov o'zgarganda statsni yuklash ===
   useEffect(() => {
     // Eski polling'ni to'xtatamiz
     if (pollRef.current) {
@@ -221,13 +286,23 @@ export default function StatisticsPage() {
       pollRef.current = null;
     }
 
-    if (!selectedSessionId || !selectedSmenaId) {
+    if (!selectedSessionId || !scopeReady) {
       setStats(null);
       return;
     }
 
-    fetchStats(selectedSessionId, selectedSmenaId);
-  }, [selectedSessionId, selectedSmenaId, fetchStats]);
+    fetchStats(selectedSessionId, scope, {
+      sessionSmenaId: selectedSmenaId,
+      day: selectedDay,
+    });
+  }, [
+    selectedSessionId,
+    scope,
+    selectedSmenaId,
+    selectedDay,
+    scopeReady,
+    fetchStats,
+  ]);
 
   // === Real-time polling — faqat session.state.key=4 bo'lsa ===
   useEffect(() => {
@@ -235,10 +310,15 @@ export default function StatisticsPage() {
       clearInterval(pollRef.current);
       pollRef.current = null;
     }
-    if (!stats?.is_realtime || !selectedSessionId || !selectedSmenaId) return;
+    if (!stats?.is_realtime || !selectedSessionId || !scopeReady) return;
 
     pollRef.current = setInterval(() => {
-      fetchStats(selectedSessionId, selectedSmenaId, true);
+      fetchStats(
+        selectedSessionId,
+        scope,
+        { sessionSmenaId: selectedSmenaId, day: selectedDay },
+        true,
+      );
     }, POLL_INTERVAL_MS);
 
     return () => {
@@ -247,14 +327,19 @@ export default function StatisticsPage() {
         pollRef.current = null;
       }
     };
-  }, [stats?.is_realtime, selectedSessionId, selectedSmenaId, fetchStats]);
-
-  // === Smenalar tanlovi uchun yordamchi (kun + smena ko'rinishi) ===
-  const smenas = selectedSession?.smenas ?? [];
+  }, [
+    stats?.is_realtime,
+    selectedSessionId,
+    scope,
+    selectedSmenaId,
+    selectedDay,
+    scopeReady,
+    fetchStats,
+  ]);
 
   // === Tanlangan status uchun rang (dropdownlarga visual accent) ===
   const selectedState = selectedStateId
-    ? states.find((st) => st.id === selectedStateId) ?? null
+    ? (states.find((st) => st.id === selectedStateId) ?? null)
     : null;
   const stateColor = getStateColor(selectedState?.key);
 
@@ -262,11 +347,13 @@ export default function StatisticsPage() {
     <div>
       <div className="page-header">
         <div className="min-w-0">
-          <h2 className="section-title">Statistika dashboard</h2>
-          <p className="section-subtitle">
-            Test sessiya, kun va smena tanlang — real vaqt statistikasi (sessiya
-            tayyor holatida) yoki oxirgi holat ko'rsatiladi
-          </p>
+          <h2 className="section-title">Davomat dashboard</h2>
+          {/*<p className="section-subtitle">
+            Ketma-ket tanlang: <b>1) Holat</b> → <b>2) Test sessiya</b> →{" "}
+            <b>3) Ko'rinish</b> (smena / kunlik / umumiy) →{" "}
+            <b>4) Kun va smena</b>. Sessiya tayyor holatida real vaqt
+            statistikasi, aks holda oxirgi holat ko'rsatiladi.
+          </p>*/}
         </div>
         {stats?.is_realtime && (
           <div className="inline-flex items-center gap-2 px-3 h-10 rounded-full bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/40 self-start sm:self-auto">
@@ -287,126 +374,140 @@ export default function StatisticsPage() {
       {error && (
         <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-xl text-sm flex items-start justify-between gap-3">
           <span>{error}</span>
-          <button
-            onClick={() => setError(null)}
-            className="underline shrink-0"
-          >
+          <button onClick={() => setError(null)} className="underline shrink-0">
             Yopish
           </button>
         </div>
       )}
 
-      {/* Selektorlar — kompakt MD3 surface */}
-      <div className="glass-card p-2.5 sm:p-3 mb-3 sm:mb-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3">
-          <div>
-            <label className="block text-[10.5px] font-semibold uppercase tracking-wider text-gray-500 dark:text-slate-400 mb-1 leading-none">
-              Holat
-            </label>
-            <select
-              value={selectedStateId ?? ""}
-              onChange={(e) =>
-                setSelectedStateId(e.target.value ? Number(e.target.value) : null)
-              }
+      {/* Selektorlar — Material 3 surface. Aniq tartib: 1) Holat → 2) Test
+          sessiya → 3) Ko'rinish → 4) Kun va smena. Keng ekranda bitta ixcham
+          qatorda joylashadi — davomat cardlarini pastga surmaydi. */}
+      <div className="glass-card p-3 sm:p-4 mb-3 sm:mb-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-3.5 items-start">
+          {/* 1 — Holat */}
+          <StepField step={1} label="Holat" done={selectedStateId !== null}>
+            <Md3Select
+              value={selectedStateId != null ? String(selectedStateId) : ""}
+              onChange={(v) => setSelectedStateId(v ? Number(v) : null)}
               disabled={statesLoading}
-              className={`input-field !min-h-0 !py-1.5 !px-3 !text-[13px] w-full disabled:opacity-60 font-semibold ${
-                selectedStateId !== null ? stateColor.accent : ""
-              }`}
-              style={
-                selectedStateId !== null
-                  ? { color: stateColor.hex }
-                  : undefined
-              }
-            >
-              <option value="" style={{ color: "#6b7280" }}>
-                — Tanlang —
-              </option>
-              {states.map((st) => {
+              clearable
+              placeholder={statesLoading ? "Yuklanmoqda…" : "Tanlang"}
+              valueColor={selectedStateId !== null ? stateColor.hex : undefined}
+              options={states.map((st) => {
                 const c = getStateColor(st.key);
-                return (
-                  <option
-                    key={st.id}
-                    value={st.id}
-                    style={{ color: c.hex, fontWeight: 600 }}
-                  >
-                    {st.name}
-                  </option>
-                );
+                return {
+                  value: String(st.id),
+                  label: st.name,
+                  color: c.hex,
+                  dot: c.dot,
+                };
               })}
-            </select>
-          </div>
+            />
+          </StepField>
 
-          <div>
-            <label className="block text-[10.5px] font-semibold uppercase tracking-wider text-gray-500 dark:text-slate-400 mb-1 leading-none">
-              Test sessiya
-            </label>
-            <select
-              value={selectedSessionId ?? ""}
-              onChange={(e) =>
-                setSelectedSessionId(e.target.value ? Number(e.target.value) : null)
-              }
+          {/* 2 — Test sessiya */}
+          <StepField
+            step={2}
+            label="Test sessiya"
+            active={selectedStateId !== null}
+            done={!!selectedSessionId}
+          >
+            <Md3Select
+              value={selectedSessionId != null ? String(selectedSessionId) : ""}
+              onChange={(v) => setSelectedSessionId(v ? Number(v) : null)}
               disabled={selectedStateId === null || sessionsLoading}
-              className={`input-field !min-h-0 !py-1.5 !px-3 !text-[13px] w-full disabled:opacity-60 font-semibold ${
-                selectedStateId !== null ? stateColor.accent : ""
-              }`}
-              style={
-                selectedStateId !== null
-                  ? { color: stateColor.hex }
-                  : undefined
-              }
-            >
-              <option value="" style={{ color: "#6b7280", fontWeight: 400 }}>
-                {selectedStateId === null
-                  ? "— Avval holatni tanlang —"
+              clearable
+              placeholder={
+                selectedStateId === null
+                  ? "Avval holatni tanlang"
                   : sessionsLoading
-                  ? "— Yuklanmoqda… —"
-                  : sessions.length === 0
-                  ? "— Bu holatda sessiyalar yo'q —"
-                  : "— Tanlang —"}
-              </option>
-              {sessions.map((s) => {
+                    ? "Yuklanmoqda…"
+                    : sessions.length === 0
+                      ? "Sessiyalar yo'q"
+                      : "Tanlang"
+              }
+              options={sessions.map((s) => {
                 const c = getStateColor(s.test_state?.key);
                 const testName = s.test?.name || s.name;
-                return (
-                  <option
-                    key={s.id}
-                    value={s.id}
-                    style={{ color: c.hex, fontWeight: 600 }}
-                  >
-                    {testName} · {s.start_date}
-                  </option>
-                );
+                return {
+                  value: String(s.id),
+                  label: testName,
+                  sublabel: s.start_date,
+                  color: c.hex,
+                  dot: c.dot,
+                };
               })}
-            </select>
-          </div>
+            />
+          </StepField>
 
-          <div>
-            <label className="block text-[10.5px] font-semibold uppercase tracking-wider text-gray-500 dark:text-slate-400 mb-1 leading-none">
-              Kun va smena
-            </label>
-            <select
-              value={selectedSmenaId ?? ""}
-              onChange={(e) =>
-                setSelectedSmenaId(e.target.value ? Number(e.target.value) : null)
-              }
-              disabled={!selectedSession || smenas.length === 0}
-              className="input-field !min-h-0 !py-1.5 !px-3 !text-[13px] w-full disabled:opacity-60"
-            >
-              <option value="">
-                {smenas.length ? "— Tanlang —" : "— Avval sessiyani tanlang —"}
-              </option>
-              {smenas.map((sm) => (
-                <option key={sm.id} value={sm.id}>
-                  {formatSmenaOption(sm)}
-                </option>
-              ))}
-            </select>
-          </div>
+          {/* 3 — Ko'rinish (scope) */}
+          <StepField step={3} label="Ko'rinish" active={!!selectedSessionId}>
+            <ScopeTabs
+              value={scope}
+              onChange={setScope}
+              disabled={!selectedSessionId}
+            />
+          </StepField>
+
+          {/* 4 — Kun va smena (ko'lamga bog'liq) */}
+          <StepField
+            step={4}
+            label={
+              scope === "day"
+                ? "Kun"
+                : scope === "overall"
+                  ? "Ko'lam"
+                  : "Kun va smena"
+            }
+            active={!!selectedSessionId}
+            done={
+              !!selectedSessionId &&
+              (scope === "overall" || !!selectedSmenaId || !!selectedDay)
+            }
+          >
+            {scope === "overall" ? (
+              <div className="h-9 px-3 w-full flex items-center gap-2 rounded-xl border border-primary-200/70 dark:border-primary-800/40 bg-primary-50/70 dark:bg-primary-900/15 text-primary-700 dark:text-primary-300 font-semibold text-[13px]">
+                <LayersIcon className="w-4 h-4 shrink-0" />
+                <span className="truncate">
+                  Butun sessiya · {dayOptions.length} ta kun
+                </span>
+              </div>
+            ) : scope === "day" ? (
+              <Md3Select
+                value={selectedDay ?? ""}
+                onChange={(v) => setSelectedDay(v || null)}
+                disabled={!selectedSession || dayOptions.length === 0}
+                placeholder={
+                  dayOptions.length
+                    ? "Kunni tanlang"
+                    : "Avval sessiyani tanlang"
+                }
+                options={dayOptions.map((d) => ({
+                  value: d,
+                  label: formatDayOption(d, smenas),
+                }))}
+              />
+            ) : (
+              <Md3Select
+                value={selectedSmenaId != null ? String(selectedSmenaId) : ""}
+                onChange={(v) => setSelectedSmenaId(v ? Number(v) : null)}
+                disabled={!selectedSession || smenas.length === 0}
+                placeholder={
+                  smenas.length ? "Tanlang" : "Avval sessiyani tanlang"
+                }
+                options={smenas.map((sm) => ({
+                  value: String(sm.id),
+                  label: formatSmenaOption(sm),
+                }))}
+              />
+            )}
+          </StepField>
         </div>
 
         {/* Tanlangan statuslar — kompakt chiplar qatori (faqat tegishlilarini ko'rsatamiz) */}
         {(selectedState || (stats && stats.session_state_key != null)) && (
-          <div className="flex flex-wrap items-center gap-1.5 mt-2 text-[10.5px]">
+          <div className="flex flex-wrap items-center gap-1.5 mt-3.5 sm:mt-4 pt-3 border-t border-gray-100 dark:border-slate-700/50 text-[10.5px]">
             {selectedState && (
               <span
                 className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md ${stateColor.chipText} bg-gray-100 dark:bg-slate-700/40`}
@@ -460,15 +561,55 @@ export default function StatisticsPage() {
       {selectedStateId !== null && !selectedSessionId && (
         <EmptyHint text="Endi test sessiyani tanlang" />
       )}
-      {selectedSessionId && !selectedSmenaId && (
-        <EmptyHint text="Endi kun va smenani tanlang" />
+      {selectedSessionId && !scopeReady && (
+        <EmptyHint
+          text={
+            scope === "day"
+              ? "Endi kunni tanlang"
+              : "Endi kun va smenani tanlang"
+          }
+        />
       )}
 
       {/* Stats */}
-      {selectedSmenaId && statsLoading && !stats && <PageLoader />}
+      {scopeReady && statsLoading && !stats && <PageLoader />}
 
       {stats && (
         <>
+          {/* Ko'lam konteksti — qaysi ko'rinish ko'rsatilmoqda + Excel eksport */}
+          <div className="flex flex-wrap items-center gap-2 mb-2 sm:mb-2.5">
+            <ScopeBadge scope={stats.scope} />
+            <span className="text-[12px] sm:text-[12.5px] font-medium text-gray-600 dark:text-slate-300">
+              {scopeContextLabel(stats)}
+            </span>
+            <div className="ml-auto flex items-center gap-2">
+              <AlphabetToggle
+                value={excelAlphabet}
+                onChange={setExcelAlphabet}
+                disabled={exporting}
+              />
+              <button
+                type="button"
+                onClick={handleExport}
+                disabled={exporting}
+                className="inline-flex items-center gap-1.5 px-3 h-8 rounded-full text-[12.5px] font-semibold bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-not-allowed text-white shadow-sm transition-colors"
+                title="Tanlangan statistikani Excel (.xlsx) hisobotiga yuklab olish"
+              >
+                {exporting ? (
+                  <>
+                    <Spinner className="w-3.5 h-3.5" />
+                    <span>Tayyorlanmoqda…</span>
+                  </>
+                ) : (
+                  <>
+                    <DownloadIcon className="w-3.5 h-3.5" />
+                    <span>Excel</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+
           {/* 4 ta asosiy card — kompakt */}
           <div className="grid grid-cols-2 xl:grid-cols-4 gap-1.5 sm:gap-2 mb-2.5 sm:mb-3">
             <SummaryCard
@@ -493,15 +634,21 @@ export default function StatisticsPage() {
           </div>
 
           {/* Region cardlari */}
-          <div className="flex items-end justify-between mb-2 sm:mb-3">
-            <div>
-              <h3 className="text-[14px] sm:text-base font-semibold text-gray-900 dark:text-white">
-                Viloyatlar bo'yicha taqsimot
-              </h3>
-              <p className="text-[11px] text-gray-500 dark:text-slate-400">
-                Region.number bo'yicha tartiblangan · {stats.regions.length} ta viloyat
-              </p>
-            </div>
+          <div className="flex items-center justify-between gap-3 mb-2 sm:mb-3">
+            <span className="text-[12px] sm:text-[12.5px] font-medium text-gray-600 dark:text-slate-300">
+              Viloyatlar bo'yicha taqsimot - {stats.regions.length} ta viloyat
+            </span>
+            {stats.regions.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setShowAllRegions(true)}
+                className="inline-flex items-center gap-1.5 px-3 h-8 rounded-full text-[12.5px] font-semibold text-primary-700 dark:text-primary-300 bg-primary-50 hover:bg-primary-100 dark:bg-primary-900/30 dark:hover:bg-primary-900/50 ring-1 ring-primary-200/60 dark:ring-primary-700/50 transition-colors shrink-0"
+                title="Barcha viloyatlarni bitta jadvalda ko'rish"
+              >
+                <TableIcon className="w-4 h-4" />
+                <span>Hammasini ko'rish</span>
+              </button>
+            )}
           </div>
 
           {stats.regions.length === 0 ? (
@@ -522,11 +669,84 @@ export default function StatisticsPage() {
           onClose={() => setOpenedRegionId(null)}
         />
       )}
+
+      {/* Barcha viloyatlar — bitta jadval modali */}
+      {showAllRegions && stats && (
+        <AllRegionsModal
+          regions={stats.regions}
+          summary={stats.summary}
+          contextLabel={scopeContextLabel(stats)}
+          onClose={() => setShowAllRegions(false)}
+        />
+      )}
     </div>
   );
 }
 
 /* ============== Sub-components ============== */
+
+/**
+ * Qadamli maydon — raqamli badge + label + boshqaruv elementi.
+ * Tanlash tartibini (1→2→3→4) ko'z bilan aniq ko'rsatadi. MD3 uslubida,
+ * yorug' rejimda yumshoq, ammo yetarli kontrastli ranglar bilan.
+ */
+function StepField({
+  step,
+  label,
+  children,
+  active = true,
+  done = false,
+}: {
+  step: number;
+  label: string;
+  children: React.ReactNode;
+  active?: boolean;
+  done?: boolean;
+}) {
+  // Badge holati: bajarilgan (yashil) → faol (primary) → kutilmoqda (kulrang)
+  const badgeCls = done
+    ? "bg-emerald-500 text-white"
+    : active
+      ? "bg-primary-600 text-white shadow-sm shadow-primary-600/25"
+      : "bg-gray-200 text-gray-400 dark:bg-slate-700/60 dark:text-slate-500";
+  const labelCls = active
+    ? "text-gray-800 dark:text-slate-100"
+    : "text-gray-400 dark:text-slate-500";
+
+  return (
+    <div>
+      <div className="flex items-center gap-1.5 mb-1">
+        <span
+          className={`inline-flex items-center justify-center w-4 h-4 rounded-full text-[10px] font-bold leading-none transition-colors ${badgeCls}`}
+          aria-hidden
+        >
+          {done ? (
+            <svg
+              className="w-2.5 h-2.5"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={3.5}
+                d="M5 13l4 4L19 7"
+              />
+            </svg>
+          ) : (
+            step
+          )}
+        </span>
+        <span className={`text-[12px] font-semibold leading-none ${labelCls}`}>
+          {label}
+        </span>
+      </div>
+      {children}
+    </div>
+  );
+}
+
 
 function EmptyHint({ text }: { text: string }) {
   return (
@@ -545,6 +765,134 @@ function EmptyHint({ text }: { text: string }) {
         />
       </svg>
       <p className="text-sm">{text}</p>
+    </div>
+  );
+}
+
+/* ============== Scope (ko'rinish) tanlovi ============== */
+
+const SCOPE_TABS: {
+  key: StatsScope;
+  label: string;
+  icon: (cls: string) => React.ReactNode;
+}[] = [
+  { key: "smena", label: "Smena", icon: (c) => <ClockIcon className={c} /> },
+  { key: "day", label: "Kunlik", icon: (c) => <CalendarIcon className={c} /> },
+  {
+    key: "overall",
+    label: "Umumiy",
+    icon: (c) => <LayersIcon className={c} />,
+  },
+];
+
+/**
+ * Material 3 uslubidagi segmented button — statistika ko'lamini tanlash:
+ * bitta smena / bitta kun / butun sessiya.
+ */
+function ScopeTabs({
+  value,
+  onChange,
+  disabled = false,
+}: {
+  value: StatsScope;
+  onChange: (s: StatsScope) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div
+      role="tablist"
+      aria-label="Statistika ko'rinishi"
+      className={`inline-flex w-full rounded-xl bg-gray-100 dark:bg-slate-800/60 p-0.5 ring-1 ring-gray-200/70 dark:ring-slate-700/60 transition-opacity ${
+        disabled ? "opacity-50 pointer-events-none" : ""
+      }`}
+    >
+      {SCOPE_TABS.map((t) => {
+        const active = value === t.key;
+        return (
+          <button
+            key={t.key}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            disabled={disabled}
+            onClick={() => onChange(t.key)}
+            className={`flex-1 inline-flex items-center justify-center gap-1 px-1.5 h-8 rounded-[10px] text-[12px] font-semibold transition-all duration-200 ${
+              active
+                ? "bg-white dark:bg-slate-900 text-primary-700 dark:text-primary-300 shadow-sm ring-1 ring-primary-200/60 dark:ring-primary-700/50"
+                : "text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200"
+            }`}
+          >
+            {t.icon("w-3.5 h-3.5 shrink-0")}
+            <span>{t.label}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Joriy ko'lamni bildiruvchi rangli chip (cardlar ustida). */
+function ScopeBadge({ scope }: { scope: StatsScope }) {
+  const meta = SCOPE_TABS.find((t) => t.key === scope) ?? SCOPE_TABS[0];
+  const tone =
+    scope === "overall"
+      ? "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300"
+      : scope === "day"
+        ? "bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300"
+        : "bg-primary-100 text-primary-700 dark:bg-primary-900/40 dark:text-primary-300";
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 px-2.5 h-7 rounded-full text-[11.5px] font-bold ${tone}`}
+    >
+      {meta.icon("w-3.5 h-3.5")}
+      {meta.label}
+    </span>
+  );
+}
+
+/**
+ * Excel hisobot alifbosini tanlash — krill yoki o'zbek lotin.
+ * ScopeTabs bilan bir xil MD3 segmented uslubda, ammo ixchamroq.
+ */
+function AlphabetToggle({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: "cyrillic" | "latin";
+  onChange: (a: "cyrillic" | "latin") => void;
+  disabled?: boolean;
+}) {
+  const options: { key: "cyrillic" | "latin"; label: string }[] = [
+    { key: "cyrillic", label: "Кирилл" },
+    { key: "latin", label: "Lotin" },
+  ];
+  return (
+    <div
+      role="group"
+      aria-label="Excel hisobot alifbosi"
+      title="Excel matnlari alifbosi"
+      className="inline-flex rounded-full bg-gray-100 dark:bg-slate-800/60 p-0.5 ring-1 ring-gray-200/70 dark:ring-slate-700/60"
+    >
+      {options.map((o) => {
+        const active = value === o.key;
+        return (
+          <button
+            key={o.key}
+            type="button"
+            aria-pressed={active}
+            disabled={disabled}
+            onClick={() => onChange(o.key)}
+            className={`inline-flex items-center justify-center px-2.5 h-7 rounded-full text-[11.5px] font-semibold transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed ${
+              active
+                ? "bg-white dark:bg-slate-900 text-emerald-700 dark:text-emerald-300 shadow-sm ring-1 ring-emerald-200/60 dark:ring-emerald-700/50"
+                : "text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200"
+            }`}
+          >
+            {o.label}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -573,7 +921,8 @@ const VARIANT_STYLES: Record<
     bg: "bg-gradient-to-br from-amber-50 to-white dark:from-amber-900/20 dark:to-slate-900",
     ring: "ring-amber-200/60 dark:ring-amber-800/40",
     valueColor: "text-amber-800 dark:text-amber-200",
-    iconBg: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
+    iconBg:
+      "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
   },
   danger: {
     bg: "bg-gradient-to-br from-red-50 to-white dark:from-red-900/20 dark:to-slate-900",
@@ -600,7 +949,7 @@ function SummaryCard({
       className={`relative overflow-hidden rounded-xl ring-1 ${s.bg} ${s.ring} p-2.5 sm:p-3 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200`}
     >
       <div className="flex items-center justify-between gap-2 mb-1.5">
-        <p className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-gray-600 dark:text-slate-400 leading-none">
+        <p className="text-[11px] sm:text-[11.5px] font-semibold text-gray-700 dark:text-slate-300 leading-none">
           {title}
         </p>
         <div
@@ -609,14 +958,16 @@ function SummaryCard({
           {icon}
         </div>
       </div>
-      <p className={`text-xl sm:text-2xl xl:text-3xl font-bold tabular-nums leading-none ${s.valueColor}`}>
+      <p
+        className={`text-xl sm:text-2xl xl:text-3xl font-bold tabular-nums leading-none ${s.valueColor}`}
+      >
         {breakdown.total.toLocaleString("uz-UZ")}
       </p>
       <div className="mt-1.5 flex flex-wrap items-center gap-1 text-[10.5px] sm:text-[11px]">
-        <GenderChip label="E" count={breakdown.male} accent="sky" />
-        <GenderChip label="A" count={breakdown.female} accent="pink" />
+        <GenderChip gender="male" count={breakdown.male} />
+        <GenderChip gender="female" count={breakdown.female} />
         {breakdown.unknown > 0 && (
-          <GenderChip label="?" count={breakdown.unknown} accent="slate" />
+          <GenderChip gender="unknown" count={breakdown.unknown} />
         )}
       </div>
     </div>
@@ -630,7 +981,7 @@ function CheatingCard({ cheating }: { cheating: StatGroup["cheating"] }) {
       className={`relative overflow-hidden rounded-xl ring-1 ${s.bg} ${s.ring} p-2.5 sm:p-3 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200`}
     >
       <div className="flex items-center justify-between gap-2 mb-1.5">
-        <p className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-gray-600 dark:text-slate-400 leading-none">
+        <p className="text-[11px] sm:text-[11.5px] font-semibold text-gray-700 dark:text-slate-300 leading-none">
           Chetlatilgan
         </p>
         <div
@@ -639,18 +990,24 @@ function CheatingCard({ cheating }: { cheating: StatGroup["cheating"] }) {
           <ShieldIcon />
         </div>
       </div>
-      <p className={`text-xl sm:text-2xl xl:text-3xl font-bold tabular-nums leading-none ${s.valueColor}`}>
+      <p
+        className={`text-xl sm:text-2xl xl:text-3xl font-bold tabular-nums leading-none ${s.valueColor}`}
+      >
         {cheating.total.toLocaleString("uz-UZ")}
       </p>
       <div className="mt-1.5 grid grid-cols-2 gap-1 text-[10px] sm:text-[10.5px]">
         <div className="bg-white/70 dark:bg-slate-800/60 rounded-md px-1.5 py-1 ring-1 ring-red-100/60 dark:ring-red-900/30">
-          <p className="text-gray-500 dark:text-slate-400 leading-none">Kirishda</p>
+          <p className="text-gray-500 dark:text-slate-400 leading-none">
+            Kirishda
+          </p>
           <p className="font-bold text-red-700 dark:text-red-300 tabular-nums leading-tight mt-0.5">
             {cheating.at_entry.toLocaleString("uz-UZ")}
           </p>
         </div>
         <div className="bg-white/70 dark:bg-slate-800/60 rounded-md px-1.5 py-1 ring-1 ring-red-100/60 dark:ring-red-900/30">
-          <p className="text-gray-500 dark:text-slate-400 leading-none">Testda</p>
+          <p className="text-gray-500 dark:text-slate-400 leading-none">
+            Testda
+          </p>
           <p className="font-bold text-red-700 dark:text-red-300 tabular-nums leading-tight mt-0.5">
             {cheating.during_test.toLocaleString("uz-UZ")}
           </p>
@@ -660,26 +1017,82 @@ function CheatingCard({ cheating }: { cheating: StatGroup["cheating"] }) {
   );
 }
 
-function GenderChip({
-  label,
-  count,
-  accent,
-}: {
-  label: string;
-  count: number;
-  accent: "sky" | "pink" | "slate";
-}) {
-  const cls =
-    accent === "sky"
-      ? "bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300"
-      : accent === "pink"
-      ? "bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300"
-      : "bg-slate-100 text-slate-600 dark:bg-slate-700/60 dark:text-slate-300";
+type Gender = "male" | "female" | "unknown";
+
+const GENDER_META: Record<
+  Gender,
+  {
+    cls: string;
+    title: string;
+    Icon: (p: { className?: string }) => React.ReactNode;
+  }
+> = {
+  male: {
+    cls: "bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300",
+    title: "Erkak",
+    Icon: MaleIcon,
+  },
+  female: {
+    cls: "bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300",
+    title: "Ayol",
+    Icon: FemaleIcon,
+  },
+  unknown: {
+    cls: "bg-slate-100 text-slate-600 dark:bg-slate-700/60 dark:text-slate-300",
+    title: "Jinsi noma'lum",
+    Icon: ({ className }) => (
+      <span className={`font-bold leading-none ${className ?? ""}`}>?</span>
+    ),
+  },
+};
+
+/** Erkak belgisi (Mars ♂) — doira + yuqori-o'ngga strelka. */
+function MaleIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <circle cx="10" cy="14" r="6" />
+      <line x1="14.5" y1="9.5" x2="20" y2="4" />
+      <polyline points="15 4 20 4 20 9" />
+    </svg>
+  );
+}
+
+/** Ayol belgisi (Venus ♀) — doira + pastdagi xoch. */
+function FemaleIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <circle cx="12" cy="8" r="6" />
+      <line x1="12" y1="14" x2="12" y2="22" />
+      <line x1="9" y1="19" x2="15" y2="19" />
+    </svg>
+  );
+}
+
+function GenderChip({ gender, count }: { gender: Gender; count: number }) {
+  const m = GENDER_META[gender];
   return (
     <span
-      className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md font-medium leading-none ${cls}`}
+      title={m.title}
+      aria-label={`${m.title}: ${count}`}
+      className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md font-medium leading-none ${m.cls}`}
     >
-      <span className="text-[9.5px] opacity-80">{label}</span>
+      <m.Icon className="w-3 h-3 shrink-0 opacity-90" />
       <span className="tabular-nums font-bold">
         {count.toLocaleString("uz-UZ")}
       </span>
@@ -744,14 +1157,14 @@ function RegionCard({
     attendancePercent >= 75
       ? "from-emerald-400 to-emerald-600"
       : attendancePercent >= 50
-      ? "from-amber-400 to-amber-500"
-      : "from-red-400 to-red-500";
+        ? "from-amber-400 to-amber-500"
+        : "from-red-400 to-red-500";
   const percentText =
     attendancePercent >= 75
       ? "text-emerald-700 dark:text-emerald-300"
       : attendancePercent >= 50
-      ? "text-amber-700 dark:text-amber-300"
-      : "text-red-700 dark:text-red-300";
+        ? "text-amber-700 dark:text-amber-300"
+        : "text-red-700 dark:text-red-300";
 
   const zoneCount = item.zones?.length ?? 0;
 
@@ -807,7 +1220,7 @@ function RegionCard({
           >
             {attendancePercent}%
           </span>
-          <span className="text-[9.5px] text-gray-500 dark:text-slate-400 uppercase tracking-wider leading-none mt-0.5">
+          <span className="text-[10.5px] font-medium text-gray-600 dark:text-slate-300 leading-none mt-0.5">
             davomat
           </span>
         </div>
@@ -829,9 +1242,21 @@ function RegionCard({
 
       {/* 4 stat tile */}
       <div className="grid grid-cols-4 gap-1.5 sm:gap-2">
-        <MiniStat label="Umumiy" breakdown={item.stats.total} accent="primary" />
-        <MiniStat label="Kelgan" breakdown={item.stats.attended} accent="success" />
-        <MiniStat label="Kelmagan" breakdown={item.stats.not_attended} accent="warning" />
+        <MiniStat
+          label="Umumiy"
+          breakdown={item.stats.total}
+          accent="primary"
+        />
+        <MiniStat
+          label="Kelgan"
+          breakdown={item.stats.attended}
+          accent="success"
+        />
+        <MiniStat
+          label="Kelmagan"
+          breakdown={item.stats.not_attended}
+          accent="warning"
+        />
         <MiniCheating cheating={item.stats.cheating} />
       </div>
 
@@ -841,9 +1266,7 @@ function RegionCard({
           <span className="inline-flex items-center gap-1">
             <BuildingIcon className="w-3.5 h-3.5" />
             <span>
-              {zoneCount > 0
-                ? `${zoneCount} ta bino`
-                : "Bino ma'lumotsiz"}
+              {zoneCount > 0 ? `${zoneCount} ta bino` : "Bino ma'lumotsiz"}
             </span>
           </span>
           <span className="inline-flex items-center gap-0.5 font-medium text-primary-600 dark:text-primary-400 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -883,7 +1306,7 @@ function MiniStat({
     <div
       className={`rounded-xl ring-1 ${s.bg} ${s.ring} px-2 py-1.5 sm:px-2.5 sm:py-2 transition-shadow duration-200 hover:shadow-sm`}
     >
-      <p className="text-[9.5px] sm:text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-slate-400 leading-none">
+      <p className="text-[10.5px] sm:text-[11px] font-semibold text-gray-600 dark:text-slate-300 leading-none">
         {label}
       </p>
       <p
@@ -927,7 +1350,7 @@ function MiniCheating({ cheating }: { cheating: StatGroup["cheating"] }) {
     <div
       className={`rounded-xl ring-1 ${s.bg} ${s.ring} px-2 py-1.5 sm:px-2.5 sm:py-2 transition-shadow duration-200 hover:shadow-sm`}
     >
-      <p className="text-[9.5px] sm:text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-slate-400 leading-none">
+      <p className="text-[10.5px] sm:text-[11px] font-semibold text-gray-600 dark:text-slate-300 leading-none">
         Chetlat.
       </p>
       <p
@@ -941,7 +1364,9 @@ function MiniCheating({ cheating }: { cheating: StatGroup["cheating"] }) {
           className="inline-flex items-center gap-0.5"
         >
           <KeyIcon className="w-3 h-3 text-red-500" />
-          <span className="tabular-nums font-semibold">{cheating.at_entry}</span>
+          <span className="tabular-nums font-semibold">
+            {cheating.at_entry}
+          </span>
         </span>
         <span
           title="Test jarayonida"
@@ -1060,7 +1485,7 @@ function RegionZonesModal({
           {/* Region summary: davomat % + progress + 4 mini stat */}
           <div className="mt-4">
             <div className="flex items-end justify-between mb-1.5">
-              <span className="text-[11px] uppercase tracking-wider font-semibold text-gray-500 dark:text-slate-400">
+              <span className="text-[12px] font-semibold text-gray-700 dark:text-slate-300">
                 Region davomati
               </span>
               <span
@@ -1110,6 +1535,255 @@ function RegionZonesModal({
               ))}
             </div>
           )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ============== All Regions Modal (bitta jadval) ============== */
+
+function TableIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M3 10h18M3 14h18M9 6v12M4 6h16a1 1 0 011 1v10a1 1 0 01-1 1H4a1 1 0 01-1-1V7a1 1 0 011-1z"
+      />
+    </svg>
+  );
+}
+
+/** Jadval katakchasi ichidagi ixcham jins ko'rsatkichi (♂/♀). */
+function GenderInline({ g }: { g: GenderStat }) {
+  return (
+    <div className="flex items-center justify-center gap-2 mt-0.5 text-[10.5px] text-gray-500 dark:text-slate-400">
+      <span className="inline-flex items-center gap-0.5" title="Erkak">
+        <MaleIcon className="w-2.5 h-2.5 text-sky-500" />
+        <span className="tabular-nums">{g.male.toLocaleString("uz-UZ")}</span>
+      </span>
+      <span className="inline-flex items-center gap-0.5" title="Ayol">
+        <FemaleIcon className="w-2.5 h-2.5 text-pink-500" />
+        <span className="tabular-nums">{g.female.toLocaleString("uz-UZ")}</span>
+      </span>
+    </div>
+  );
+}
+
+/**
+ * Barcha viloyatlar statistikasini bitta Material Design 3 jadval-modalda
+ * ko'rsatadi. RegionGrid bilan bir xil ma'lumotni (real-time polling natijasi)
+ * ishlatadi — mavjud logikani buzmaydi, faqat boshqa ko'rinish. Pastda "Jami"
+ * yig'indi qatori `summary`'dan olinadi.
+ */
+function AllRegionsModal({
+  regions,
+  summary,
+  contextLabel,
+  onClose,
+}: {
+  regions: RegionStatItem[];
+  summary: StatGroup;
+  contextLabel: string;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", handler);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", handler);
+      document.body.style.overflow = prev;
+    };
+  }, [onClose]);
+
+  const pct = (att: number, tot: number) =>
+    tot > 0 ? Math.round((att / tot) * 1000) / 10 : 0;
+  const toneText = (p: number) =>
+    p >= 75
+      ? "text-emerald-700 dark:text-emerald-300"
+      : p >= 50
+        ? "text-amber-700 dark:text-amber-300"
+        : "text-red-700 dark:text-red-300";
+  const toneBar = (p: number) =>
+    p >= 75
+      ? "from-emerald-400 to-emerald-600"
+      : p >= 50
+        ? "from-amber-400 to-amber-500"
+        : "from-red-400 to-red-500";
+
+  const totalPct = pct(summary.attended.total, summary.total.total);
+  const thCls =
+    "px-2.5 py-2.5 text-[11px] font-semibold text-gray-500 dark:text-slate-400 whitespace-nowrap";
+  const numCls = "px-2.5 py-2 text-center align-middle";
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/45 dark:bg-black/65 backdrop-blur-[3px] animate-fade-in p-0 sm:p-4"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Barcha viloyatlar bo'yicha taqsimot"
+    >
+      <div
+        className="md3-dialog w-full sm:max-w-6xl max-h-[92vh] overflow-hidden rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col safe-pb"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="px-5 sm:px-6 pt-5 pb-4 border-b border-gray-100 dark:border-slate-700/60">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-primary-500 to-primary-700 text-white flex items-center justify-center shadow-md shadow-primary-500/25 ring-1 ring-white/20 shrink-0">
+                <TableIcon className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white truncate leading-tight">
+                  Barcha viloyatlar bo'yicha taqsimot
+                </h3>
+                <p className="text-[11px] text-gray-500 dark:text-slate-400 leading-none mt-1 truncate">
+                  {contextLabel} · {regions.length} ta viloyat
+                </p>
+              </div>
+            </div>
+
+            <button
+              onClick={onClose}
+              className="p-2 rounded-full text-gray-400 hover:text-gray-700 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-slate-700/60 transition-colors shrink-0"
+              aria-label="Yopish"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M6 18L18 6M6 6l12 12"
+                />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        {/* Body: jadval */}
+        <div className="overflow-auto">
+          <table className="w-full min-w-[720px] border-collapse">
+            <thead className="sticky top-0 z-10 bg-gray-50 dark:bg-slate-800 shadow-[0_1px_0_0_rgba(0,0,0,0.06)]">
+              <tr>
+                <th className={`${thCls} text-center w-12`}>№</th>
+                <th className={`${thCls} text-left`}>Viloyat</th>
+                <th className={`${thCls} text-center`}>Umumiy</th>
+                <th className={`${thCls} text-center`}>Kelgan</th>
+                <th className={`${thCls} text-center`}>Kelmagan</th>
+                <th className={`${thCls} text-center`}>Chetlatilgan</th>
+                <th className={`${thCls} text-center w-40`}>Davomat</th>
+              </tr>
+            </thead>
+            <tbody>
+              {regions.map((r) => {
+                const p = pct(r.stats.attended.total, r.stats.total.total);
+                return (
+                  <tr
+                    key={r.region_id}
+                    className="border-b border-gray-100 dark:border-slate-700/50 hover:bg-gray-50/80 dark:hover:bg-slate-700/30 transition-colors"
+                  >
+                    <td className="px-2.5 py-2 text-center">
+                      <span className="inline-flex items-center justify-center w-6 h-6 rounded-lg bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 text-[11px] font-bold tabular-nums">
+                        {r.region_number}
+                      </span>
+                    </td>
+                    <td className="px-2.5 py-2 text-left font-semibold text-gray-800 dark:text-slate-100 text-[13px]">
+                      {r.region_name || `Region #${r.region_number}`}
+                    </td>
+                    <td className={numCls}>
+                      <div className="font-bold tabular-nums text-gray-900 dark:text-white text-[14px]">
+                        {r.stats.total.total.toLocaleString("uz-UZ")}
+                      </div>
+                      <GenderInline g={r.stats.total} />
+                    </td>
+                    <td className={numCls}>
+                      <div className="font-bold tabular-nums text-emerald-700 dark:text-emerald-300 text-[14px]">
+                        {r.stats.attended.total.toLocaleString("uz-UZ")}
+                      </div>
+                      <GenderInline g={r.stats.attended} />
+                    </td>
+                    <td className={numCls}>
+                      <div className="font-bold tabular-nums text-amber-700 dark:text-amber-300 text-[14px]">
+                        {r.stats.not_attended.total.toLocaleString("uz-UZ")}
+                      </div>
+                      <GenderInline g={r.stats.not_attended} />
+                    </td>
+                    <td className={numCls}>
+                      <div className="font-bold tabular-nums text-red-700 dark:text-red-300 text-[14px]">
+                        {r.stats.cheating.total.toLocaleString("uz-UZ")}
+                      </div>
+                      <div className="text-[10.5px] text-gray-500 dark:text-slate-400 mt-0.5">
+                        kirish {r.stats.cheating.at_entry} · test{" "}
+                        {r.stats.cheating.during_test}
+                      </div>
+                    </td>
+                    <td className="px-2.5 py-2 align-middle">
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 h-1.5 rounded-full bg-gray-100 dark:bg-slate-700/50 overflow-hidden">
+                          <div
+                            className={`h-full rounded-full bg-gradient-to-r ${toneBar(p)}`}
+                            style={{ width: `${p}%` }}
+                          />
+                        </div>
+                        <span
+                          className={`text-[12.5px] font-bold tabular-nums w-12 text-right ${toneText(p)}`}
+                        >
+                          {p}%
+                        </span>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+            <tfoot className="sticky bottom-0 z-10 bg-primary-50/90 dark:bg-primary-900/30 backdrop-blur-sm border-t-2 border-primary-200/70 dark:border-primary-700/50">
+              <tr className="font-bold text-primary-800 dark:text-primary-200">
+                <td className="px-2.5 py-3 text-center" colSpan={2}>
+                  <span className="text-[13px]">Jami:</span>
+                </td>
+                <td className={numCls}>
+                  <div className="font-bold tabular-nums text-[14px]">
+                    {summary.total.total.toLocaleString("uz-UZ")}
+                  </div>
+                  <GenderInline g={summary.total} />
+                </td>
+                <td className={numCls}>
+                  <div className="font-bold tabular-nums text-[14px]">
+                    {summary.attended.total.toLocaleString("uz-UZ")}
+                  </div>
+                  <GenderInline g={summary.attended} />
+                </td>
+                <td className={numCls}>
+                  <div className="font-bold tabular-nums text-[14px]">
+                    {summary.not_attended.total.toLocaleString("uz-UZ")}
+                  </div>
+                  <GenderInline g={summary.not_attended} />
+                </td>
+                <td className={numCls}>
+                  <div className="font-bold tabular-nums text-[14px]">
+                    {summary.cheating.total.toLocaleString("uz-UZ")}
+                  </div>
+                  <div className="text-[10.5px] text-primary-700/80 dark:text-primary-300/80 mt-0.5">
+                    kirish {summary.cheating.at_entry} · test{" "}
+                    {summary.cheating.during_test}
+                  </div>
+                </td>
+                <td className="px-2.5 py-3 text-right">
+                  <span className="text-[13.5px] font-bold tabular-nums">
+                    {totalPct}%
+                  </span>
+                </td>
+              </tr>
+            </tfoot>
+          </table>
         </div>
       </div>
     </div>
@@ -1167,7 +1841,7 @@ function ZoneCard({ item }: { item: ZoneStatItem }) {
           >
             {attendancePercent}%
           </span>
-          <span className="text-[9px] text-gray-500 dark:text-slate-400 uppercase tracking-wider leading-none mt-0.5">
+          <span className="text-[10px] font-medium text-gray-600 dark:text-slate-300 leading-none mt-0.5">
             davomat
           </span>
         </div>
@@ -1187,9 +1861,21 @@ function ZoneCard({ item }: { item: ZoneStatItem }) {
       </div>
 
       <div className="grid grid-cols-4 gap-1.5">
-        <MiniStat label="Umumiy" breakdown={item.stats.total} accent="primary" />
-        <MiniStat label="Kelgan" breakdown={item.stats.attended} accent="success" />
-        <MiniStat label="Kelmagan" breakdown={item.stats.not_attended} accent="warning" />
+        <MiniStat
+          label="Umumiy"
+          breakdown={item.stats.total}
+          accent="primary"
+        />
+        <MiniStat
+          label="Kelgan"
+          breakdown={item.stats.attended}
+          accent="success"
+        />
+        <MiniStat
+          label="Kelmagan"
+          breakdown={item.stats.not_attended}
+          accent="warning"
+        />
         <MiniCheating cheating={item.stats.cheating} />
       </div>
     </article>
@@ -1203,6 +1889,29 @@ function formatSmenaOption(sm: TestSessionSmenaResponse): string {
   const smName = sm.smena?.name ?? `#${sm.smena?.number ?? sm.test_smena_id}`;
   const smNum = sm.smena?.number ?? sm.test_smena_id;
   return `${day} · ${smName} (smena №${smNum})`;
+}
+
+/** "Kunlik" selektor uchun — kun + shu kundagi smenalar soni. */
+function formatDayOption(
+  day: string,
+  smenas: TestSessionSmenaResponse[],
+): string {
+  const count = smenas.filter((s) => s.day === day).length;
+  return `${day} · ${count} ta smena`;
+}
+
+/** Cardlar ustidagi kontekst yozuvi — qaysi ko'lam ko'rsatilmoqda. */
+function scopeContextLabel(s: DashboardStatsResponse): string {
+  if (s.scope === "overall") {
+    return `Butun sessiya — barcha kunlar · ${s.smena_count} ta smena`;
+  }
+  if (s.scope === "day") {
+    return `${s.day ?? ""} — kunlik · ${s.smena_count} ta smena`;
+  }
+  // smena
+  const sm =
+    s.smena_name || (s.smena_number != null ? `№${s.smena_number}` : "");
+  return `${s.day ?? ""}${sm ? ` · ${sm}` : ""}`;
 }
 
 function stateLabel(key: number): string {
@@ -1345,6 +2054,102 @@ function BookIcon({ className = "w-4 h-4" }: { className?: string }) {
         strokeLinejoin="round"
         strokeWidth={2}
         d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"
+      />
+    </svg>
+  );
+}
+
+function ClockIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+      />
+    </svg>
+  );
+}
+
+function CalendarIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+      />
+    </svg>
+  );
+}
+
+function LayersIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M12 3l9 5-9 5-9-5 9-5zM3 12l9 5 9-5M3 17l9 5 9-5"
+      />
+    </svg>
+  );
+}
+
+function DownloadIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+      />
+    </svg>
+  );
+}
+
+function Spinner({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg
+      className={`${className} animate-spin`}
+      fill="none"
+      viewBox="0 0 24 24"
+    >
+      <circle
+        className="opacity-25"
+        cx="12"
+        cy="12"
+        r="10"
+        stroke="currentColor"
+        strokeWidth={4}
+      />
+      <path
+        className="opacity-75"
+        fill="currentColor"
+        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
       />
     </svg>
   );

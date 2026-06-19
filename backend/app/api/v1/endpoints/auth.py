@@ -87,7 +87,7 @@ def _delete_csrf_cookie(response: Response) -> None:
 
 
 @router.post("/login", response_model=TokenPairResponse, summary="Tizimga kirish")
-@limiter.limit("5/minute", key_func=_login_rate_key)
+@limiter.limit("50/minute", key_func=_login_rate_key)
 def login(
     request: Request,
     response: Response,

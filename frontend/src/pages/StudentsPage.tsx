@@ -28,6 +28,7 @@ import {
 import PageLoader from "../components/PageLoader";
 import Pagination from "../components/Pagination";
 import PermissionGate from "../components/PermissionGate";
+import Md3Select from "../components/Md3Select";
 import { PERM } from "../permissions";
 import { extractErrorMessage } from "../utils/errorMessage";
 
@@ -1517,86 +1518,81 @@ export default function StudentsPage() {
 
                 {/* Region → Zone cascade */}
                 <ModalField label="Viloyat (Region)">
-                  <select
+                  <Md3Select
                     value={modalRegionId}
-                    onChange={(e) => {
-                      setModalRegionId(e.target.value);
+                    onChange={(v) => {
+                      setModalRegionId(v);
                       setField("zone_id", 0);
                     }}
-                    className="input-field w-full"
-                  >
-                    <option value="">Tanlang...</option>
-                    {regions.map((r) => (
-                      <option key={r.id} value={String(r.id)}>
-                        {r.name}
-                      </option>
-                    ))}
-                  </select>
+                    options={regions.map((r) => ({
+                      value: String(r.id),
+                      label: r.name,
+                    }))}
+                    placeholder="Tanlang..."
+                    ariaLabel="Viloyat (Region)"
+                  />
                 </ModalField>
                 <ModalField label="Bino (Zone)">
-                  <select
-                    value={form.zone_id || ""}
-                    onChange={(e) =>
-                      setField("zone_id", Number(e.target.value))
-                    }
-                    className="input-field w-full"
-                    disabled={!modalRegionId || modalZonesLoading}
-                  >
-                    <option value="0">
-                      {modalZonesLoading
+                  <Md3Select
+                    value={form.zone_id ? String(form.zone_id) : ""}
+                    onChange={(v) => setField("zone_id", Number(v))}
+                    options={modalZones.map((z) => ({
+                      value: String(z.id),
+                      label: z.name,
+                    }))}
+                    placeholder={
+                      modalZonesLoading
                         ? "Yuklanmoqda..."
                         : modalRegionId
                           ? "Tanlang..."
-                          : "Avval viloyatni tanlang"}
-                    </option>
-                    {modalZones.map((z) => (
-                      <option key={z.id} value={z.id}>
-                        {z.name}
-                      </option>
-                    ))}
-                  </select>
+                          : "Avval viloyatni tanlang"
+                    }
+                    disabled={!modalRegionId || modalZonesLoading}
+                    ariaLabel="Bino (Zone)"
+                  />
                 </ModalField>
 
                 <ModalField label="Test sessiya">
-                  <select
+                  <Md3Select
                     value={modalTestSessionId}
-                    onChange={(e) => {
-                      setModalTestSessionId(e.target.value);
+                    onChange={(v) => {
+                      setModalTestSessionId(v);
                       setField("session_smena_id", 0);
                     }}
-                    className="input-field w-full"
-                  >
-                    <option value="">Tanlang...</option>
-                    {testSessions.map((ts) => (
-                      <option key={ts.id} value={String(ts.id)}>
-                        {ts.name} ({ts.test?.name || "—"})
-                      </option>
-                    ))}
-                  </select>
+                    options={testSessions.map((ts) => ({
+                      value: String(ts.id),
+                      label: `${ts.name} (${ts.test?.name || "—"})`,
+                    }))}
+                    placeholder="Tanlang..."
+                    ariaLabel="Test sessiya"
+                  />
                 </ModalField>
                 <ModalField label="Sessiya smena">
-                  <select
-                    value={form.session_smena_id || ""}
-                    onChange={(e) =>
-                      setField("session_smena_id", Number(e.target.value))
+                  <Md3Select
+                    value={
+                      form.session_smena_id ? String(form.session_smena_id) : ""
                     }
-                    className="input-field w-full"
-                    disabled={!modalTestSessionId}
-                  >
-                    <option value="0">
-                      {modalTestSessionId
+                    onChange={(v) =>
+                      setField("session_smena_id", Number(v))
+                    }
+                    options={
+                      modalTestSessionId
+                        ? (testSessions
+                            .find((ts) => ts.id === Number(modalTestSessionId))
+                            ?.smenas.map((sm) => ({
+                              value: String(sm.id),
+                              label: `${sm.smena?.name || `Smena #${sm.number}`} — ${sm.day}`,
+                            })) ?? [])
+                        : []
+                    }
+                    placeholder={
+                      modalTestSessionId
                         ? "Tanlang..."
-                        : "Avval sessiyani tanlang"}
-                    </option>
-                    {modalTestSessionId &&
-                      testSessions
-                        .find((ts) => ts.id === Number(modalTestSessionId))
-                        ?.smenas.map((sm) => (
-                          <option key={sm.id} value={sm.id}>
-                            {sm.smena?.name || `Smena #${sm.number}`} — {sm.day}
-                          </option>
-                        ))}
-                  </select>
+                        : "Avval sessiyani tanlang"
+                    }
+                    disabled={!modalTestSessionId}
+                    ariaLabel="Sessiya smena"
+                  />
                 </ModalField>
                 <ModalField label="Test sanasi">
                   <input
@@ -1872,18 +1868,13 @@ function FilterSelect({
       <label className="block text-[10px] uppercase tracking-wider text-gray-500 dark:text-slate-400 mb-1 font-semibold">
         {label}
       </label>
-      <select
+      <Md3Select
         value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="input-field !py-1.5 !text-sm w-full"
-      >
-        <option value="">Barchasi</option>
-        {options.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
-        ))}
-      </select>
+        onChange={onChange}
+        options={options}
+        placeholder="Barchasi"
+        ariaLabel={label}
+      />
     </div>
   );
 }

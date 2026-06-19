@@ -17,6 +17,7 @@ import {
 import PageLoader from "../components/PageLoader";
 import Pagination from "../components/Pagination";
 import PermissionGate from "../components/PermissionGate";
+import Md3Select from "../components/Md3Select";
 import { PERM } from "../permissions";
 import { extractErrorMessage } from "../utils/errorMessage";
 
@@ -539,25 +540,22 @@ export default function DavomatBotsPage() {
                   <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
                     Rol
                   </label>
-                  <select
-                    value={form.role_id ?? ""}
-                    onChange={(e) =>
-                      handleRoleChange(
-                        e.target.value ? Number(e.target.value) : null,
-                      )
+                  <Md3Select
+                    value={form.role_id != null ? String(form.role_id) : ""}
+                    onChange={(v) =>
+                      handleRoleChange(v ? Number(v) : null)
                     }
-                    className="input-field w-full"
-                  >
-                    <option value="">— Tanlanmagan —</option>
-                    {roles.map((r) => (
-                      <option key={r.id} value={r.id}>
-                        {r.name}
-                        {r.key === SINGLE_REGION_ROLE_KEY
+                    clearable
+                    placeholder="— Tanlanmagan —"
+                    options={roles.map((r) => ({
+                      value: String(r.id),
+                      label:
+                        r.name +
+                        (r.key === SINGLE_REGION_ROLE_KEY
                           ? " (bir region)"
-                          : ""}
-                      </option>
-                    ))}
-                  </select>
+                          : ""),
+                    }))}
+                  />
                   {selectedRole && (
                     <p className="mt-1.5 text-[11px] text-gray-500 dark:text-slate-400">
                       {isSingleRegionRole

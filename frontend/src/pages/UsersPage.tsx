@@ -5,6 +5,7 @@ import { useAuth } from "../contexts/AuthContext";
 import PageLoader from "../components/PageLoader";
 import Pagination from "../components/Pagination";
 import PermissionGate from "../components/PermissionGate";
+import Md3Select from "../components/Md3Select";
 import { PERM } from "../permissions";
 import { extractErrorMessage } from "../utils/errorMessage";
 
@@ -397,32 +398,29 @@ export default function UsersPage() {
                     <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
                       Rol
                     </label>
-                    <select
-                      value={form.role_id ?? ""}
-                      onChange={(e) =>
+                    <Md3Select
+                      value={form.role_id != null ? String(form.role_id) : ""}
+                      onChange={(v) =>
                         setForm({
                           ...form,
-                          role_id: e.target.value ? Number(e.target.value) : null,
+                          role_id: v ? Number(v) : null,
                         })
                       }
                       disabled={roleLocked}
-                      className="input-field w-full disabled:opacity-60 disabled:cursor-not-allowed"
-                    >
-                      <option value="">— Tanlanmagan —</option>
-                      {roles.map((r) => {
+                      placeholder="— Tanlanmagan —"
+                      options={roles.map((r) => {
                         const isAdminRole = r.key === ADMIN_ROLE_KEY;
                         // Admin variantini super-admin bo'lmaganlar uchun yopiq qilamiz,
                         // lekin agar joriy tanlangan rol shu bo'lsa (edit holatda) — ko'rinib tursin.
                         const optDisabled =
                           isAdminRole && !isSuperAdmin && form.role_id !== r.id;
-                        return (
-                          <option key={r.id} value={r.id} disabled={optDisabled}>
-                            {r.name}
-                            {optDisabled ? " — faqat super-admin" : ""}
-                          </option>
-                        );
+                        return {
+                          value: String(r.id),
+                          label: r.name + (optDisabled ? " — faqat super-admin" : ""),
+                          disabled: optDisabled,
+                        };
                       })}
-                    </select>
+                    />
                     {roleLocked && (
                       <p className="mt-1.5 text-[11px] text-amber-600 dark:text-amber-400 flex items-start gap-1.5">
                         <svg
@@ -449,31 +447,23 @@ export default function UsersPage() {
               {/* Cascade: Region → Zone */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Hudud</label>
-                <select
-                  value={form.region_id ?? ""}
-                  onChange={(e) => handleRegionChange(e.target.value ? Number(e.target.value) : null)}
-                  className="input-field w-full"
-                >
-                  <option value="">— Tanlanmagan —</option>
-                  {regions.map((r) => (
-                    <option key={r.id} value={r.id}>{r.name}</option>
-                  ))}
-                </select>
+                <Md3Select
+                  value={form.region_id != null ? String(form.region_id) : ""}
+                  onChange={(v) => handleRegionChange(v ? Number(v) : null)}
+                  placeholder="— Tanlanmagan —"
+                  options={regions.map((r) => ({ value: String(r.id), label: r.name }))}
+                />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Bino (uy zonasi — ixtiyoriy)</label>
-                <select
-                  value={form.zone_id ?? ""}
-                  onChange={(e) => setForm({ ...form, zone_id: e.target.value ? Number(e.target.value) : null })}
-                  className="input-field w-full"
+                <Md3Select
+                  value={form.zone_id != null ? String(form.zone_id) : ""}
+                  onChange={(v) => setForm({ ...form, zone_id: v ? Number(v) : null })}
                   disabled={!form.region_id}
-                >
-                  <option value="">{form.region_id ? "— Tanlang —" : "— Avval hududni tanlang —"}</option>
-                  {filteredZones.map((z) => (
-                    <option key={z.id} value={z.id}>{z.name}</option>
-                  ))}
-                </select>
+                  placeholder={form.region_id ? "— Tanlang —" : "— Avval hududni tanlang —"}
+                  options={filteredZones.map((z) => ({ value: String(z.id), label: z.name }))}
+                />
               </div>
 
               <div>

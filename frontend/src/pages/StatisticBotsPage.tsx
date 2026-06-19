@@ -13,6 +13,7 @@ import {
 import PageLoader from "../components/PageLoader";
 import Pagination from "../components/Pagination";
 import PermissionGate from "../components/PermissionGate";
+import Md3Select from "../components/Md3Select";
 import { PERM } from "../permissions";
 import { extractErrorMessage } from "../utils/errorMessage";
 
@@ -433,19 +434,14 @@ export default function StatisticBotsPage() {
                   <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
                     Rol *
                   </label>
-                  <select
-                    value={form.role}
-                    onChange={(e) =>
-                      setForm({ ...form, role: Number(e.target.value) })
-                    }
-                    className="input-field w-full"
-                  >
-                    {ROLE_OPTIONS.map((r) => (
-                      <option key={r.value} value={r.value}>
-                        {r.label} — {r.hint}
-                      </option>
-                    ))}
-                  </select>
+                  <Md3Select
+                    value={String(form.role)}
+                    onChange={(v) => setForm({ ...form, role: Number(v) })}
+                    options={ROLE_OPTIONS.map((r) => ({
+                      value: String(r.value),
+                      label: `${r.label} — ${r.hint}`,
+                    }))}
+                  />
                   <p className="mt-1.5 text-[11px] text-gray-500 dark:text-slate-400">
                     {ROLE_OPTIONS.find((r) => r.value === form.role)?.hint}
                   </p>

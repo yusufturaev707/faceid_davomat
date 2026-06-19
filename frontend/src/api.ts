@@ -342,18 +342,89 @@ export async function getStudentLoadProgressApi(sessionId: number): Promise<{
 }
 
 /**
- * Tanlangan sessiya/smena+kun uchun dashboard statistikasini olish.
+ * Tanlangan ko'lam (scope) uchun dashboard statistikasini olish:
+ *  - scope="smena"   — `sessionSmenaId` majburiy (bitta kun + smena)
+ *  - scope="day"     — `day` (YYYY-MM-DD) majburiy (bitta kunning barcha smenalari)
+ *  - scope="overall" — qo'shimcha parametr kerak emas (butun sessiya)
+ *
  * `is_realtime=true` (session state.key=4) bo'lsa frontend polling qiladi.
  */
 export async function getSessionDashboardStatsApi(
   sessionId: number,
-  sessionSmenaId: number,
+  opts: {
+    scope: import("./interfaces").StatsScope;
+    sessionSmenaId?: number | null;
+    day?: string | null;
+  },
 ): Promise<import("./interfaces").DashboardStatsResponse> {
+  const params: Record<string, string | number> = { scope: opts.scope };
+  if (opts.scope === "smena" && opts.sessionSmenaId != null) {
+    params.session_smena_id = opts.sessionSmenaId;
+  }
+  if (opts.scope === "day" && opts.day) {
+    params.day = opts.day;
+  }
   const res = await apiClient.get(
     `/test-sessions/${sessionId}/dashboard-stats`,
-    { params: { session_smena_id: sessionSmenaId } },
+    { params },
   );
   return res.data;
+}
+
+/**
+ * Tanlangan ko'lam (scope) statistikasini rasmiy "МАЪЛУМОТ" ko'rinishidagi
+ * Excel (.xlsx) hisobotiga eksport qilib yuklab olish. Parametrlar
+ * `getSessionDashboardStatsApi` bilan bir xil. Brauzer faylni saqlaydi.
+ */
+export async function exportSessionDashboardStatsApi(
+  sessionId: number,
+  opts: {
+    scope: import("./interfaces").StatsScope;
+    sessionSmenaId?: number | null;
+    day?: string | null;
+    alphabet?: "cyrillic" | "latin";
+  },
+): Promise<void> {
+  const params: Record<string, string | number> = { scope: opts.scope };
+  if (opts.scope === "smena" && opts.sessionSmenaId != null) {
+    params.session_smena_id = opts.sessionSmenaId;
+  }
+  if (opts.scope === "day" && opts.day) {
+    params.day = opts.day;
+  }
+  if (opts.alphabet) {
+    params.alphabet = opts.alphabet;
+  }
+  try {
+    const res = await apiClient.get(
+      `/test-sessions/${sessionId}/dashboard-stats/export`,
+      { params, responseType: "blob" },
+    );
+    const cd = (res.headers["content-disposition"] as string | undefined) ?? "";
+    const match = /filename="?([^";]+)"?/.exec(cd);
+    const filename = match ? match[1] : "statistika.xlsx";
+
+    const url = URL.createObjectURL(res.data);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    // Xato javob blob ko'rinishida keladi — ichidagi {detail} ni o'qib chiqaramiz
+    const data = (err as { response?: { data?: unknown } })?.response?.data;
+    if (data instanceof Blob) {
+      try {
+        const parsed = JSON.parse(await data.text());
+        throw new Error(parsed.detail || "Eksport amalga oshmadi");
+      } catch (e) {
+        if (e instanceof Error && e.message) throw e;
+      }
+    }
+    throw err;
+  }
 }
 
 /**

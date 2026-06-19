@@ -1,0 +1,167 @@
+- generic [ref=e22]:
+  - banner [ref=e23]:
+    - button "Menyu" [ref=e24] [cursor=pointer]:
+      - img [ref=e25]
+    - generic [ref=e27]:
+      - img [ref=e29]
+      - generic [ref=e31]: FaceID Admin
+  - complementary "Sidebar" [ref=e32]:
+    - generic [ref=e33]:
+      - generic [ref=e34]:
+        - img [ref=e36]
+        - generic [ref=e38]:
+          - heading "FaceID Admin" [level=1] [ref=e39]
+          - paragraph [ref=e40]: Verification System
+      - button "Yopish" [ref=e41] [cursor=pointer]:
+        - img [ref=e42]
+    - navigation [ref=e44]:
+      - paragraph [ref=e46]: Test markazi
+      - link "Test Dashboard" [ref=e48] [cursor=pointer]:
+        - /url: /test-dashboard
+        - img [ref=e49]
+        - text: Test Dashboard
+      - link "Statistika" [ref=e51] [cursor=pointer]:
+        - /url: /statistics
+        - img [ref=e52]
+        - text: Statistika
+      - link "Test sessiyalar" [ref=e54] [cursor=pointer]:
+        - /url: /test-sessions
+        - img [ref=e55]
+        - text: Test sessiyalar
+      - link "Talabgorlar" [ref=e57] [cursor=pointer]:
+        - /url: /students
+        - img [ref=e58]
+        - text: Talabgorlar
+      - link "Binoga kirish loglari" [ref=e61] [cursor=pointer]:
+        - /url: /student-logs
+        - img [ref=e62]
+        - text: Binoga kirish loglari
+      - link "Chetlatilganlar" [ref=e64] [cursor=pointer]:
+        - /url: /cheating-logs
+        - img [ref=e65]
+        - text: Chetlatilganlar
+      - paragraph [ref=e68]: Sozlamalar
+      - link "Foydalanuvchilar" [ref=e70] [cursor=pointer]:
+        - /url: /users
+        - img [ref=e71]
+        - text: Foydalanuvchilar
+      - link "Davomat bot foydalanuvchilari" [ref=e73] [cursor=pointer]:
+        - /url: /davomat-bots
+        - img [ref=e74]
+        - text: Davomat bot foydalanuvchilari
+      - link "Rollar" [ref=e76] [cursor=pointer]:
+        - /url: /manage-roles
+        - img [ref=e77]
+        - text: Rollar
+      - link "Huquqlar" [ref=e79] [cursor=pointer]:
+        - /url: /manage-permissions
+        - img [ref=e80]
+        - text: Huquqlar
+      - link "Failed login audit" [ref=e82] [cursor=pointer]:
+        - /url: /failed-logins
+        - img [ref=e83]
+        - text: Failed login audit
+      - link "Hududlar" [ref=e85] [cursor=pointer]:
+        - /url: /manage-regions
+        - img [ref=e86]
+        - text: Hududlar
+      - link "Binolar" [ref=e88] [cursor=pointer]:
+        - /url: /manage-zones
+        - img [ref=e89]
+        - text: Binolar
+      - link "Testlar" [ref=e91] [cursor=pointer]:
+        - /url: /manage-tests
+        - img [ref=e92]
+        - text: Testlar
+      - link "Smenalar" [ref=e94] [cursor=pointer]:
+        - /url: /manage-smenas
+        - img [ref=e95]
+        - text: Smenalar
+      - link "Sessiya holatlari" [ref=e97] [cursor=pointer]:
+        - /url: /manage-session-states
+        - img [ref=e98]
+        - text: Sessiya holatlari
+      - link "Sabablar" [ref=e100] [cursor=pointer]:
+        - /url: /manage-reasons
+        - img [ref=e101]
+        - text: Sabablar
+      - link "Sabab turi" [ref=e103] [cursor=pointer]:
+        - /url: /manage-reason-types
+        - img [ref=e104]
+        - text: Sabab turi
+      - link "Jinslar" [ref=e106] [cursor=pointer]:
+        - /url: /manage-genders
+        - img [ref=e107]
+        - text: Jinslar
+      - link "Qora ro'yxat" [ref=e109] [cursor=pointer]:
+        - /url: /manage-blacklist
+        - img [ref=e110]
+        - text: Qora ro'yxat
+      - paragraph [ref=e113]: Xizmatlar
+      - link "Rasm tekshirish" [ref=e115] [cursor=pointer]:
+        - /url: /verify
+        - img [ref=e116]
+        - text: Rasm tekshirish
+      - link "Yuzlarni solishtirish" [ref=e118] [cursor=pointer]:
+        - /url: /verify-two-face
+        - img [ref=e119]
+        - text: Yuzlarni solishtirish
+      - link "Embedding olish" [ref=e121] [cursor=pointer]:
+        - /url: /embedding
+        - img [ref=e122]
+        - text: Embedding olish
+      - link "Pasport info" [ref=e124] [cursor=pointer]:
+        - /url: /pasport-info
+        - img [ref=e125]
+        - text: Pasport info
+      - link "Statistika bot foydalanuvchilari" [ref=e127] [cursor=pointer]:
+        - /url: /statistic-bots
+        - img [ref=e128]
+        - text: Statistika bot foydalanuvchilari
+      - link "Qabul-2026" [ref=e130] [cursor=pointer]:
+        - /url: /qabul
+        - img [ref=e131]
+        - text: Qabul-2026
+      - paragraph [ref=e134]: Boshqaruv
+      - link "Dashboard" [ref=e136] [cursor=pointer]:
+        - /url: /dashboard
+        - img [ref=e137]
+        - text: Dashboard
+      - link "Ram tekshiruv loglari" [ref=e139] [cursor=pointer]:
+        - /url: /logs
+        - img [ref=e140]
+        - text: Ram tekshiruv loglari
+      - link "Yuz solishtirish loglari" [ref=e142] [cursor=pointer]:
+        - /url: /face-logs
+        - img [ref=e143]
+        - text: Yuz solishtirish loglari
+      - link "API kalitlar" [ref=e145] [cursor=pointer]:
+        - /url: /api-keys
+        - img [ref=e146]
+        - text: API kalitlar
+    - generic [ref=e148]:
+      - button "A Administrator Admin" [ref=e149] [cursor=pointer]:
+        - generic [ref=e151]: A
+        - generic [ref=e152]:
+          - paragraph [ref=e153]: Administrator
+          - paragraph [ref=e154]: Admin
+        - img [ref=e155]
+      - button "Chiqish" [ref=e158] [cursor=pointer]:
+        - img [ref=e159]
+        - text: Chiqish
+  - main [ref=e161]:
+    - generic [ref=e163]:
+      - generic [ref=e164]:
+        - heading "Rasm Tekshiruv" [level=2] [ref=e165]
+        - paragraph [ref=e166]: Rasmni yuklang va sertifikat uchun yaroqliligini tekshiring
+      - generic [ref=e167]:
+        - generic [ref=e168]:
+          - generic [ref=e169]: Rasm tanlash
+          - generic [ref=e171] [cursor=pointer]:
+            - img [ref=e173]
+            - paragraph [ref=e175]: Rasmni tashlang yoki tanlang
+            - paragraph [ref=e176]: JPG, PNG (max 10MB)
+        - generic [ref=e177]:
+          - generic [ref=e178]: Yosh
+          - spinbutton [ref=e179]: "25"
+        - button "Tekshirish" [disabled] [ref=e180]

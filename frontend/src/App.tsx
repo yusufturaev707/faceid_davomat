@@ -43,22 +43,27 @@ import StatisticsPage from "./pages/StatisticsPage";
 
 /**
  * Asosiy sahifani foydalanuvchining huquqlariga qarab tanlash.
- * Xizmat sahifalari endi permission-gate'lanadi, shuning uchun root'ni
- * doim /verify ga yuborib bo'lmaydi — ruxsati yo'q user redirect halqasiga
- * tushib qolardi.
+ * Adminka uchun standart sahifa — Test dashboard (`/test-dashboard`). Ruxsati
+ * yo'q foydalanuvchilar uchun esa o'z huquqlariga mos xizmat sahifasiga
+ * tushadi (redirect halqasiga tushmaslik uchun fallbacklar saqlangan).
+ * `/test-dashboard` shartlari shu route guard'i (DASHBOARD_READ yoki
+ * TEST_SESSION_READ) bilan aynan bir xil — shuning uchun halqa bo'lmaydi.
  */
 function HomeRedirect() {
   const { hasPermission, hasAnyPermission } = usePermission();
 
+  // Standart kirish sahifasi — Test dashboard
+  if (hasAnyPermission(PERM.DASHBOARD_READ, PERM.TEST_SESSION_READ))
+    return <Navigate to="/test-dashboard" replace />;
+
+  // Test dashboard'ga ruxsati yo'q foydalanuvchilar uchun fallbacklar
   if (hasPermission(PERM.PHOTO_VERIFY)) return <Navigate to="/verify" replace />;
   if (hasPermission(PERM.PHOTO_VERIFY_TWO_FACE))
     return <Navigate to="/verify-two-face" replace />;
   if (hasPermission(PERM.EMBEDDING_EXTRACT))
     return <Navigate to="/embedding" replace />;
-  if (hasAnyPermission(PERM.DASHBOARD_READ, PERM.DASHBOARD_STATS))
+  if (hasPermission(PERM.DASHBOARD_STATS))
     return <Navigate to="/dashboard" replace />;
-  if (hasAnyPermission(PERM.TEST_SESSION_READ))
-    return <Navigate to="/test-dashboard" replace />;
   return <Navigate to="/settings" replace />;
 }
 

@@ -77,10 +77,18 @@ class RegionStatItem(BaseModel):
 
 class DashboardStatsResponse(BaseModel):
     session_id: int
-    session_smena_id: int
-    day: date
-    smena_number: int
-    smena_name: str
+    # Statistika ko'lami: "smena" (bitta kun+smena) | "day" (bitta kun) |
+    # "overall" (butun sessiya).
+    scope: str = "smena"
+    # smena/day/overall ga qarab to'ldiriladi (overall'da day=None, smena
+    # maydonlari faqat scope="smena" da bo'ladi).
+    session_smena_id: int | None = None
+    day: date | None = None
+    smena_number: int | None = None
+    smena_name: str | None = None
+    # Nechta smena agregatsiya qilindi (smena=1, day=shu kun smenalari,
+    # overall=sessiyaning barcha smenalari).
+    smena_count: int = 1
     # Front'da real-time polling boshlash uchun: 4 = ACTIVE/ready
     session_state_key: int
     is_realtime: bool

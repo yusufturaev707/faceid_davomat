@@ -24,6 +24,7 @@ import {
 } from "../api";
 import PageLoader from "../components/PageLoader";
 import Pagination from "../components/Pagination";
+import Md3Select from "../components/Md3Select";
 import PermissionGate from "../components/PermissionGate";
 import { PERM } from "../permissions";
 import { extractErrorMessage } from "../utils/errorMessage";
@@ -356,20 +357,18 @@ export default function CheatingLogsPage() {
               <span className="text-[10px] uppercase tracking-wider text-gray-500 dark:text-slate-400 font-semibold">
                 Sahifada
               </span>
-              <select
-                value={perPage}
-                onChange={(e) => {
-                  setPerPage(Number(e.target.value));
+              <Md3Select
+                value={String(perPage)}
+                onChange={(v) => {
+                  setPerPage(Number(v));
                   setPage(1);
                 }}
-                className="input-field !py-1 !text-sm !pr-7"
-              >
-                {[10, 20, 50, 100].map((n) => (
-                  <option key={n} value={n}>
-                    {n}
-                  </option>
-                ))}
-              </select>
+                options={[10, 20, 50, 100].map((n) => ({
+                  value: String(n),
+                  label: String(n),
+                }))}
+                className="w-20"
+              />
             </div>
             {data && (
               <span className="text-xs text-gray-400 dark:text-slate-500">
@@ -782,19 +781,14 @@ function FilterSelect({
       <label className="block text-[10px] uppercase tracking-wider text-gray-500 dark:text-slate-400 mb-1 font-semibold">
         {label}
       </label>
-      <select
+      <Md3Select
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={onChange}
         disabled={disabled}
-        className="input-field !py-1.5 !text-sm w-full disabled:opacity-50"
-      >
-        <option value="">Barchasi</option>
-        {options.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
-        ))}
-      </select>
+        placeholder="Barchasi"
+        clearable
+        options={options.map((o) => ({ value: o.value, label: o.label }))}
+      />
     </div>
   );
 }

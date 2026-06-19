@@ -24,8 +24,9 @@ from __future__ import annotations
 import logging
 from collections import defaultdict
 from dataclasses import dataclass, field
+from datetime import date
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models.cheating_log import CheatingLog
@@ -61,6 +62,12 @@ STATE_KEY_ACTIVE = 4
 # Gender.key qiymatlari
 GENDER_MALE = 1
 GENDER_FEMALE = 2
+
+# Statistika ko'lami (scope) — bitta smena, bitta kun yoki butun sessiya
+SCOPE_SMENA = "smena"      # bitta kun + smena (session_smena_id majburiy)
+SCOPE_DAY = "day"          # bitta kunning barcha smenalari (day majburiy)
+SCOPE_OVERALL = "overall"  # sessiyaning barcha kun va smenalari
+VALID_SCOPES = (SCOPE_SMENA, SCOPE_DAY, SCOPE_OVERALL)
 
 
 class DashboardStatsError(Exception):
@@ -179,65 +186,106 @@ def _tally_to_stat_group(t: _Tally) -> StatGroup:
 
 
 def get_dashboard_stats(
-    db: Session, *, session_id: int, session_smena_id: int
+    db: Session,
+    *,
+    session_id: int,
+    session_smena_id: int | None = None,
+    day: date | None = None,
+    scope: str = SCOPE_SMENA,
 ) -> DashboardStatsResponse:
-    """Bitta (session, smena+kun) uchun dashboard statistikasini qaytarish.
+    """(session, scope) uchun dashboard statistikasini qaytarish.
+
+    scope:
+      - ``"smena"``   — bitta kun + smena (`session_smena_id` majburiy)
+      - ``"day"``     — bitta kunning barcha smenalari (`day` majburiy)
+      - ``"overall"`` — sessiyaning barcha kun va smenalari
+
+    Tezlik: scope qanday bo'lishidan qat'i nazar 2 ta asosiy SELECT
+    (studentlar + cheating loglari) — filtr `TestSessionSmena` join orqali
+    qo'yiladi, shuning uchun katta IN-ro'yxatlardan qochiladi.
 
     Raises:
-        DashboardStatsError: sessiya yoki smena topilmadi yoki bog'lanmagan.
+        DashboardStatsError: sessiya/smena topilmadi yoki parametr yetishmaydi.
     """
+    if scope not in VALID_SCOPES:
+        raise DashboardStatsError(f"Noma'lum scope: {scope}")
+
     session = db.get(TestSession, session_id)
     if session is None:
         raise DashboardStatsError("Sessiya topilmadi")
 
-    smena = db.get(TestSessionSmena, session_smena_id)
-    if smena is None:
-        raise DashboardStatsError("Smena topilmadi")
-    if smena.test_session_id != session_id:
-        raise DashboardStatsError("Tanlangan smena bu sessiyaga tegishli emas")
+    smena = None
+    if scope == SCOPE_SMENA:
+        if session_smena_id is None:
+            raise DashboardStatsError("session_smena_id majburiy (scope=smena)")
+        smena = db.get(TestSessionSmena, session_smena_id)
+        if smena is None:
+            raise DashboardStatsError("Smena topilmadi")
+        if smena.test_session_id != session_id:
+            raise DashboardStatsError("Tanlangan smena bu sessiyaga tegishli emas")
+    elif scope == SCOPE_DAY and day is None:
+        raise DashboardStatsError("day majburiy (scope=day)")
 
     state = db.get(SessionState, session.test_state_id) if session.test_state_id else None
     state_key = int(state.key) if state else 0
 
+    def _apply_scope(stmt):
+        """Tanlangan ko'lam (scope) bo'yicha WHERE filtrlarini qo'shadi.
+
+        `stmt` allaqachon `Student` va `TestSessionSmena` ni join qilgan
+        bo'lishi shart.
+        """
+        stmt = stmt.where(TestSessionSmena.test_session_id == session_id)
+        if scope == SCOPE_SMENA:
+            stmt = stmt.where(Student.session_smena_id == session_smena_id)
+        elif scope == SCOPE_DAY:
+            stmt = stmt.where(TestSessionSmena.day == day)
+        return stmt
+
     # 1) Studentlar — region/zone/gender bilan birga
     student_rows = db.execute(
-        select(
-            Student.id,
-            Student.is_entered,
-            Student.is_cheating,
-            Student.zone_id,
-            Zone.region_id,
-            Zone.number.label("zone_number"),
-            Zone.name.label("zone_name"),
-            Region.number.label("region_number"),
-            Region.name.label("region_name"),
-            Gender.key.label("gender_key"),
+        _apply_scope(
+            select(
+                Student.id,
+                Student.is_entered,
+                Student.is_cheating,
+                Student.zone_id,
+                Zone.region_id,
+                Zone.number.label("zone_number"),
+                Zone.name.label("zone_name"),
+                Region.number.label("region_number"),
+                Region.name.label("region_name"),
+                Gender.key.label("gender_key"),
+            )
+            .select_from(Student)
+            .join(TestSessionSmena, TestSessionSmena.id == Student.session_smena_id)
+            .join(Zone, Zone.id == Student.zone_id)
+            .join(Region, Region.id == Zone.region_id)
+            .outerjoin(StudentPsData, StudentPsData.student_id == Student.id)
+            .outerjoin(Gender, Gender.id == StudentPsData.gender_id)
         )
-        .select_from(Student)
-        .join(Zone, Zone.id == Student.zone_id)
-        .join(Region, Region.id == Zone.region_id)
-        .outerjoin(StudentPsData, StudentPsData.student_id == Student.id)
-        .outerjoin(Gender, Gender.id == StudentPsData.gender_id)
-        .where(Student.session_smena_id == session_smena_id)
     ).all()
 
-    # 2) Chetlatish loglari — reason_type bo'yicha guruhlash uchun
-    student_ids = [r.id for r in student_rows]
+    # 2) Chetlatish loglari — reason_type bo'yicha guruhlash uchun.
+    #    IN-ro'yxat o'rniga scope filtri join orqali qo'yiladi (overall'da
+    #    student_ids o'n minglab bo'lishi mumkin).
     cheating_map: dict[int, int | None] = {}
-    if student_ids:
-        cheating_rows = db.execute(
+    cheating_rows = db.execute(
+        _apply_scope(
             select(
                 CheatingLog.student_id,
                 ReasonType.key.label("rt_key"),
             )
             .select_from(CheatingLog)
+            .join(Student, Student.id == CheatingLog.student_id)
+            .join(TestSessionSmena, TestSessionSmena.id == Student.session_smena_id)
             .join(Reason, Reason.id == CheatingLog.reason_id)
             .outerjoin(ReasonType, ReasonType.id == Reason.reason_type_id)
-            .where(CheatingLog.student_id.in_(student_ids))
-        ).all()
-        for sid, rt_key in cheating_rows:
-            # Bitta studentda CheatingLog.student_id unique — kichik xavfsizlik
-            cheating_map[int(sid)] = int(rt_key) if rt_key is not None else None
+        )
+    ).all()
+    for sid, rt_key in cheating_rows:
+        # Bitta studentda CheatingLog.student_id unique — kichik xavfsizlik
+        cheating_map[int(sid)] = int(rt_key) if rt_key is not None else None
 
     # Agregatsiya
     summary = _Tally()
@@ -317,18 +365,48 @@ def get_dashboard_stats(
             )
         )
 
-    smena_name = ""
-    smena_number = 0
-    if smena.smena is not None:
-        smena_name = smena.smena.name or ""
-        smena_number = int(smena.smena.number)
+    # Scope bo'yicha meta — sarlavha va smenalar soni
+    resp_smena_id: int | None = None
+    resp_day: date | None = None
+    resp_smena_number: int | None = None
+    resp_smena_name: str | None = None
+    smena_count = 1
+
+    if scope == SCOPE_SMENA:
+        resp_smena_id = session_smena_id
+        resp_day = smena.day
+        if smena.smena is not None:
+            resp_smena_name = smena.smena.name or ""
+            resp_smena_number = int(smena.smena.number)
+    elif scope == SCOPE_DAY:
+        resp_day = day
+        smena_count = int(
+            db.execute(
+                select(func.count())
+                .select_from(TestSessionSmena)
+                .where(
+                    TestSessionSmena.test_session_id == session_id,
+                    TestSessionSmena.day == day,
+                )
+            ).scalar_one()
+        )
+    else:  # SCOPE_OVERALL
+        smena_count = int(
+            db.execute(
+                select(func.count())
+                .select_from(TestSessionSmena)
+                .where(TestSessionSmena.test_session_id == session_id)
+            ).scalar_one()
+        )
 
     return DashboardStatsResponse(
         session_id=session_id,
-        session_smena_id=session_smena_id,
-        day=smena.day,
-        smena_number=smena_number,
-        smena_name=smena_name,
+        scope=scope,
+        session_smena_id=resp_smena_id,
+        day=resp_day,
+        smena_number=resp_smena_number,
+        smena_name=resp_smena_name,
+        smena_count=smena_count,
         session_state_key=state_key,
         is_realtime=(state_key == STATE_KEY_ACTIVE),
         summary=_tally_to_stat_group(summary),

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { getFailedLoginsApi, getFailedLoginsCountApi } from "../api";
 import PageLoader from "../components/PageLoader";
 import Pagination from "../components/Pagination";
+import Md3Select from "../components/Md3Select";
 import type { FailedLoginAttemptResponse } from "../interfaces";
 import { extractErrorMessage } from "../utils/errorMessage";
 
@@ -206,32 +207,35 @@ export default function FailedLoginsPage() {
           <label className="block text-xs text-gray-500 dark:text-slate-400 mb-1.5 font-medium">
             Limit
           </label>
-          <select
-            value={limit}
-            onChange={(e) => setLimit(Number(e.target.value))}
-            className="input-field !py-2 !text-sm"
-          >
-            <option value={50}>50</option>
-            <option value={100}>100</option>
-            <option value={200}>200</option>
-            <option value={500}>500</option>
-          </select>
+          <Md3Select
+            value={String(limit)}
+            onChange={(v) => setLimit(Number(v))}
+            options={[
+              { value: "50", label: "50" },
+              { value: "100", label: "100" },
+              { value: "200", label: "200" },
+              { value: "500", label: "500" },
+            ]}
+            className="w-28"
+          />
         </div>
         <div>
           <label className="block text-xs text-gray-500 dark:text-slate-400 mb-1.5 font-medium">
             Sabab
           </label>
-          <select
+          <Md3Select
             value={reasonFilter}
-            onChange={(e) => setReasonFilter(e.target.value)}
-            className="input-field !py-2 !text-sm"
-          >
-            <option value="">Barchasi</option>
-            <option value="wrong_password">Parol noto'g'ri</option>
-            <option value="no_user">Foydalanuvchi yo'q</option>
-            <option value="inactive">Bloklangan</option>
-            <option value="locked">Lockout</option>
-          </select>
+            onChange={(v) => setReasonFilter(v)}
+            placeholder="Barchasi"
+            clearable
+            options={[
+              { value: "wrong_password", label: "Parol noto'g'ri" },
+              { value: "no_user", label: "Foydalanuvchi yo'q" },
+              { value: "inactive", label: "Bloklangan" },
+              { value: "locked", label: "Lockout" },
+            ]}
+            className="w-44"
+          />
         </div>
         <button onClick={handleFilter} className="btn-primary !py-2 text-sm">
           Filtrlash

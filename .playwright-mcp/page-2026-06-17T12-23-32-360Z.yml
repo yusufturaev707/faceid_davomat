@@ -1,0 +1,187 @@
+- generic [ref=e5]:
+  - complementary "Sidebar" [ref=e6]:
+    - generic [ref=e8]:
+      - img [ref=e10]
+      - generic [ref=e12]:
+        - heading "FaceID Admin" [level=1] [ref=e13]
+        - paragraph [ref=e14]: Verification System
+    - navigation [ref=e15]:
+      - paragraph [ref=e17]: Test markazi
+      - link "Test Dashboard" [ref=e19] [cursor=pointer]:
+        - /url: /test-dashboard
+        - img [ref=e20]
+        - text: Test Dashboard
+      - link "Statistika" [ref=e22] [cursor=pointer]:
+        - /url: /statistics
+        - img [ref=e23]
+        - text: Statistika
+      - link "Test sessiyalar" [ref=e25] [cursor=pointer]:
+        - /url: /test-sessions
+        - img [ref=e26]
+        - text: Test sessiyalar
+      - link "Talabgorlar" [ref=e28] [cursor=pointer]:
+        - /url: /students
+        - img [ref=e29]
+        - text: Talabgorlar
+      - link "Binoga kirish loglari" [ref=e32] [cursor=pointer]:
+        - /url: /student-logs
+        - img [ref=e33]
+        - text: Binoga kirish loglari
+      - link "Chetlatilganlar" [ref=e35] [cursor=pointer]:
+        - /url: /cheating-logs
+        - img [ref=e36]
+        - text: Chetlatilganlar
+      - paragraph [ref=e39]: Sozlamalar
+      - link "Foydalanuvchilar" [ref=e41] [cursor=pointer]:
+        - /url: /users
+        - img [ref=e42]
+        - text: Foydalanuvchilar
+      - link "Davomat bot foydalanuvchilari" [ref=e44] [cursor=pointer]:
+        - /url: /davomat-bots
+        - img [ref=e45]
+        - text: Davomat bot foydalanuvchilari
+      - link "Rollar" [ref=e47] [cursor=pointer]:
+        - /url: /manage-roles
+        - img [ref=e48]
+        - text: Rollar
+      - link "Huquqlar" [ref=e50] [cursor=pointer]:
+        - /url: /manage-permissions
+        - img [ref=e51]
+        - text: Huquqlar
+      - link "Failed login audit" [ref=e53] [cursor=pointer]:
+        - /url: /failed-logins
+        - img [ref=e54]
+        - text: Failed login audit
+      - link "Hududlar" [ref=e56] [cursor=pointer]:
+        - /url: /manage-regions
+        - img [ref=e57]
+        - text: Hududlar
+      - link "Binolar" [ref=e59] [cursor=pointer]:
+        - /url: /manage-zones
+        - img [ref=e60]
+        - text: Binolar
+      - link "Testlar" [ref=e62] [cursor=pointer]:
+        - /url: /manage-tests
+        - img [ref=e63]
+        - text: Testlar
+      - link "Smenalar" [ref=e65] [cursor=pointer]:
+        - /url: /manage-smenas
+        - img [ref=e66]
+        - text: Smenalar
+      - link "Sessiya holatlari" [ref=e68] [cursor=pointer]:
+        - /url: /manage-session-states
+        - img [ref=e69]
+        - text: Sessiya holatlari
+      - link "Sabablar" [ref=e71] [cursor=pointer]:
+        - /url: /manage-reasons
+        - img [ref=e72]
+        - text: Sabablar
+      - link "Sabab turi" [ref=e74] [cursor=pointer]:
+        - /url: /manage-reason-types
+        - img [ref=e75]
+        - text: Sabab turi
+      - link "Jinslar" [ref=e77] [cursor=pointer]:
+        - /url: /manage-genders
+        - img [ref=e78]
+        - text: Jinslar
+      - link "Qora ro'yxat" [ref=e80] [cursor=pointer]:
+        - /url: /manage-blacklist
+        - img [ref=e81]
+        - text: Qora ro'yxat
+      - paragraph [ref=e84]: Xizmatlar
+      - link "Rasm tekshirish" [ref=e86] [cursor=pointer]:
+        - /url: /verify
+        - img [ref=e87]
+        - text: Rasm tekshirish
+      - link "Yuzlarni solishtirish" [ref=e89] [cursor=pointer]:
+        - /url: /verify-two-face
+        - img [ref=e90]
+        - text: Yuzlarni solishtirish
+      - link "Embedding olish" [ref=e92] [cursor=pointer]:
+        - /url: /embedding
+        - img [ref=e93]
+        - text: Embedding olish
+      - link "Pasport info" [ref=e95] [cursor=pointer]:
+        - /url: /pasport-info
+        - img [ref=e96]
+        - text: Pasport info
+      - link "Statistika bot foydalanuvchilari" [ref=e98] [cursor=pointer]:
+        - /url: /statistic-bots
+        - img [ref=e99]
+        - text: Statistika bot foydalanuvchilari
+      - link "Qabul-2026" [ref=e101] [cursor=pointer]:
+        - /url: /qabul
+        - img [ref=e102]
+        - text: Qabul-2026
+      - paragraph [ref=e105]: Boshqaruv
+      - link "Dashboard" [ref=e107] [cursor=pointer]:
+        - /url: /dashboard
+        - img [ref=e108]
+        - text: Dashboard
+      - link "Ram tekshiruv loglari" [ref=e110] [cursor=pointer]:
+        - /url: /logs
+        - img [ref=e111]
+        - text: Ram tekshiruv loglari
+      - link "Yuz solishtirish loglari" [ref=e113] [cursor=pointer]:
+        - /url: /face-logs
+        - img [ref=e114]
+        - text: Yuz solishtirish loglari
+      - link "API kalitlar" [ref=e116] [cursor=pointer]:
+        - /url: /api-keys
+        - img [ref=e117]
+        - text: API kalitlar
+    - generic [ref=e119]:
+      - button "A Administrator Admin" [ref=e120] [cursor=pointer]:
+        - generic [ref=e122]: A
+        - generic [ref=e123]:
+          - paragraph [ref=e124]: Administrator
+          - paragraph [ref=e125]: Admin
+        - img [ref=e126]
+      - button "Chiqish" [ref=e129] [cursor=pointer]:
+        - img [ref=e130]
+        - text: Chiqish
+  - main [ref=e132]:
+    - generic [ref=e134]:
+      - generic [ref=e136]:
+        - heading "Statistika dashboard" [level=2] [ref=e137]
+        - paragraph [ref=e138]: Test sessiyani tanlang, so'ng smena, kunlik yoki umumiy ko'rinishni tanlang — real vaqt statistikasi (sessiya tayyor holatida) yoki oxirgi holat ko'rsatiladi
+      - generic [ref=e139]:
+        - generic [ref=e140]:
+          - generic [ref=e141]:
+            - generic [ref=e142]: Holat
+            - combobox [ref=e143]:
+              - option "— Tanlang —"
+              - option "New"
+              - option "Download"
+              - option "Generate Face"
+              - option "Ready"
+              - option "Finish" [selected]
+          - generic [ref=e144]:
+            - generic [ref=e145]: Test sessiya
+            - combobox [ref=e146]:
+              - option "— Tanlang —"
+              - option "Oliy va kasbiy taʼlim muassasalariga o‘qishga qabul qilish · 2026-05-11" [selected]
+              - option "IIV ishga qabul qilish testi · 2026-05-08"
+          - generic [ref=e147]:
+            - generic [ref=e148]: Kun
+            - combobox [ref=e1032]:
+              - option "— Kunni tanlang —" [selected]
+              - option "2026-05-11 · 2 ta smena"
+              - option "2026-05-12 · 2 ta smena"
+              - option "2026-05-13 · 2 ta smena"
+        - generic [ref=e162]:
+          - generic [ref=e163]: Ko'rinish
+          - tablist "Statistika ko'rinishi" [ref=e164]:
+            - tab "Smena" [ref=e165] [cursor=pointer]:
+              - img [ref=e166]
+              - generic [ref=e168]: Smena
+            - tab "Kunlik" [active] [selected] [ref=e169] [cursor=pointer]:
+              - img [ref=e170]
+              - generic [ref=e172]: Kunlik
+            - tab "Umumiy" [ref=e173] [cursor=pointer]:
+              - img [ref=e174]
+              - generic [ref=e176]: Umumiy
+        - generic [ref=e157]: Finish
+      - generic [ref=e1033]:
+        - img [ref=e1034]
+        - paragraph [ref=e1036]: Endi kunni tanlang

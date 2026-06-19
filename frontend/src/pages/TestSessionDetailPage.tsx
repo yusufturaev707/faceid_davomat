@@ -32,6 +32,7 @@ import {
   downloadPassportTemplate,
   fileToBase64,
 } from "../api";
+import Md3Select from "../components/Md3Select";
 import PageLoader from "../components/PageLoader";
 import PermissionGate from "../components/PermissionGate";
 import { PERM } from "../permissions";
@@ -1340,17 +1341,14 @@ export default function TestSessionDetailPage() {
               />
             </Field>
             <Field label="Test">
-              <select
-                value={editTestId}
-                onChange={(e) => setEditTestId(Number(e.target.value))}
-                className="input-field"
-              >
-                {tests.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}
-                  </option>
-                ))}
-              </select>
+              <Md3Select
+                value={editTestId ? String(editTestId) : ""}
+                onChange={(v) => setEditTestId(Number(v))}
+                options={tests.map((t) => ({
+                  value: String(t.id),
+                  label: t.name,
+                }))}
+              />
             </Field>
             <div className="grid grid-cols-2 gap-4">
               <Field label="Boshlanish sanasi">
@@ -1434,17 +1432,14 @@ export default function TestSessionDetailPage() {
           <div className="space-y-4">
             {addSmenaError && <ErrorBox message={addSmenaError} />}
             <Field label="Smena">
-              <select
-                value={addSmenaId}
-                onChange={(e) => setAddSmenaId(Number(e.target.value))}
-                className="input-field"
-              >
-                {smenas.map((sm) => (
-                  <option key={sm.id} value={sm.id}>
-                    {sm.name}
-                  </option>
-                ))}
-              </select>
+              <Md3Select
+                value={addSmenaId ? String(addSmenaId) : ""}
+                onChange={(v) => setAddSmenaId(Number(v))}
+                options={smenas.map((sm) => ({
+                  value: String(sm.id),
+                  label: sm.name,
+                }))}
+              />
             </Field>
             <Field label="Kun">
               <input

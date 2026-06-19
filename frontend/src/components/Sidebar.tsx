@@ -2,6 +2,7 @@ import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { usePermission } from "../hooks/usePermission";
 import { PERM } from "../permissions";
+import logoBba from "../assets/logo_bba.png";
 
 /**
  * Material 3 "pill" navigation item.
@@ -17,13 +18,7 @@ const navLinkClass = ({ isActive }: { isActive: boolean }) =>
 
 const iconClass = "w-5 h-5 shrink-0";
 
-function SectionHeader({
-  label,
-  accent,
-}: {
-  label: string;
-  accent: string;
-}) {
+function SectionHeader({ label, accent }: { label: string; accent: string }) {
   return (
     <div className="px-6 pt-5 pb-2 select-none">
       <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gray-500 dark:text-slate-400 flex items-center gap-2">
@@ -64,12 +59,17 @@ export default function Sidebar({ drawerOpen = false, onClose }: SidebarProps) {
     PERM.LOOKUP_READ,
   );
 
+  // Botlar — Davomat va Statistika bot foydalanuvchilari alohida guruhda
+  const showBotlar = hasAnyPermission(
+    PERM.DAVOMAT_BOT_READ,
+    PERM.STATISTIC_BOT_READ,
+  );
+
   const showXizmatlar = hasAnyPermission(
     PERM.PHOTO_VERIFY,
     PERM.PHOTO_VERIFY_TWO_FACE,
     PERM.EMBEDDING_EXTRACT,
     PERM.PASPORT_INFO_READ,
-    PERM.STATISTIC_BOT_READ,
     PERM.QABUL_READ,
   );
 
@@ -103,28 +103,21 @@ export default function Sidebar({ drawerOpen = false, onClose }: SidebarProps) {
     <aside className={drawerClass} aria-label="Sidebar">
       {/* Brand */}
       <div className="px-6 pt-6 pb-4 select-none flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-primary-500 via-primary-600 to-primary-700 flex items-center justify-center shadow-lg shadow-primary-500/25 ring-1 ring-white/10">
-            <svg
-              className="w-5 h-5 text-white"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"
-              />
-            </svg>
-          </div>
+        <div className="flex items-center gap-3 min-w-0">
+          <img
+            src={logoBba}
+            alt="BBA logotipi"
+            className="h-10 w-auto object-contain select-none shrink-0"
+            draggable={false}
+          />
+          {/* Vertikal ajratuvchi — brend va ilova nomini ulaydi (co-brand lockup) */}
+          <div className="w-px h-9 bg-gray-200 dark:bg-slate-700 shrink-0" />
           <div className="min-w-0">
             <h1 className="text-[15px] font-semibold text-gray-900 dark:text-white tracking-tight leading-tight">
               FaceID Admin
             </h1>
-            <p className="text-[11px] text-gray-500 dark:text-slate-400 mt-0.5">
-              Verification System
+            <p className="text-[10.5px] text-gray-500 dark:text-slate-400 leading-snug mt-0.5 truncate">
+              Bilim va malakalarni baholash agentligi
             </p>
           </div>
         </div>
@@ -192,7 +185,7 @@ export default function Sidebar({ drawerOpen = false, onClose }: SidebarProps) {
                     d="M3 3v18h18M7 14l3-3 4 4 5-7"
                   />
                 </svg>
-                Statistika
+                Davomat
               </NavLink>
             )}
 
@@ -301,25 +294,6 @@ export default function Sidebar({ drawerOpen = false, onClose }: SidebarProps) {
                   />
                 </svg>
                 Foydalanuvchilar
-              </NavLink>
-            )}
-
-            {hasPermission(PERM.DAVOMAT_BOT_READ) && (
-              <NavLink to="/davomat-bots" className={navLinkClass}>
-                <svg
-                  className={iconClass}
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"
-                  />
-                </svg>
-                Davomat bot foydalanuvchilari
               </NavLink>
             )}
 
@@ -539,6 +513,51 @@ export default function Sidebar({ drawerOpen = false, onClose }: SidebarProps) {
           </>
         )}
 
+        {/* ====== Bo'lim: Botlar ====== */}
+        {showBotlar && (
+          <>
+            <SectionHeader label="Botlar" accent="bg-rose-500" />
+
+            {hasPermission(PERM.DAVOMAT_BOT_READ) && (
+              <NavLink to="/davomat-bots" className={navLinkClass}>
+                <svg
+                  className={iconClass}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"
+                  />
+                </svg>
+                Davomat bot foydalanuvchilari
+              </NavLink>
+            )}
+
+            {hasPermission(PERM.STATISTIC_BOT_READ) && (
+              <NavLink to="/statistic-bots" className={navLinkClass}>
+                <svg
+                  className={iconClass}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"
+                  />
+                </svg>
+                Statistika bot foydalanuvchilari
+              </NavLink>
+            )}
+          </>
+        )}
+
         {/* ====== Bo'lim 3: Xizmatlar ====== */}
         {showXizmatlar && (
           <>
@@ -617,25 +636,6 @@ export default function Sidebar({ drawerOpen = false, onClose }: SidebarProps) {
                   />
                 </svg>
                 Pasport info
-              </NavLink>
-            )}
-
-            {hasPermission(PERM.STATISTIC_BOT_READ) && (
-              <NavLink to="/statistic-bots" className={navLinkClass}>
-                <svg
-                  className={iconClass}
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"
-                  />
-                </svg>
-                Statistika bot foydalanuvchilari
               </NavLink>
             )}
 

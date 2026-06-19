@@ -1,0 +1,158 @@
+- generic [ref=e27]:
+  - complementary "Sidebar" [ref=e28]:
+    - generic [ref=e30]:
+      - img [ref=e32]
+      - generic [ref=e34]:
+        - heading "FaceID Admin" [level=1] [ref=e35]
+        - paragraph [ref=e36]: Verification System
+    - navigation [ref=e37]:
+      - paragraph [ref=e39]: Test markazi
+      - link "Test Dashboard" [ref=e41] [cursor=pointer]:
+        - /url: /test-dashboard
+        - img [ref=e42]
+        - text: Test Dashboard
+      - link "Statistika" [ref=e44] [cursor=pointer]:
+        - /url: /statistics
+        - img [ref=e45]
+        - text: Statistika
+      - link "Test sessiyalar" [ref=e47] [cursor=pointer]:
+        - /url: /test-sessions
+        - img [ref=e48]
+        - text: Test sessiyalar
+      - link "Talabgorlar" [ref=e50] [cursor=pointer]:
+        - /url: /students
+        - img [ref=e51]
+        - text: Talabgorlar
+      - link "Binoga kirish loglari" [ref=e54] [cursor=pointer]:
+        - /url: /student-logs
+        - img [ref=e55]
+        - text: Binoga kirish loglari
+      - link "Chetlatilganlar" [ref=e57] [cursor=pointer]:
+        - /url: /cheating-logs
+        - img [ref=e58]
+        - text: Chetlatilganlar
+      - paragraph [ref=e61]: Sozlamalar
+      - link "Foydalanuvchilar" [ref=e63] [cursor=pointer]:
+        - /url: /users
+        - img [ref=e64]
+        - text: Foydalanuvchilar
+      - link "Davomat bot foydalanuvchilari" [ref=e66] [cursor=pointer]:
+        - /url: /davomat-bots
+        - img [ref=e67]
+        - text: Davomat bot foydalanuvchilari
+      - link "Rollar" [ref=e69] [cursor=pointer]:
+        - /url: /manage-roles
+        - img [ref=e70]
+        - text: Rollar
+      - link "Huquqlar" [ref=e72] [cursor=pointer]:
+        - /url: /manage-permissions
+        - img [ref=e73]
+        - text: Huquqlar
+      - link "Failed login audit" [ref=e75] [cursor=pointer]:
+        - /url: /failed-logins
+        - img [ref=e76]
+        - text: Failed login audit
+      - link "Hududlar" [ref=e78] [cursor=pointer]:
+        - /url: /manage-regions
+        - img [ref=e79]
+        - text: Hududlar
+      - link "Binolar" [ref=e81] [cursor=pointer]:
+        - /url: /manage-zones
+        - img [ref=e82]
+        - text: Binolar
+      - link "Testlar" [ref=e84] [cursor=pointer]:
+        - /url: /manage-tests
+        - img [ref=e85]
+        - text: Testlar
+      - link "Smenalar" [ref=e87] [cursor=pointer]:
+        - /url: /manage-smenas
+        - img [ref=e88]
+        - text: Smenalar
+      - link "Sessiya holatlari" [ref=e90] [cursor=pointer]:
+        - /url: /manage-session-states
+        - img [ref=e91]
+        - text: Sessiya holatlari
+      - link "Sabablar" [ref=e93] [cursor=pointer]:
+        - /url: /manage-reasons
+        - img [ref=e94]
+        - text: Sabablar
+      - link "Sabab turi" [ref=e96] [cursor=pointer]:
+        - /url: /manage-reason-types
+        - img [ref=e97]
+        - text: Sabab turi
+      - link "Jinslar" [ref=e99] [cursor=pointer]:
+        - /url: /manage-genders
+        - img [ref=e100]
+        - text: Jinslar
+      - link "Qora ro'yxat" [ref=e102] [cursor=pointer]:
+        - /url: /manage-blacklist
+        - img [ref=e103]
+        - text: Qora ro'yxat
+      - paragraph [ref=e106]: Xizmatlar
+      - link "Rasm tekshirish" [ref=e108] [cursor=pointer]:
+        - /url: /verify
+        - img [ref=e109]
+        - text: Rasm tekshirish
+      - link "Yuzlarni solishtirish" [ref=e111] [cursor=pointer]:
+        - /url: /verify-two-face
+        - img [ref=e112]
+        - text: Yuzlarni solishtirish
+      - link "Embedding olish" [ref=e114] [cursor=pointer]:
+        - /url: /embedding
+        - img [ref=e115]
+        - text: Embedding olish
+      - link "Pasport info" [ref=e117] [cursor=pointer]:
+        - /url: /pasport-info
+        - img [ref=e118]
+        - text: Pasport info
+      - link "Statistika bot foydalanuvchilari" [ref=e120] [cursor=pointer]:
+        - /url: /statistic-bots
+        - img [ref=e121]
+        - text: Statistika bot foydalanuvchilari
+      - link "Qabul-2026" [ref=e123] [cursor=pointer]:
+        - /url: /qabul
+        - img [ref=e124]
+        - text: Qabul-2026
+      - paragraph [ref=e127]: Boshqaruv
+      - link "Dashboard" [ref=e129] [cursor=pointer]:
+        - /url: /dashboard
+        - img [ref=e130]
+        - text: Dashboard
+      - link "Ram tekshiruv loglari" [ref=e132] [cursor=pointer]:
+        - /url: /logs
+        - img [ref=e133]
+        - text: Ram tekshiruv loglari
+      - link "Yuz solishtirish loglari" [ref=e135] [cursor=pointer]:
+        - /url: /face-logs
+        - img [ref=e136]
+        - text: Yuz solishtirish loglari
+      - link "API kalitlar" [ref=e138] [cursor=pointer]:
+        - /url: /api-keys
+        - img [ref=e139]
+        - text: API kalitlar
+    - generic [ref=e141]:
+      - button "A Administrator Admin" [ref=e142] [cursor=pointer]:
+        - generic [ref=e144]: A
+        - generic [ref=e145]:
+          - paragraph [ref=e146]: Administrator
+          - paragraph [ref=e147]: Admin
+        - img [ref=e148]
+      - button "Chiqish" [ref=e151] [cursor=pointer]:
+        - img [ref=e152]
+        - text: Chiqish
+  - main [ref=e154]:
+    - generic [ref=e156]:
+      - generic [ref=e157]:
+        - heading "Rasm Tekshiruv" [level=2] [ref=e158]
+        - paragraph [ref=e159]: Rasmni yuklang va sertifikat uchun yaroqliligini tekshiring
+      - generic [ref=e160]:
+        - generic [ref=e161]:
+          - generic [ref=e162]: Rasm tanlash
+          - generic [ref=e164] [cursor=pointer]:
+            - img [ref=e166]
+            - paragraph [ref=e168]: Rasmni tashlang yoki tanlang
+            - paragraph [ref=e169]: JPG, PNG (max 10MB)
+        - generic [ref=e170]:
+          - generic [ref=e171]: Yosh
+          - spinbutton [ref=e172]: "25"
+        - button "Tekshirish" [disabled] [ref=e173]

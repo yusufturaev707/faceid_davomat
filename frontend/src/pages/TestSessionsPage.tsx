@@ -13,6 +13,7 @@ import {
   getTestSessionsApi,
   getTestsLookupApi,
 } from "../api";
+import Md3Select from "../components/Md3Select";
 import PageLoader from "../components/PageLoader";
 import Pagination from "../components/Pagination";
 import PermissionGate from "../components/PermissionGate";
@@ -415,17 +416,14 @@ export default function TestSessionsPage() {
                 <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
                   Test
                 </label>
-                <select
-                  value={formTestId}
-                  onChange={(e) => setFormTestId(Number(e.target.value))}
-                  className="input-field"
-                >
-                  {tests.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name}
-                    </option>
-                  ))}
-                </select>
+                <Md3Select
+                  value={formTestId ? String(formTestId) : ""}
+                  onChange={(v) => setFormTestId(Number(v))}
+                  options={tests.map((t) => ({
+                    value: String(t.id),
+                    label: t.name,
+                  }))}
+                />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -488,19 +486,17 @@ export default function TestSessionsPage() {
                 <div className="space-y-2">
                   {formSmenas.map((row, idx) => (
                     <div key={idx} className="flex items-center gap-2">
-                      <select
-                        value={row.test_smena_id}
-                        onChange={(e) =>
-                          updateSmenaRow(idx, "test_smena_id", e.target.value)
+                      <Md3Select
+                        value={row.test_smena_id ? String(row.test_smena_id) : ""}
+                        onChange={(v) =>
+                          updateSmenaRow(idx, "test_smena_id", v)
                         }
-                        className="input-field !py-1.5 text-sm flex-1"
-                      >
-                        {smenas.map((sm) => (
-                          <option key={sm.id} value={sm.id}>
-                            {sm.name}
-                          </option>
-                        ))}
-                      </select>
+                        options={smenas.map((sm) => ({
+                          value: String(sm.id),
+                          label: sm.name,
+                        }))}
+                        className="flex-1"
+                      />
                       <input
                         type="date"
                         value={row.day}
@@ -575,19 +571,15 @@ function FilterSelect({
       <label className="block text-[10px] uppercase tracking-wider text-gray-500 dark:text-slate-400 mb-1 font-semibold">
         {label}
       </label>
-      <select
+      <Md3Select
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={onChange}
         disabled={disabled}
-        className="input-field !py-1.5 !text-sm w-full disabled:opacity-50"
-      >
-        <option value="">Barchasi</option>
-        {options.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
-        ))}
-      </select>
+        clearable
+        placeholder="Barchasi"
+        options={options}
+        className="w-full"
+      />
     </div>
   );
 }

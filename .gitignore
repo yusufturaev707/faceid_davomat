@@ -18,6 +18,8 @@ davomat_bot/.env.local
 davomat_bot/.env.prod
 davomat_bot/.env.example
 
+.playwright-mcp/
+
 backend/celerybeat-schedule*
 
 frontend/node_modules/

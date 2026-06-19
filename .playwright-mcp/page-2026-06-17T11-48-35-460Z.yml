@@ -1,0 +1,20 @@
+- generic [ref=e4]:
+  - generic [ref=e5]:
+    - img [ref=e7]
+    - heading "FaceID" [level=1] [ref=e9]
+    - paragraph [ref=e10]: Identifikatsiya tizimiga kirish
+  - generic [ref=e11]:
+    - generic [ref=e12]:
+      - generic [ref=e13]: Login
+      - generic [ref=e14]:
+        - generic:
+          - img
+        - textbox "Username" [ref=e15]
+    - generic [ref=e16]:
+      - generic [ref=e17]: Parol
+      - generic [ref=e18]:
+        - generic:
+          - img
+        - textbox "Parolni kiriting" [ref=e19]
+    - button "Kirish" [ref=e20] [cursor=pointer]
+  - paragraph [ref=e21]: FaceID Verification System v2.0

@@ -369,12 +369,18 @@ export interface RegionStatItem {
   zones: ZoneStatItem[];
 }
 
+/** Statistika ko'lami: bitta smena, bitta kun yoki butun sessiya. */
+export type StatsScope = "smena" | "day" | "overall";
+
 export interface DashboardStatsResponse {
   session_id: number;
-  session_smena_id: number;
-  day: string;
-  smena_number: number;
-  smena_name: string;
+  scope: StatsScope;
+  session_smena_id: number | null;
+  day: string | null;
+  smena_number: number | null;
+  smena_name: string | null;
+  /** Nechta smena agregatsiya qilindi (smena=1, day/overall=ko'p). */
+  smena_count: number;
   session_state_key: number;
   is_realtime: boolean;
   summary: StatGroup;

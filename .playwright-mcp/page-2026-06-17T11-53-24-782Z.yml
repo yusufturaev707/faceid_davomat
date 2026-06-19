@@ -1,0 +1,890 @@
+- generic [ref=e5]:
+  - complementary "Sidebar" [ref=e15]:
+    - generic [ref=e17]:
+      - img [ref=e19]
+      - generic [ref=e21]:
+        - heading "FaceID Admin" [level=1] [ref=e22]
+        - paragraph [ref=e23]: Verification System
+    - navigation [ref=e27]:
+      - paragraph [ref=e29]: Test markazi
+      - link "Test Dashboard" [ref=e31] [cursor=pointer]:
+        - /url: /test-dashboard
+        - img [ref=e32]
+        - text: Test Dashboard
+      - link "Statistika" [ref=e34] [cursor=pointer]:
+        - /url: /statistics
+        - img [ref=e35]
+        - text: Statistika
+      - link "Test sessiyalar" [ref=e37] [cursor=pointer]:
+        - /url: /test-sessions
+        - img [ref=e38]
+        - text: Test sessiyalar
+      - link "Talabgorlar" [ref=e40] [cursor=pointer]:
+        - /url: /students
+        - img [ref=e41]
+        - text: Talabgorlar
+      - link "Binoga kirish loglari" [ref=e44] [cursor=pointer]:
+        - /url: /student-logs
+        - img [ref=e45]
+        - text: Binoga kirish loglari
+      - link "Chetlatilganlar" [ref=e47] [cursor=pointer]:
+        - /url: /cheating-logs
+        - img [ref=e48]
+        - text: Chetlatilganlar
+      - paragraph [ref=e51]: Sozlamalar
+      - link "Foydalanuvchilar" [ref=e53] [cursor=pointer]:
+        - /url: /users
+        - img [ref=e54]
+        - text: Foydalanuvchilar
+      - link "Davomat bot foydalanuvchilari" [ref=e56] [cursor=pointer]:
+        - /url: /davomat-bots
+        - img [ref=e57]
+        - text: Davomat bot foydalanuvchilari
+      - link "Rollar" [ref=e59] [cursor=pointer]:
+        - /url: /manage-roles
+        - img [ref=e60]
+        - text: Rollar
+      - link "Huquqlar" [ref=e62] [cursor=pointer]:
+        - /url: /manage-permissions
+        - img [ref=e63]
+        - text: Huquqlar
+      - link "Failed login audit" [ref=e65] [cursor=pointer]:
+        - /url: /failed-logins
+        - img [ref=e66]
+        - text: Failed login audit
+      - link "Hududlar" [ref=e68] [cursor=pointer]:
+        - /url: /manage-regions
+        - img [ref=e69]
+        - text: Hududlar
+      - link "Binolar" [ref=e71] [cursor=pointer]:
+        - /url: /manage-zones
+        - img [ref=e72]
+        - text: Binolar
+      - link "Testlar" [ref=e74] [cursor=pointer]:
+        - /url: /manage-tests
+        - img [ref=e75]
+        - text: Testlar
+      - link "Smenalar" [ref=e77] [cursor=pointer]:
+        - /url: /manage-smenas
+        - img [ref=e78]
+        - text: Smenalar
+      - link "Sessiya holatlari" [ref=e80] [cursor=pointer]:
+        - /url: /manage-session-states
+        - img [ref=e81]
+        - text: Sessiya holatlari
+      - link "Sabablar" [ref=e83] [cursor=pointer]:
+        - /url: /manage-reasons
+        - img [ref=e84]
+        - text: Sabablar
+      - link "Sabab turi" [ref=e86] [cursor=pointer]:
+        - /url: /manage-reason-types
+        - img [ref=e87]
+        - text: Sabab turi
+      - link "Jinslar" [ref=e89] [cursor=pointer]:
+        - /url: /manage-genders
+        - img [ref=e90]
+        - text: Jinslar
+      - link "Qora ro'yxat" [ref=e92] [cursor=pointer]:
+        - /url: /manage-blacklist
+        - img [ref=e93]
+        - text: Qora ro'yxat
+      - paragraph [ref=e96]: Xizmatlar
+      - link "Rasm tekshirish" [ref=e98] [cursor=pointer]:
+        - /url: /verify
+        - img [ref=e99]
+        - text: Rasm tekshirish
+      - link "Yuzlarni solishtirish" [ref=e101] [cursor=pointer]:
+        - /url: /verify-two-face
+        - img [ref=e102]
+        - text: Yuzlarni solishtirish
+      - link "Embedding olish" [ref=e104] [cursor=pointer]:
+        - /url: /embedding
+        - img [ref=e105]
+        - text: Embedding olish
+      - link "Pasport info" [ref=e107] [cursor=pointer]:
+        - /url: /pasport-info
+        - img [ref=e108]
+        - text: Pasport info
+      - link "Statistika bot foydalanuvchilari" [ref=e110] [cursor=pointer]:
+        - /url: /statistic-bots
+        - img [ref=e111]
+        - text: Statistika bot foydalanuvchilari
+      - link "Qabul-2026" [ref=e113] [cursor=pointer]:
+        - /url: /qabul
+        - img [ref=e114]
+        - text: Qabul-2026
+      - paragraph [ref=e117]: Boshqaruv
+      - link "Dashboard" [ref=e119] [cursor=pointer]:
+        - /url: /dashboard
+        - img [ref=e120]
+        - text: Dashboard
+      - link "Ram tekshiruv loglari" [ref=e122] [cursor=pointer]:
+        - /url: /logs
+        - img [ref=e123]
+        - text: Ram tekshiruv loglari
+      - link "Yuz solishtirish loglari" [ref=e125] [cursor=pointer]:
+        - /url: /face-logs
+        - img [ref=e126]
+        - text: Yuz solishtirish loglari
+      - link "API kalitlar" [ref=e128] [cursor=pointer]:
+        - /url: /api-keys
+        - img [ref=e129]
+        - text: API kalitlar
+    - generic [ref=e131]:
+      - button "A Administrator Admin" [ref=e132] [cursor=pointer]:
+        - generic [ref=e134]: A
+        - generic [ref=e135]:
+          - paragraph [ref=e136]: Administrator
+          - paragraph [ref=e137]: Admin
+        - img [ref=e138]
+      - button "Chiqish" [ref=e141] [cursor=pointer]:
+        - img [ref=e142]
+        - text: Chiqish
+  - main [ref=e144]:
+    - generic [ref=e146]:
+      - generic [ref=e148]:
+        - heading "Statistika dashboard" [level=2] [ref=e149]
+        - paragraph [ref=e150]: Test sessiyani tanlang, so'ng smena, kunlik yoki umumiy ko'rinishni tanlang — real vaqt statistikasi (sessiya tayyor holatida) yoki oxirgi holat ko'rsatiladi
+      - generic [ref=e151]:
+        - generic [ref=e152]:
+          - generic [ref=e153]:
+            - generic [ref=e154]: Holat
+            - combobox [ref=e155]:
+              - option "— Tanlang —"
+              - option "New"
+              - option "Download"
+              - option "Generate Face"
+              - option "Ready"
+              - option "Finish" [selected]
+          - generic [ref=e156]:
+            - generic [ref=e157]: Test sessiya
+            - combobox [ref=e158]:
+              - option "— Tanlang —"
+              - option "Oliy va kasbiy taʼlim muassasalariga o‘qishga qabul qilish · 2026-05-11" [selected]
+              - option "IIV ishga qabul qilish testi · 2026-05-08"
+          - generic [ref=e159]:
+            - generic [ref=e160]: Kun va smena
+            - combobox [ref=e161]:
+              - option "— Tanlang —"
+              - option "2026-05-11 · 1-Smena (smena №1)" [selected]
+              - option "2026-05-11 · 2-Smena (smena №2)"
+              - option "2026-05-12 · 1-Smena (smena №1)"
+              - option "2026-05-12 · 2-Smena (smena №2)"
+              - option "2026-05-13 · 1-Smena (smena №1)"
+              - option "2026-05-13 · 2-Smena (smena №2)"
+        - generic [ref=e174]:
+          - generic [ref=e175]: Ko'rinish
+          - tablist "Statistika ko'rinishi" [ref=e176]:
+            - tab "Smena" [selected] [ref=e177] [cursor=pointer]:
+              - img [ref=e178]
+              - generic [ref=e180]: Smena
+            - tab "Kunlik" [ref=e181] [cursor=pointer]:
+              - img [ref=e182]
+              - generic [ref=e184]: Kunlik
+            - tab "Umumiy" [ref=e185] [cursor=pointer]:
+              - img [ref=e186]
+              - generic [ref=e188]: Umumiy
+        - generic [ref=e166]:
+          - generic [ref=e169]: Finish
+          - generic [ref=e198]:
+            - generic [ref=e199]: ·
+            - generic [ref=e200]: "joriy: Yakunlangan"
+      - generic [ref=e201]:
+        - generic [ref=e202]:
+          - img [ref=e203]
+          - text: Smena
+        - generic [ref=e205]: 2026-05-11 · 1-Smena
+        - button "Excel" [ref=e206] [cursor=pointer]:
+          - img [ref=e1044]
+          - generic [ref=e209]: Excel
+      - generic [ref=e210]:
+        - generic [ref=e211]:
+          - generic [ref=e212]:
+            - paragraph [ref=e213]: Umumiy talabgorlar
+            - img [ref=e215]
+          - paragraph [ref=e217]: 9,828
+          - generic [ref=e218]:
+            - generic [ref=e219]:
+              - generic [ref=e220]: E
+              - generic [ref=e221]: 2,606
+            - generic [ref=e222]:
+              - generic [ref=e223]: A
+              - generic [ref=e224]: 7,222
+        - generic [ref=e225]:
+          - generic [ref=e226]:
+            - paragraph [ref=e227]: Kelganlar
+            - img [ref=e229]
+          - paragraph [ref=e231]: "57"
+          - generic [ref=e232]:
+            - generic [ref=e233]:
+              - generic [ref=e234]: E
+              - generic [ref=e235]: "19"
+            - generic [ref=e236]:
+              - generic [ref=e237]: A
+              - generic [ref=e238]: "38"
+        - generic [ref=e239]:
+          - generic [ref=e240]:
+            - paragraph [ref=e241]: Kelmaganlar
+            - img [ref=e243]
+          - paragraph [ref=e245]: 9,771
+          - generic [ref=e246]:
+            - generic [ref=e247]:
+              - generic [ref=e248]: E
+              - generic [ref=e249]: 2,587
+            - generic [ref=e250]:
+              - generic [ref=e251]: A
+              - generic [ref=e252]: 7,184
+        - generic [ref=e253]:
+          - generic [ref=e254]:
+            - paragraph [ref=e255]: Chetlatilgan
+            - img [ref=e257]
+          - paragraph [ref=e259]: "4"
+          - generic [ref=e260]:
+            - generic [ref=e261]:
+              - paragraph [ref=e262]: Kirishda
+              - paragraph [ref=e263]: "4"
+            - generic [ref=e264]:
+              - paragraph [ref=e265]: Testda
+              - paragraph [ref=e266]: "0"
+      - generic [ref=e268]:
+        - heading "Viloyatlar bo'yicha taqsimot" [level=3] [ref=e269]
+        - paragraph [ref=e270]: Region.number bo'yicha tartiblangan · 12 ta viloyat
+      - generic [ref=e271]:
+        - generic [ref=e272]:
+          - 'button "Region 1: Qoraqalpog‘iston Respublikasi — binolar bo''yicha taqsimotni ochish" [ref=e273] [cursor=pointer]':
+            - generic [ref=e274]:
+              - generic [ref=e275]:
+                - generic [ref=e278]: "1"
+                - generic [ref=e279]:
+                  - paragraph [ref=e280]: Qoraqalpog‘iston Respublikasi
+                  - paragraph [ref=e281]: Region №1
+              - generic [ref=e282]:
+                - generic [ref=e283]: 0%
+                - generic [ref=e284]: davomat
+            - progressbar [ref=e285]
+            - generic [ref=e286]:
+              - generic [ref=e287]:
+                - paragraph [ref=e288]: Umumiy
+                - paragraph [ref=e289]: "570"
+                - generic [ref=e290]:
+                  - 'generic "Erkak: 123" [ref=e291]':
+                    - generic [ref=e293]: "123"
+                  - 'generic "Ayol: 447" [ref=e294]':
+                    - generic [ref=e296]: "447"
+              - generic [ref=e297]:
+                - paragraph [ref=e298]: Kelgan
+                - paragraph [ref=e299]: "0"
+                - generic [ref=e300]:
+                  - 'generic "Erkak: 0" [ref=e301]':
+                    - generic [ref=e303]: "0"
+                  - 'generic "Ayol: 0" [ref=e304]':
+                    - generic [ref=e306]: "0"
+              - generic [ref=e307]:
+                - paragraph [ref=e308]: Kelmagan
+                - paragraph [ref=e309]: "570"
+                - generic [ref=e310]:
+                  - 'generic "Erkak: 123" [ref=e311]':
+                    - generic [ref=e313]: "123"
+                  - 'generic "Ayol: 447" [ref=e314]':
+                    - generic [ref=e316]: "447"
+              - generic [ref=e317]:
+                - paragraph [ref=e318]: Chetlat.
+                - paragraph [ref=e319]: "0"
+                - generic [ref=e320]:
+                  - generic "Binoga kirishda" [ref=e321]:
+                    - img [ref=e322]
+                    - generic [ref=e324]: "0"
+                  - generic "Test jarayonida" [ref=e325]:
+                    - img [ref=e326]
+                    - generic [ref=e328]: "0"
+            - generic [ref=e329]:
+              - generic [ref=e330]:
+                - img [ref=e331]
+                - generic [ref=e333]: 1 ta bino
+              - generic [ref=e334]:
+                - text: Batafsil
+                - img [ref=e335]
+          - 'button "Region 2: Andijon viloyati — binolar bo''yicha taqsimotni ochish" [ref=e337] [cursor=pointer]':
+            - generic [ref=e338]:
+              - generic [ref=e339]:
+                - generic [ref=e342]: "2"
+                - generic [ref=e343]:
+                  - paragraph [ref=e344]: Andijon viloyati
+                  - paragraph [ref=e345]: Region №2
+              - generic [ref=e346]:
+                - generic [ref=e347]: 0%
+                - generic [ref=e348]: davomat
+            - progressbar [ref=e349]
+            - generic [ref=e350]:
+              - generic [ref=e351]:
+                - paragraph [ref=e352]: Umumiy
+                - paragraph [ref=e353]: "460"
+                - generic [ref=e354]:
+                  - 'generic "Erkak: 114" [ref=e355]':
+                    - generic [ref=e357]: "114"
+                  - 'generic "Ayol: 346" [ref=e358]':
+                    - generic [ref=e360]: "346"
+              - generic [ref=e361]:
+                - paragraph [ref=e362]: Kelgan
+                - paragraph [ref=e363]: "0"
+                - generic [ref=e364]:
+                  - 'generic "Erkak: 0" [ref=e365]':
+                    - generic [ref=e367]: "0"
+                  - 'generic "Ayol: 0" [ref=e368]':
+                    - generic [ref=e370]: "0"
+              - generic [ref=e371]:
+                - paragraph [ref=e372]: Kelmagan
+                - paragraph [ref=e373]: "460"
+                - generic [ref=e374]:
+                  - 'generic "Erkak: 114" [ref=e375]':
+                    - generic [ref=e377]: "114"
+                  - 'generic "Ayol: 346" [ref=e378]':
+                    - generic [ref=e380]: "346"
+              - generic [ref=e381]:
+                - paragraph [ref=e382]: Chetlat.
+                - paragraph [ref=e383]: "0"
+                - generic [ref=e384]:
+                  - generic "Binoga kirishda" [ref=e385]:
+                    - img [ref=e386]
+                    - generic [ref=e388]: "0"
+                  - generic "Test jarayonida" [ref=e389]:
+                    - img [ref=e390]
+                    - generic [ref=e392]: "0"
+            - generic [ref=e393]:
+              - generic [ref=e394]:
+                - img [ref=e395]
+                - generic [ref=e397]: 1 ta bino
+              - generic [ref=e398]:
+                - text: Batafsil
+                - img [ref=e399]
+          - 'button "Region 3: Namangan viloyati — binolar bo''yicha taqsimotni ochish" [ref=e401] [cursor=pointer]':
+            - generic [ref=e402]:
+              - generic [ref=e403]:
+                - generic [ref=e406]: "3"
+                - generic [ref=e407]:
+                  - paragraph [ref=e408]: Namangan viloyati
+                  - paragraph [ref=e409]: Region №3
+              - generic [ref=e410]:
+                - generic [ref=e411]: 0%
+                - generic [ref=e412]: davomat
+            - progressbar [ref=e413]
+            - generic [ref=e414]:
+              - generic [ref=e415]:
+                - paragraph [ref=e416]: Umumiy
+                - paragraph [ref=e417]: "960"
+                - generic [ref=e418]:
+                  - 'generic "Erkak: 242" [ref=e419]':
+                    - generic [ref=e421]: "242"
+                  - 'generic "Ayol: 718" [ref=e422]':
+                    - generic [ref=e424]: "718"
+              - generic [ref=e425]:
+                - paragraph [ref=e426]: Kelgan
+                - paragraph [ref=e427]: "0"
+                - generic [ref=e428]:
+                  - 'generic "Erkak: 0" [ref=e429]':
+                    - generic [ref=e431]: "0"
+                  - 'generic "Ayol: 0" [ref=e432]':
+                    - generic [ref=e434]: "0"
+              - generic [ref=e435]:
+                - paragraph [ref=e436]: Kelmagan
+                - paragraph [ref=e437]: "960"
+                - generic [ref=e438]:
+                  - 'generic "Erkak: 242" [ref=e439]':
+                    - generic [ref=e441]: "242"
+                  - 'generic "Ayol: 718" [ref=e442]':
+                    - generic [ref=e444]: "718"
+              - generic [ref=e445]:
+                - paragraph [ref=e446]: Chetlat.
+                - paragraph [ref=e447]: "0"
+                - generic [ref=e448]:
+                  - generic "Binoga kirishda" [ref=e449]:
+                    - img [ref=e450]
+                    - generic [ref=e452]: "0"
+                  - generic "Test jarayonida" [ref=e453]:
+                    - img [ref=e454]
+                    - generic [ref=e456]: "0"
+            - generic [ref=e457]:
+              - generic [ref=e458]:
+                - img [ref=e459]
+                - generic [ref=e461]: 1 ta bino
+              - generic [ref=e462]:
+                - text: Batafsil
+                - img [ref=e463]
+          - 'button "Region 4: Farg‘ona viloyati — binolar bo''yicha taqsimotni ochish" [ref=e465] [cursor=pointer]':
+            - generic [ref=e466]:
+              - generic [ref=e467]:
+                - generic [ref=e470]: "4"
+                - generic [ref=e471]:
+                  - paragraph [ref=e472]: Farg‘ona viloyati
+                  - paragraph [ref=e473]: Region №4
+              - generic [ref=e474]:
+                - generic [ref=e475]: 0%
+                - generic [ref=e476]: davomat
+            - progressbar [ref=e477]
+            - generic [ref=e478]:
+              - generic [ref=e479]:
+                - paragraph [ref=e480]: Umumiy
+                - paragraph [ref=e481]: 1,280
+                - generic [ref=e482]:
+                  - 'generic "Erkak: 402" [ref=e483]':
+                    - generic [ref=e485]: "402"
+                  - 'generic "Ayol: 878" [ref=e486]':
+                    - generic [ref=e488]: "878"
+              - generic [ref=e489]:
+                - paragraph [ref=e490]: Kelgan
+                - paragraph [ref=e491]: "0"
+                - generic [ref=e492]:
+                  - 'generic "Erkak: 0" [ref=e493]':
+                    - generic [ref=e495]: "0"
+                  - 'generic "Ayol: 0" [ref=e496]':
+                    - generic [ref=e498]: "0"
+              - generic [ref=e499]:
+                - paragraph [ref=e500]: Kelmagan
+                - paragraph [ref=e501]: 1,280
+                - generic [ref=e502]:
+                  - 'generic "Erkak: 402" [ref=e503]':
+                    - generic [ref=e505]: "402"
+                  - 'generic "Ayol: 878" [ref=e506]':
+                    - generic [ref=e508]: "878"
+              - generic [ref=e509]:
+                - paragraph [ref=e510]: Chetlat.
+                - paragraph [ref=e511]: "0"
+                - generic [ref=e512]:
+                  - generic "Binoga kirishda" [ref=e513]:
+                    - img [ref=e514]
+                    - generic [ref=e516]: "0"
+                  - generic "Test jarayonida" [ref=e517]:
+                    - img [ref=e518]
+                    - generic [ref=e520]: "0"
+            - generic [ref=e521]:
+              - generic [ref=e522]:
+                - img [ref=e523]
+                - generic [ref=e525]: 1 ta bino
+              - generic [ref=e526]:
+                - text: Batafsil
+                - img [ref=e527]
+          - 'button "Region 6: Xorazm viloyati — binolar bo''yicha taqsimotni ochish" [ref=e529] [cursor=pointer]':
+            - generic [ref=e530]:
+              - generic [ref=e531]:
+                - generic [ref=e534]: "6"
+                - generic [ref=e535]:
+                  - paragraph [ref=e536]: Xorazm viloyati
+                  - paragraph [ref=e537]: Region №6
+              - generic [ref=e538]:
+                - generic [ref=e539]: 0%
+                - generic [ref=e540]: davomat
+            - progressbar [ref=e541]
+            - generic [ref=e542]:
+              - generic [ref=e543]:
+                - paragraph [ref=e544]: Umumiy
+                - paragraph [ref=e545]: "750"
+                - generic [ref=e546]:
+                  - 'generic "Erkak: 163" [ref=e547]':
+                    - generic [ref=e549]: "163"
+                  - 'generic "Ayol: 587" [ref=e550]':
+                    - generic [ref=e552]: "587"
+              - generic [ref=e553]:
+                - paragraph [ref=e554]: Kelgan
+                - paragraph [ref=e555]: "0"
+                - generic [ref=e556]:
+                  - 'generic "Erkak: 0" [ref=e557]':
+                    - generic [ref=e559]: "0"
+                  - 'generic "Ayol: 0" [ref=e560]':
+                    - generic [ref=e562]: "0"
+              - generic [ref=e563]:
+                - paragraph [ref=e564]: Kelmagan
+                - paragraph [ref=e565]: "750"
+                - generic [ref=e566]:
+                  - 'generic "Erkak: 163" [ref=e567]':
+                    - generic [ref=e569]: "163"
+                  - 'generic "Ayol: 587" [ref=e570]':
+                    - generic [ref=e572]: "587"
+              - generic [ref=e573]:
+                - paragraph [ref=e574]: Chetlat.
+                - paragraph [ref=e575]: "0"
+                - generic [ref=e576]:
+                  - generic "Binoga kirishda" [ref=e577]:
+                    - img [ref=e578]
+                    - generic [ref=e580]: "0"
+                  - generic "Test jarayonida" [ref=e581]:
+                    - img [ref=e582]
+                    - generic [ref=e584]: "0"
+            - generic [ref=e585]:
+              - generic [ref=e586]:
+                - img [ref=e587]
+                - generic [ref=e589]: 1 ta bino
+              - generic [ref=e590]:
+                - text: Batafsil
+                - img [ref=e591]
+          - 'button "Region 7: Surxondaryo viloyati — binolar bo''yicha taqsimotni ochish" [ref=e593] [cursor=pointer]':
+            - generic [ref=e594]:
+              - generic [ref=e595]:
+                - generic [ref=e598]: "7"
+                - generic [ref=e599]:
+                  - paragraph [ref=e600]: Surxondaryo viloyati
+                  - paragraph [ref=e601]: Region №7
+              - generic [ref=e602]:
+                - generic [ref=e603]: 0%
+                - generic [ref=e604]: davomat
+            - progressbar [ref=e605]
+            - generic [ref=e606]:
+              - generic [ref=e607]:
+                - paragraph [ref=e608]: Umumiy
+                - paragraph [ref=e609]: "810"
+                - generic [ref=e610]:
+                  - 'generic "Erkak: 208" [ref=e611]':
+                    - generic [ref=e613]: "208"
+                  - 'generic "Ayol: 602" [ref=e614]':
+                    - generic [ref=e616]: "602"
+              - generic [ref=e617]:
+                - paragraph [ref=e618]: Kelgan
+                - paragraph [ref=e619]: "0"
+                - generic [ref=e620]:
+                  - 'generic "Erkak: 0" [ref=e621]':
+                    - generic [ref=e623]: "0"
+                  - 'generic "Ayol: 0" [ref=e624]':
+                    - generic [ref=e626]: "0"
+              - generic [ref=e627]:
+                - paragraph [ref=e628]: Kelmagan
+                - paragraph [ref=e629]: "810"
+                - generic [ref=e630]:
+                  - 'generic "Erkak: 208" [ref=e631]':
+                    - generic [ref=e633]: "208"
+                  - 'generic "Ayol: 602" [ref=e634]':
+                    - generic [ref=e636]: "602"
+              - generic [ref=e637]:
+                - paragraph [ref=e638]: Chetlat.
+                - paragraph [ref=e639]: "0"
+                - generic [ref=e640]:
+                  - generic "Binoga kirishda" [ref=e641]:
+                    - img [ref=e642]
+                    - generic [ref=e644]: "0"
+                  - generic "Test jarayonida" [ref=e645]:
+                    - img [ref=e646]
+                    - generic [ref=e648]: "0"
+            - generic [ref=e649]:
+              - generic [ref=e650]:
+                - img [ref=e651]
+                - generic [ref=e653]: 1 ta bino
+              - generic [ref=e654]:
+                - text: Batafsil
+                - img [ref=e655]
+        - generic [ref=e657]:
+          - 'button "Region 8: Qashqadaryo viloyati — binolar bo''yicha taqsimotni ochish" [ref=e658] [cursor=pointer]':
+            - generic [ref=e659]:
+              - generic [ref=e660]:
+                - generic [ref=e663]: "8"
+                - generic [ref=e664]:
+                  - paragraph [ref=e665]: Qashqadaryo viloyati
+                  - paragraph [ref=e666]: Region №8
+              - generic [ref=e667]:
+                - generic [ref=e668]: 0%
+                - generic [ref=e669]: davomat
+            - progressbar [ref=e670]
+            - generic [ref=e671]:
+              - generic [ref=e672]:
+                - paragraph [ref=e673]: Umumiy
+                - paragraph [ref=e674]: 1,292
+                - generic [ref=e675]:
+                  - 'generic "Erkak: 368" [ref=e676]':
+                    - generic [ref=e678]: "368"
+                  - 'generic "Ayol: 924" [ref=e679]':
+                    - generic [ref=e681]: "924"
+              - generic [ref=e682]:
+                - paragraph [ref=e683]: Kelgan
+                - paragraph [ref=e684]: "0"
+                - generic [ref=e685]:
+                  - 'generic "Erkak: 0" [ref=e686]':
+                    - generic [ref=e688]: "0"
+                  - 'generic "Ayol: 0" [ref=e689]':
+                    - generic [ref=e691]: "0"
+              - generic [ref=e692]:
+                - paragraph [ref=e693]: Kelmagan
+                - paragraph [ref=e694]: 1,292
+                - generic [ref=e695]:
+                  - 'generic "Erkak: 368" [ref=e696]':
+                    - generic [ref=e698]: "368"
+                  - 'generic "Ayol: 924" [ref=e699]':
+                    - generic [ref=e701]: "924"
+              - generic [ref=e702]:
+                - paragraph [ref=e703]: Chetlat.
+                - paragraph [ref=e704]: "0"
+                - generic [ref=e705]:
+                  - generic "Binoga kirishda" [ref=e706]:
+                    - img [ref=e707]
+                    - generic [ref=e709]: "0"
+                  - generic "Test jarayonida" [ref=e710]:
+                    - img [ref=e711]
+                    - generic [ref=e713]: "0"
+            - generic [ref=e714]:
+              - generic [ref=e715]:
+                - img [ref=e716]
+                - generic [ref=e718]: 1 ta bino
+              - generic [ref=e719]:
+                - text: Batafsil
+                - img [ref=e720]
+          - 'button "Region 9: Jizzax viloyati — binolar bo''yicha taqsimotni ochish" [ref=e722] [cursor=pointer]':
+            - generic [ref=e723]:
+              - generic [ref=e724]:
+                - generic [ref=e727]: "9"
+                - generic [ref=e728]:
+                  - paragraph [ref=e729]: Jizzax viloyati
+                  - paragraph [ref=e730]: Region №9
+              - generic [ref=e731]:
+                - generic [ref=e732]: 0%
+                - generic [ref=e733]: davomat
+            - progressbar [ref=e734]
+            - generic [ref=e735]:
+              - generic [ref=e736]:
+                - paragraph [ref=e737]: Umumiy
+                - paragraph [ref=e738]: "420"
+                - generic [ref=e739]:
+                  - 'generic "Erkak: 106" [ref=e740]':
+                    - generic [ref=e742]: "106"
+                  - 'generic "Ayol: 314" [ref=e743]':
+                    - generic [ref=e745]: "314"
+              - generic [ref=e746]:
+                - paragraph [ref=e747]: Kelgan
+                - paragraph [ref=e748]: "0"
+                - generic [ref=e749]:
+                  - 'generic "Erkak: 0" [ref=e750]':
+                    - generic [ref=e752]: "0"
+                  - 'generic "Ayol: 0" [ref=e753]':
+                    - generic [ref=e755]: "0"
+              - generic [ref=e756]:
+                - paragraph [ref=e757]: Kelmagan
+                - paragraph [ref=e758]: "420"
+                - generic [ref=e759]:
+                  - 'generic "Erkak: 106" [ref=e760]':
+                    - generic [ref=e762]: "106"
+                  - 'generic "Ayol: 314" [ref=e763]':
+                    - generic [ref=e765]: "314"
+              - generic [ref=e766]:
+                - paragraph [ref=e767]: Chetlat.
+                - paragraph [ref=e768]: "0"
+                - generic [ref=e769]:
+                  - generic "Binoga kirishda" [ref=e770]:
+                    - img [ref=e771]
+                    - generic [ref=e773]: "0"
+                  - generic "Test jarayonida" [ref=e774]:
+                    - img [ref=e775]
+                    - generic [ref=e777]: "0"
+            - generic [ref=e778]:
+              - generic [ref=e779]:
+                - img [ref=e780]
+                - generic [ref=e782]: 1 ta bino
+              - generic [ref=e783]:
+                - text: Batafsil
+                - img [ref=e784]
+          - 'button "Region 10: Navoiy viloyati — binolar bo''yicha taqsimotni ochish" [ref=e786] [cursor=pointer]':
+            - generic [ref=e787]:
+              - generic [ref=e788]:
+                - generic [ref=e791]: "10"
+                - generic [ref=e792]:
+                  - paragraph [ref=e793]: Navoiy viloyati
+                  - paragraph [ref=e794]: Region №10
+              - generic [ref=e795]:
+                - generic [ref=e796]: 0%
+                - generic [ref=e797]: davomat
+            - progressbar [ref=e798]
+            - generic [ref=e799]:
+              - generic [ref=e800]:
+                - paragraph [ref=e801]: Umumiy
+                - paragraph [ref=e802]: "930"
+                - generic [ref=e803]:
+                  - 'generic "Erkak: 320" [ref=e804]':
+                    - generic [ref=e806]: "320"
+                  - 'generic "Ayol: 610" [ref=e807]':
+                    - generic [ref=e809]: "610"
+              - generic [ref=e810]:
+                - paragraph [ref=e811]: Kelgan
+                - paragraph [ref=e812]: "0"
+                - generic [ref=e813]:
+                  - 'generic "Erkak: 0" [ref=e814]':
+                    - generic [ref=e816]: "0"
+                  - 'generic "Ayol: 0" [ref=e817]':
+                    - generic [ref=e819]: "0"
+              - generic [ref=e820]:
+                - paragraph [ref=e821]: Kelmagan
+                - paragraph [ref=e822]: "930"
+                - generic [ref=e823]:
+                  - 'generic "Erkak: 320" [ref=e824]':
+                    - generic [ref=e826]: "320"
+                  - 'generic "Ayol: 610" [ref=e827]':
+                    - generic [ref=e829]: "610"
+              - generic [ref=e830]:
+                - paragraph [ref=e831]: Chetlat.
+                - paragraph [ref=e832]: "0"
+                - generic [ref=e833]:
+                  - generic "Binoga kirishda" [ref=e834]:
+                    - img [ref=e835]
+                    - generic [ref=e837]: "0"
+                  - generic "Test jarayonida" [ref=e838]:
+                    - img [ref=e839]
+                    - generic [ref=e841]: "0"
+            - generic [ref=e842]:
+              - generic [ref=e843]:
+                - img [ref=e844]
+                - generic [ref=e846]: 1 ta bino
+              - generic [ref=e847]:
+                - text: Batafsil
+                - img [ref=e848]
+          - 'button "Region 11: Samarqand viloyati — binolar bo''yicha taqsimotni ochish" [ref=e850] [cursor=pointer]':
+            - generic [ref=e851]:
+              - generic [ref=e852]:
+                - generic [ref=e855]: "11"
+                - generic [ref=e856]:
+                  - paragraph [ref=e857]: Samarqand viloyati
+                  - paragraph [ref=e858]: Region №11
+              - generic [ref=e859]:
+                - generic [ref=e860]: 0%
+                - generic [ref=e861]: davomat
+            - progressbar [ref=e862]
+            - generic [ref=e863]:
+              - generic [ref=e864]:
+                - paragraph [ref=e865]: Umumiy
+                - paragraph [ref=e866]: "990"
+                - generic [ref=e867]:
+                  - 'generic "Erkak: 221" [ref=e868]':
+                    - generic [ref=e870]: "221"
+                  - 'generic "Ayol: 769" [ref=e871]':
+                    - generic [ref=e873]: "769"
+              - generic [ref=e874]:
+                - paragraph [ref=e875]: Kelgan
+                - paragraph [ref=e876]: "0"
+                - generic [ref=e877]:
+                  - 'generic "Erkak: 0" [ref=e878]':
+                    - generic [ref=e880]: "0"
+                  - 'generic "Ayol: 0" [ref=e881]':
+                    - generic [ref=e883]: "0"
+              - generic [ref=e884]:
+                - paragraph [ref=e885]: Kelmagan
+                - paragraph [ref=e886]: "990"
+                - generic [ref=e887]:
+                  - 'generic "Erkak: 221" [ref=e888]':
+                    - generic [ref=e890]: "221"
+                  - 'generic "Ayol: 769" [ref=e891]':
+                    - generic [ref=e893]: "769"
+              - generic [ref=e894]:
+                - paragraph [ref=e895]: Chetlat.
+                - paragraph [ref=e896]: "0"
+                - generic [ref=e897]:
+                  - generic "Binoga kirishda" [ref=e898]:
+                    - img [ref=e899]
+                    - generic [ref=e901]: "0"
+                  - generic "Test jarayonida" [ref=e902]:
+                    - img [ref=e903]
+                    - generic [ref=e905]: "0"
+            - generic [ref=e906]:
+              - generic [ref=e907]:
+                - img [ref=e908]
+                - generic [ref=e910]: 1 ta bino
+              - generic [ref=e911]:
+                - text: Batafsil
+                - img [ref=e912]
+          - 'button "Region 12: Sirdaryo viloyati — binolar bo''yicha taqsimotni ochish" [ref=e914] [cursor=pointer]':
+            - generic [ref=e915]:
+              - generic [ref=e916]:
+                - generic [ref=e919]: "12"
+                - generic [ref=e920]:
+                  - paragraph [ref=e921]: Sirdaryo viloyati
+                  - paragraph [ref=e922]: Region №12
+              - generic [ref=e923]:
+                - generic [ref=e924]: 2.2%
+                - generic [ref=e925]: davomat
+            - progressbar [ref=e926]
+            - generic [ref=e928]:
+              - generic [ref=e929]:
+                - paragraph [ref=e930]: Umumiy
+                - paragraph [ref=e931]: "450"
+                - generic [ref=e932]:
+                  - 'generic "Erkak: 118" [ref=e933]':
+                    - generic [ref=e935]: "118"
+                  - 'generic "Ayol: 332" [ref=e936]':
+                    - generic [ref=e938]: "332"
+              - generic [ref=e939]:
+                - paragraph [ref=e940]: Kelgan
+                - paragraph [ref=e941]: "10"
+                - generic [ref=e942]:
+                  - 'generic "Erkak: 3" [ref=e943]':
+                    - generic [ref=e945]: "3"
+                  - 'generic "Ayol: 7" [ref=e946]':
+                    - generic [ref=e948]: "7"
+              - generic [ref=e949]:
+                - paragraph [ref=e950]: Kelmagan
+                - paragraph [ref=e951]: "440"
+                - generic [ref=e952]:
+                  - 'generic "Erkak: 115" [ref=e953]':
+                    - generic [ref=e955]: "115"
+                  - 'generic "Ayol: 325" [ref=e956]':
+                    - generic [ref=e958]: "325"
+              - generic [ref=e959]:
+                - paragraph [ref=e960]: Chetlat.
+                - paragraph [ref=e961]: "0"
+                - generic [ref=e962]:
+                  - generic "Binoga kirishda" [ref=e963]:
+                    - img [ref=e964]
+                    - generic [ref=e966]: "0"
+                  - generic "Test jarayonida" [ref=e967]:
+                    - img [ref=e968]
+                    - generic [ref=e970]: "0"
+            - generic [ref=e971]:
+              - generic [ref=e972]:
+                - img [ref=e973]
+                - generic [ref=e975]: 1 ta bino
+              - generic [ref=e976]:
+                - text: Batafsil
+                - img [ref=e977]
+          - 'button "Region 14: Toshkent shahri — binolar bo''yicha taqsimotni ochish" [ref=e979] [cursor=pointer]':
+            - generic [ref=e980]:
+              - generic [ref=e981]:
+                - generic [ref=e984]: "14"
+                - generic [ref=e985]:
+                  - paragraph [ref=e986]: Toshkent shahri
+                  - paragraph [ref=e987]: Region №14
+              - generic [ref=e988]:
+                - generic [ref=e989]: 5.1%
+                - generic [ref=e990]: davomat
+            - progressbar [ref=e991]
+            - generic [ref=e993]:
+              - generic [ref=e994]:
+                - paragraph [ref=e995]: Umumiy
+                - paragraph [ref=e996]: "916"
+                - generic [ref=e997]:
+                  - 'generic "Erkak: 221" [ref=e998]':
+                    - generic [ref=e1000]: "221"
+                  - 'generic "Ayol: 695" [ref=e1001]':
+                    - generic [ref=e1003]: "695"
+              - generic [ref=e1004]:
+                - paragraph [ref=e1005]: Kelgan
+                - paragraph [ref=e1006]: "47"
+                - generic [ref=e1007]:
+                  - 'generic "Erkak: 16" [ref=e1008]':
+                    - generic [ref=e1010]: "16"
+                  - 'generic "Ayol: 31" [ref=e1011]':
+                    - generic [ref=e1013]: "31"
+              - generic [ref=e1014]:
+                - paragraph [ref=e1015]: Kelmagan
+                - paragraph [ref=e1016]: "869"
+                - generic [ref=e1017]:
+                  - 'generic "Erkak: 205" [ref=e1018]':
+                    - generic [ref=e1020]: "205"
+                  - 'generic "Ayol: 664" [ref=e1021]':
+                    - generic [ref=e1023]: "664"
+              - generic [ref=e1024]:
+                - paragraph [ref=e1025]: Chetlat.
+                - paragraph [ref=e1026]: "4"
+                - generic [ref=e1027]:
+                  - generic "Binoga kirishda" [ref=e1028]:
+                    - img [ref=e1029]
+                    - generic [ref=e1031]: "4"
+                  - generic "Test jarayonida" [ref=e1032]:
+                    - img [ref=e1033]
+                    - generic [ref=e1035]: "0"
+            - generic [ref=e1036]:
+              - generic [ref=e1037]:
+                - img [ref=e1038]
+                - generic [ref=e1040]: 1 ta bino
+              - generic [ref=e1041]:
+                - text: Batafsil
+                - img [ref=e1042]

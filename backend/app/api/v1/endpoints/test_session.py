@@ -3,6 +3,7 @@
 import base64
 import logging
 import math
+from datetime import date
 from io import BytesIO
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
@@ -67,6 +68,7 @@ from app.services.session_dashboard_stats import (
     DashboardStatsError,
     get_dashboard_stats,
 )
+from app.services.session_stats_excel import build_session_stats_excel
 from app.services.student_loader import get_student_load_progress
 from app.tasks.excel_loader_task import excel_load_and_enrich_task
 from app.tasks.student_loader_task import load_students_task
@@ -852,13 +854,26 @@ def student_load_progress(
 )
 def session_dashboard_stats(
     session_id: int,
-    session_smena_id: int = Query(
-        ..., description="TestSessionSmena.id — kun va smena tanlovi shu yozuv orqali"
+    scope: str = Query(
+        "smena",
+        description="Statistika ko'lami: smena | day | overall",
+    ),
+    session_smena_id: int | None = Query(
+        None,
+        description="TestSessionSmena.id — scope=smena uchun majburiy (kun+smena)",
+    ),
+    day: date | None = Query(
+        None,
+        description="Kun (YYYY-MM-DD) — scope=day uchun majburiy",
     ),
     db: Session = Depends(get_db),
     _: User = Depends(PermissionChecker(P.STATISTICS_READ.code)),
 ):
-    """Tanlangan sessiya/smena+kun uchun dashboard statistikasini qaytarish.
+    """Tanlangan ko'lam (scope) uchun dashboard statistikasini qaytarish.
+
+    - **scope=smena** — bitta kun+smena (`session_smena_id` majburiy).
+    - **scope=day** — bitta kunning barcha smenalari (`day` majburiy).
+    - **scope=overall** — sessiyaning barcha kun va smenalari.
 
     - **Real-time**: javobda `is_realtime=True` qaytsa (sessiya state.key=4),
       frontend bu endpoint'ni har necha sekundda qayta chaqirib turishi
@@ -872,10 +887,114 @@ def session_dashboard_stats(
     """
     try:
         return get_dashboard_stats(
-            db, session_id=session_id, session_smena_id=session_smena_id
+            db,
+            session_id=session_id,
+            scope=scope,
+            session_smena_id=session_smena_id,
+            day=day,
         )
     except DashboardStatsError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+def _safe_filename(name: str) -> str:
+    """Fayl nomi uchun xavfsiz ASCII variant (Content-Disposition fallback)."""
+    cleaned = "".join(
+        ch if ch.isalnum() or ch in ("-", "_", " ") else "_" for ch in name
+    ).strip().replace(" ", "_")
+    return cleaned or "statistika"
+
+
+@router.get(
+    "/{session_id}/dashboard-stats/export",
+    summary="Sessiya statistikasini Excel (.xlsx) hisobotiga eksport qilish",
+)
+def export_session_dashboard_stats(
+    session_id: int,
+    scope: str = Query(
+        "smena",
+        description="Statistika ko'lami: smena | day | overall",
+    ),
+    session_smena_id: int | None = Query(
+        None,
+        description="TestSessionSmena.id — scope=smena uchun majburiy (kun+smena)",
+    ),
+    day: date | None = Query(
+        None,
+        description="Kun (YYYY-MM-DD) — scope=day uchun majburiy",
+    ),
+    alphabet: str = Query(
+        "cyrillic",
+        description="Hisobot alifbosi: cyrillic (krill) | latin (o'zbek lotin)",
+    ),
+    db: Session = Depends(get_db),
+    _: User = Depends(PermissionChecker(P.STATISTICS_READ.code)),
+):
+    """Tanlangan ko'lam (scope) statistikasini rasmiy "МАЪЛУМОТ" ko'rinishidagi
+    Excel (.xlsx) hisobotiga yozib qaytaradi.
+
+    Parametrlar `/dashboard-stats` bilan bir xil. Hisobot tepasida sessiya
+    nomi, "МАЪЛУМОТ" sarlavhasi va o'ng burchakda sana/vaqt/smena yoziladi;
+    so'ng har bir viloyat bo'yicha statistika jadvali va "Жами" yig'indisi.
+    """
+    session = db.get(TestSession, session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Sessiya topilmadi")
+
+    try:
+        stats = get_dashboard_stats(
+            db,
+            session_id=session_id,
+            scope=scope,
+            session_smena_id=session_smena_id,
+            day=day,
+        )
+    except DashboardStatsError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    # Sarlavha: test sessiya nomi + test nomi (servis krillga o'tkazadi)
+    session_name = session.name or ""
+    test_name = session.test.name if session.test else ""
+    title = " ".join(p for p in (session_name, test_name) if p) or f"Sessiya #{session_id}"
+
+    # Sessiya kun oralig'i (umumiy/kunlik sarlavhalar uchun)
+    session_days = db.execute(
+        sa_select(TestSessionSmena.day).where(
+            TestSessionSmena.test_session_id == session_id
+        )
+    ).scalars().all()
+    day_from = min(session_days) if session_days else None
+    day_to = max(session_days) if session_days else None
+
+    latin = alphabet.strip().lower() == "latin"
+    content = build_session_stats_excel(
+        stats, title=title, day_from=day_from, day_to=day_to, latin=latin
+    )
+
+    # Fayl nomi: sessiya + kun (+ smena) — scope'ga qarab
+    base = _safe_filename(session_name or f"sessiya_{session_id}")
+    parts = [base]
+    if stats.day is not None:
+        parts.append(stats.day.isoformat())
+    if stats.scope == "smena" and stats.smena_number is not None:
+        parts.append(f"{stats.smena_number}-smena")
+    elif stats.scope == "day":
+        parts.append("kunlik")
+    elif stats.scope == "overall":
+        parts.append("umumiy")
+    parts.append("lotin" if latin else "krill")
+    filename = "_".join(parts) + ".xlsx"
+    headers = {
+        "Content-Disposition": f'attachment; filename="{filename}"',
+        "Cache-Control": "no-store",
+    }
+    return StreamingResponse(
+        BytesIO(content),
+        media_type=(
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        ),
+        headers=headers,
+    )
 
 
 @router.get("/{session_id}/student-stats")
