@@ -674,8 +674,8 @@ export default function StatisticsPage() {
             </div>
           </div>
 
-          {/* 4 ta asosiy card — kompakt */}
-          <div className="grid grid-cols-2 xl:grid-cols-4 gap-1.5 sm:gap-2 mb-2.5 sm:mb-3">
+          {/* 4 ta asosiy card — kengroq MD3 surface */}
+          <div className="grid grid-cols-2 xl:grid-cols-4 gap-2.5 sm:gap-3.5 mb-3 sm:mb-4">
             <SummaryCard
               title="Umumiy talabgorlar"
               variant="primary"
@@ -696,6 +696,9 @@ export default function StatisticsPage() {
             />
             <CheatingCard cheating={stats.summary.cheating} />
           </div>
+
+          {/* Umumiy ko'rsatkichlar — davomat darajasi + tahliliy ma'lumotlar */}
+          <OverviewPanel stats={stats} />
 
           {/* Region cardlari */}
           <div className="flex items-center justify-between gap-3 mb-2 sm:mb-3">
@@ -1022,7 +1025,7 @@ type Variant = "primary" | "success" | "warning" | "danger";
 
 const VARIANT_STYLES: Record<
   Variant,
-  { bg: string; ring: string; valueColor: string; iconBg: string }
+  { bg: string; ring: string; valueColor: string; iconBg: string; blob: string }
 > = {
   primary: {
     bg: "bg-gradient-to-br from-primary-50 to-white dark:from-primary-900/20 dark:to-slate-900",
@@ -1030,6 +1033,7 @@ const VARIANT_STYLES: Record<
     valueColor: "text-primary-800 dark:text-primary-200",
     iconBg:
       "bg-primary-100 text-primary-700 dark:bg-primary-900/40 dark:text-primary-300",
+    blob: "bg-primary-400",
   },
   success: {
     bg: "bg-gradient-to-br from-emerald-50 to-white dark:from-emerald-900/20 dark:to-slate-900",
@@ -1037,6 +1041,7 @@ const VARIANT_STYLES: Record<
     valueColor: "text-emerald-800 dark:text-emerald-200",
     iconBg:
       "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300",
+    blob: "bg-emerald-400",
   },
   warning: {
     bg: "bg-gradient-to-br from-amber-50 to-white dark:from-amber-900/20 dark:to-slate-900",
@@ -1044,12 +1049,14 @@ const VARIANT_STYLES: Record<
     valueColor: "text-amber-800 dark:text-amber-200",
     iconBg:
       "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
+    blob: "bg-amber-400",
   },
   danger: {
     bg: "bg-gradient-to-br from-red-50 to-white dark:from-red-900/20 dark:to-slate-900",
     ring: "ring-red-200/60 dark:ring-red-800/40",
     valueColor: "text-red-800 dark:text-red-200",
     iconBg: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300",
+    blob: "bg-red-400",
   },
 };
 
@@ -1067,24 +1074,32 @@ function SummaryCard({
   const s = VARIANT_STYLES[variant];
   return (
     <div
-      className={`relative overflow-hidden rounded-xl ring-1 ${s.bg} ${s.ring} p-2 sm:p-2.5 shadow-sm hover:shadow-md transition-all duration-200`}
+      className={`group relative overflow-hidden rounded-2xl ring-1 ${s.bg} ${s.ring} p-3.5 sm:p-4 shadow-sm hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300`}
     >
-      <div className="flex items-center gap-2">
+      {/* Dekorativ yumshoq rangli nur — MD3 chuqurlik hissi */}
+      <div
+        className={`pointer-events-none absolute -right-6 -top-9 w-28 h-28 rounded-full blur-2xl opacity-20 dark:opacity-[0.18] ${s.blob}`}
+        aria-hidden
+      />
+      {/* Header: icon chip + sarlavha */}
+      <div className="relative flex items-center gap-2.5 mb-3 sm:mb-3.5">
         <div
-          className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${s.iconBg}`}
+          className={`w-10 h-10 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center shrink-0 shadow-sm ring-1 ring-white/40 dark:ring-white/5 ${s.iconBg}`}
         >
           {icon}
         </div>
-        <p className="min-w-0 flex-1 truncate text-[10.5px] sm:text-[11px] font-semibold text-gray-600 dark:text-slate-400 leading-tight">
+        <p className="min-w-0 flex-1 text-[12px] sm:text-[13px] font-semibold text-gray-600 dark:text-slate-300 leading-snug">
           {title}
         </p>
-        <p
-          className={`text-lg sm:text-2xl font-bold tabular-nums leading-none ${s.valueColor}`}
-        >
-          {breakdown.total.toLocaleString("uz-UZ")}
-        </p>
       </div>
-      <div className="mt-1.5 flex flex-wrap items-center gap-1 text-[10.5px] sm:text-[11px]">
+      {/* Asosiy son */}
+      <p
+        className={`relative text-3xl sm:text-[2.5rem] font-extrabold tabular-nums leading-none tracking-tight ${s.valueColor}`}
+      >
+        {breakdown.total.toLocaleString("uz-UZ")}
+      </p>
+      {/* Gender breakdown */}
+      <div className="relative mt-3 sm:mt-3.5 flex flex-wrap items-center gap-1.5 text-[11px] sm:text-[11.5px]">
         <GenderChip gender="male" count={breakdown.male} />
         <GenderChip gender="female" count={breakdown.female} />
         {breakdown.unknown > 0 && (
@@ -1099,42 +1114,355 @@ function CheatingCard({ cheating }: { cheating: StatGroup["cheating"] }) {
   const s = VARIANT_STYLES.danger;
   return (
     <div
-      className={`relative overflow-hidden rounded-xl ring-1 ${s.bg} ${s.ring} p-2 sm:p-2.5 shadow-sm hover:shadow-md transition-all duration-200`}
+      className={`group relative overflow-hidden rounded-2xl ring-1 ${s.bg} ${s.ring} p-3.5 sm:p-4 shadow-sm hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300`}
     >
-      <div className="flex items-center gap-2">
+      {/* Dekorativ yumshoq rangli nur */}
+      <div
+        className={`pointer-events-none absolute -right-6 -top-9 w-28 h-28 rounded-full blur-2xl opacity-20 dark:opacity-[0.18] ${s.blob}`}
+        aria-hidden
+      />
+      {/* Header: icon chip + sarlavha */}
+      <div className="relative flex items-center gap-2.5 mb-3 sm:mb-3.5">
         <div
-          className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${s.iconBg}`}
+          className={`w-10 h-10 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center shrink-0 shadow-sm ring-1 ring-white/40 dark:ring-white/5 ${s.iconBg}`}
         >
           <ShieldIcon />
         </div>
-        <p className="min-w-0 flex-1 truncate text-[10.5px] sm:text-[11px] font-semibold text-gray-600 dark:text-slate-400 leading-tight">
+        <p className="min-w-0 flex-1 text-[12px] sm:text-[13px] font-semibold text-gray-600 dark:text-slate-300 leading-snug">
           Chetlatilgan
         </p>
-        <p
-          className={`text-lg sm:text-2xl font-bold tabular-nums leading-none ${s.valueColor}`}
-        >
-          {cheating.total.toLocaleString("uz-UZ")}
-        </p>
       </div>
-      <div className="mt-1.5 flex flex-wrap items-center gap-1 text-[10.5px] sm:text-[11px]">
+      {/* Asosiy son */}
+      <p
+        className={`relative text-3xl sm:text-[2.5rem] font-extrabold tabular-nums leading-none tracking-tight ${s.valueColor}`}
+      >
+        {cheating.total.toLocaleString("uz-UZ")}
+      </p>
+      {/* Joy bo'yicha breakdown */}
+      <div className="relative mt-3 sm:mt-3.5 flex flex-wrap items-center gap-1.5 text-[11px] sm:text-[11.5px]">
         <span
           title="Binoga kirishda"
-          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md font-medium leading-none bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300"
+          className="inline-flex items-center gap-1 px-2 py-1 rounded-lg font-medium leading-none bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300"
         >
-          <KeyIcon className="w-3 h-3 shrink-0 opacity-90" />
+          <KeyIcon className="w-3.5 h-3.5 shrink-0 opacity-90" />
           <span className="tabular-nums font-bold">
             {cheating.at_entry.toLocaleString("uz-UZ")}
           </span>
         </span>
         <span
           title="Test jarayonida"
-          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md font-medium leading-none bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300"
+          className="inline-flex items-center gap-1 px-2 py-1 rounded-lg font-medium leading-none bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300"
         >
-          <BookIcon className="w-3 h-3 shrink-0 opacity-90" />
+          <BookIcon className="w-3.5 h-3.5 shrink-0 opacity-90" />
           <span className="tabular-nums font-bold">
             {cheating.during_test.toLocaleString("uz-UZ")}
           </span>
         </span>
+      </div>
+    </div>
+  );
+}
+
+/* ============== Umumiy ko'rsatkichlar paneli ============== */
+
+/** Davomat foiziga qarab semantik rang (region kartlari bilan bir xil chegara). */
+function attendanceTone(pct: number): {
+  ring: string;
+  text: string;
+  hex: string;
+} {
+  if (pct >= 75)
+    return {
+      ring: "from-emerald-400 to-emerald-600",
+      text: "text-emerald-700 dark:text-emerald-300",
+      hex: "#10b981",
+    };
+  if (pct >= 50)
+    return {
+      ring: "from-amber-400 to-amber-500",
+      text: "text-amber-700 dark:text-amber-300",
+      hex: "#f59e0b",
+    };
+  return {
+    ring: "from-red-400 to-red-500",
+    text: "text-red-700 dark:text-red-300",
+    hex: "#ef4444",
+  };
+}
+
+/**
+ * MD3 uslubidagi donut (circular progress) — davomat darajasini ko'rsatadi.
+ * Markazda foiz, atrofida rangli yoy. SVG `stroke-dasharray` bilan chiziladi.
+ */
+function AttendanceDonut({ pct }: { pct: number }) {
+  const size = 140;
+  const stroke = 13;
+  const r = (size - stroke) / 2;
+  const circ = 2 * Math.PI * r;
+  const dash = (Math.min(100, Math.max(0, pct)) / 100) * circ;
+  const tone = attendanceTone(pct);
+  return (
+    <div
+      className="relative shrink-0"
+      style={{ width: size, height: size }}
+      role="img"
+      aria-label={`Davomat darajasi: ${pct}%`}
+    >
+      <svg width={size} height={size} className="-rotate-90">
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          fill="none"
+          strokeWidth={stroke}
+          className="stroke-gray-100 dark:stroke-slate-700/50"
+        />
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          fill="none"
+          strokeWidth={stroke}
+          strokeLinecap="round"
+          stroke={tone.hex}
+          strokeDasharray={`${dash} ${circ}`}
+          style={{ transition: "stroke-dasharray 700ms cubic-bezier(0.4,0,0.2,1)" }}
+        />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <span className={`text-2xl sm:text-[28px] font-extrabold tabular-nums leading-none ${tone.text}`}>
+          {pct}%
+        </span>
+        <span className="mt-1 text-[10.5px] font-semibold text-gray-500 dark:text-slate-400">
+          Davomat
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/** Kichik tahliliy plitka — icon + qiymat + label. */
+function InsightTile({
+  icon,
+  value,
+  label,
+  accent = "text-gray-900 dark:text-white",
+}: {
+  icon: React.ReactNode;
+  value: React.ReactNode;
+  label: string;
+  accent?: string;
+}) {
+  return (
+    <div className="flex items-center gap-2.5 rounded-xl bg-gray-50/80 dark:bg-slate-800/50 ring-1 ring-gray-100 dark:ring-slate-700/50 px-3 py-2.5">
+      <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 bg-white dark:bg-slate-900/60 ring-1 ring-gray-200/70 dark:ring-slate-700/60 text-gray-500 dark:text-slate-300">
+        {icon}
+      </div>
+      <div className="min-w-0">
+        <p className={`text-lg font-bold tabular-nums leading-none ${accent}`}>
+          {value}
+        </p>
+        <p className="mt-1 text-[11px] font-medium text-gray-500 dark:text-slate-400 truncate leading-none">
+          {label}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/** Eng faol / eng past davomatli viloyatni ko'rsatuvchi qator. */
+function RegionHighlight({
+  label,
+  region,
+  up,
+}: {
+  label: string;
+  region: { name: string; number: number; pct: number } | null;
+  up: boolean;
+}) {
+  const tone = region ? attendanceTone(region.pct) : null;
+  return (
+    <div className="flex items-center gap-2.5 rounded-xl bg-gray-50/80 dark:bg-slate-800/50 ring-1 ring-gray-100 dark:ring-slate-700/50 px-3 py-2.5">
+      <div
+        className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
+          up
+            ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
+            : "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300"
+        }`}
+      >
+        {up ? (
+          <TrendUpIcon className="w-4 h-4" />
+        ) : (
+          <TrendDownIcon className="w-4 h-4" />
+        )}
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="text-[10.5px] font-semibold text-gray-400 dark:text-slate-500 leading-none">
+          {label}
+        </p>
+        <p className="mt-1 text-[12.5px] font-bold text-gray-800 dark:text-slate-100 truncate leading-tight">
+          {region ? region.name || `#${region.number}` : "—"}
+        </p>
+      </div>
+      {region && (
+        <span className={`shrink-0 text-sm font-bold tabular-nums ${tone!.text}`}>
+          {region.pct}%
+        </span>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Umumiy ko'rsatkichlar paneli — `stats`'dan hosilaviy (derived) tahliliy
+ * ma'lumotlar: davomat darajasi (donut), haqiqiy ishtirok, viloyat/bino soni,
+ * jins taqsimoti hamda eng faol/past davomatli viloyatlar.
+ */
+function OverviewPanel({ stats }: { stats: DashboardStatsResponse }) {
+  const t = stats.summary.total.total;
+  const attended = stats.summary.attended.total;
+  const notAttended = stats.summary.not_attended.total;
+  const cheating = stats.summary.cheating.total;
+  // Haqiqiy testda ishtirok etganlar = Keldi − Chetlatilgan
+  const participated = Math.max(0, attended - cheating);
+  const rate = t > 0 ? Math.round((attended / t) * 1000) / 10 : 0;
+
+  const buildings = stats.regions.reduce(
+    (sum, r) => sum + (r.zones?.length ?? 0),
+    0,
+  );
+  const regionsCount = stats.regions.length;
+
+  const male = stats.summary.total.male;
+  const female = stats.summary.total.female;
+  const unknown = stats.summary.total.unknown;
+  const pctOf = (n: number) => (t > 0 ? (n / t) * 100 : 0);
+
+  // Davomat foizi bo'yicha viloyatlar reytingi (faqat talabgori bor viloyatlar)
+  const ranked = stats.regions
+    .filter((r) => r.stats.total.total > 0)
+    .map((r) => ({
+      name: r.region_name,
+      number: r.region_number,
+      pct:
+        Math.round(
+          (r.stats.attended.total / r.stats.total.total) * 1000,
+        ) / 10,
+    }))
+    .sort((a, b) => b.pct - a.pct);
+  const best = ranked.length ? ranked[0] : null;
+  const worst = ranked.length ? ranked[ranked.length - 1] : null;
+
+  return (
+    <div className="glass-card p-4 sm:p-5 mb-3 sm:mb-4">
+      <div className="grid grid-cols-1 lg:grid-cols-[auto_1fr] gap-5 lg:gap-7 items-center">
+        {/* Donut + Keldi/Kelmadi legend */}
+        <div className="flex items-center justify-center gap-4 sm:gap-5">
+          <AttendanceDonut pct={rate} />
+          <div className="flex flex-col gap-2.5">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0" />
+              <div>
+                <p className="text-base font-bold tabular-nums text-gray-900 dark:text-white leading-none">
+                  {attended.toLocaleString("uz-UZ")}
+                </p>
+                <p className="text-[11px] text-gray-500 dark:text-slate-400 leading-none mt-0.5">
+                  Keldi
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-amber-400 shrink-0" />
+              <div>
+                <p className="text-base font-bold tabular-nums text-gray-900 dark:text-white leading-none">
+                  {notAttended.toLocaleString("uz-UZ")}
+                </p>
+                <p className="text-[11px] text-gray-500 dark:text-slate-400 leading-none mt-0.5">
+                  Kelmadi
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-gray-300 dark:bg-slate-600 shrink-0" />
+              <div>
+                <p className="text-base font-bold tabular-nums text-gray-900 dark:text-white leading-none">
+                  {t.toLocaleString("uz-UZ")}
+                </p>
+                <p className="text-[11px] text-gray-500 dark:text-slate-400 leading-none mt-0.5">
+                  Jami
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Tahliliy plitkalar */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 gap-2.5 sm:gap-3">
+          <InsightTile
+            icon={<CheckIcon />}
+            value={participated.toLocaleString("uz-UZ")}
+            label="Haqiqiy ishtirok"
+            accent="text-emerald-700 dark:text-emerald-300"
+          />
+          <InsightTile
+            icon={<MapPinIcon className="w-5 h-5" />}
+            value={regionsCount.toLocaleString("uz-UZ")}
+            label="Viloyatlar"
+          />
+          <InsightTile
+            icon={<BuildingIcon className="w-5 h-5" />}
+            value={buildings.toLocaleString("uz-UZ")}
+            label="Binolar"
+          />
+          <RegionHighlight label="Eng faol viloyat" region={best} up />
+          <RegionHighlight label="Eng past davomat" region={worst} up={false} />
+          <InsightTile
+            icon={<ShieldIcon />}
+            value={cheating.toLocaleString("uz-UZ")}
+            label="Chetlatilgan"
+            accent="text-red-700 dark:text-red-300"
+          />
+        </div>
+      </div>
+
+      {/* Jins taqsimoti — stacked bar */}
+      <div className="mt-4 pt-4 border-t border-gray-100 dark:border-slate-700/50">
+        <div className="flex items-center justify-between mb-1.5">
+          <span className="text-[12px] font-semibold text-gray-600 dark:text-slate-300">
+            Jins taqsimoti
+          </span>
+          <span className="flex items-center gap-3 text-[11px] font-medium">
+            <span className="inline-flex items-center gap-1 text-sky-600 dark:text-sky-400">
+              <MaleIcon className="w-3.5 h-3.5" />
+              {male.toLocaleString("uz-UZ")} ({Math.round(pctOf(male))}%)
+            </span>
+            <span className="inline-flex items-center gap-1 text-pink-600 dark:text-pink-400">
+              <FemaleIcon className="w-3.5 h-3.5" />
+              {female.toLocaleString("uz-UZ")} ({Math.round(pctOf(female))}%)
+            </span>
+            {unknown > 0 && (
+              <span className="inline-flex items-center gap-1 text-gray-400">
+                ? {unknown.toLocaleString("uz-UZ")}
+              </span>
+            )}
+          </span>
+        </div>
+        <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-gray-100 dark:bg-slate-700/50">
+          <div
+            className="h-full bg-sky-500 transition-[width] duration-700"
+            style={{ width: `${pctOf(male)}%` }}
+          />
+          <div
+            className="h-full bg-pink-500 transition-[width] duration-700"
+            style={{ width: `${pctOf(female)}%` }}
+          />
+          {unknown > 0 && (
+            <div
+              className="h-full bg-gray-300 dark:bg-slate-500 transition-[width] duration-700"
+              style={{ width: `${pctOf(unknown)}%` }}
+            />
+          )}
+        </div>
       </div>
     </div>
   );
@@ -2145,6 +2473,54 @@ function BuildingIcon({ className = "w-4 h-4" }: { className?: string }) {
         strokeLinejoin="round"
         strokeWidth={1.8}
         d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0H5m14 0h2m-2 0v-5a1 1 0 00-1-1h-2a1 1 0 00-1 1v5M5 21H3m6-12h.01M9 13h.01M9 17h.01M13 9h.01M13 13h.01M13 17h.01"
+      />
+    </svg>
+  );
+}
+
+/** Joylashuv belgisi (map pin) — viloyatlar soni uchun. */
+function MapPinIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={1.8}
+        d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
+      />
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={1.8}
+        d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+      />
+    </svg>
+  );
+}
+
+/** O'sish strelkasi — eng faol viloyat uchun. */
+function TrendUpIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M3 17l6-6 4 4 8-8m0 0h-5m5 0v5"
+      />
+    </svg>
+  );
+}
+
+/** Pasayish strelkasi — eng past davomat uchun. */
+function TrendDownIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M3 7l6 6 4-4 8 8m0 0h-5m5 0v-5"
       />
     </svg>
   );
