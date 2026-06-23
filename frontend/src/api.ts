@@ -372,6 +372,17 @@ export async function getSessionDashboardStatsApi(
 }
 
 /**
+ * Online foydalanuvchilar — aktiv login sessiyalari va qurilmalar.
+ * Har bir foydalanuvchi uchun qurilmalar soni va online holati qaytadi.
+ */
+export async function getOnlineUsersApi(): Promise<
+  import("./interfaces").OnlineUsersResponse
+> {
+  const res = await apiClient.get("/admin/online-users");
+  return res.data;
+}
+
+/**
  * Tanlangan ko'lam (scope) statistikasini rasmiy "МАЪЛУМОТ" ko'rinishidagi
  * Excel (.xlsx) hisobotiga eksport qilib yuklab olish. Parametrlar
  * `getSessionDashboardStatsApi` bilan bir xil. Brauzer faylni saqlaydi.

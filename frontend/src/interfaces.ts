@@ -398,6 +398,37 @@ export interface TestSessionListResponse {
   pages: number;
 }
 
+// === Online foydalanuvchilar (aktiv login sessiyalari / qurilmalar) ===
+
+export interface OnlineDevice {
+  family_id: string;
+  first_login: string;
+  last_active: string;
+  expires_at: string;
+  is_online: boolean;
+}
+
+export interface OnlineUser {
+  user_id: number;
+  username: string;
+  full_name: string | null;
+  role: string;
+  device_count: number;
+  online_device_count: number;
+  last_active: string;
+  is_online: boolean;
+  devices: OnlineDevice[];
+}
+
+export interface OnlineUsersResponse {
+  online_users: number;
+  total_users_with_sessions: number;
+  online_devices: number;
+  total_devices: number;
+  window_minutes: number;
+  users: OnlineUser[];
+}
+
 // --- Passport (ps_ser/ps_num) ommaviy yangilash ---
 export interface PassportUpdateRow {
   jshshir: string;

@@ -1,7 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import type { TestSessionListResponse } from "../interfaces";
-import { getTestSessionsApi } from "../api";
+import type {
+  OnlineUser,
+  OnlineUsersResponse,
+  TestSessionListResponse,
+} from "../interfaces";
+import { getOnlineUsersApi, getTestSessionsApi } from "../api";
 import PageLoader from "../components/PageLoader";
 
 /* ============================================================
@@ -150,24 +154,6 @@ export default function TestDashboardPage() {
     () => sessions.filter((s) => s.test_state?.key === 4),
     [sessions],
   );
-
-  // Talabgorlar holat (state) bo'yicha taqsimlangan
-  const studentsByState = useMemo(() => {
-    const map = new Map<
-      string,
-      { name: string; key: number | null; students: number }
-    >();
-    sessions.forEach((s) => {
-      const name = s.test_state?.name || "Noma'lum";
-      const key = s.test_state?.key ?? null;
-      const cur = map.get(name) || { name, key, students: 0 };
-      cur.students += s.count_total_student;
-      map.set(name, cur);
-    });
-    return [...map.values()]
-      .filter((g) => g.students > 0)
-      .sort((a, b) => b.students - a.students);
-  }, [sessions]);
 
   // Holat (state) bo'yicha guruhlash
   const stateGroups = useMemo(() => {
@@ -463,64 +449,9 @@ export default function TestDashboardPage() {
         </SectionCard>
       </div>
 
-      {/* Talabgorlar holat bo'yicha — to'liq kenglik */}
+      {/* Online foydalanuvchilar — aktiv sessiyalar va qurilmalar */}
       <div className="mb-5 sm:mb-6">
-        <SectionCard
-          title="Talabgorlar holat bo'yicha"
-          subtitle={`${metrics.totalStudents.toLocaleString("uz-UZ")} ta talabgor`}
-        >
-          {studentsByState.length > 0 ? (
-            <>
-              <div className="flex h-3 w-full overflow-hidden rounded-full bg-gray-100 dark:bg-slate-700/50 mb-3.5">
-                {studentsByState.map((g) => {
-                  const pct =
-                    metrics.totalStudents > 0
-                      ? (g.students / metrics.totalStudents) * 100
-                      : 0;
-                  return (
-                    <div
-                      key={g.name}
-                      className={`h-full ${stateTone(g.key).bar} transition-[width] duration-700`}
-                      style={{ width: `${pct}%` }}
-                      title={`${g.name}: ${g.students.toLocaleString("uz-UZ")}`}
-                    />
-                  );
-                })}
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
-                {studentsByState.map((g) => {
-                  const pct =
-                    metrics.totalStudents > 0
-                      ? Math.round((g.students / metrics.totalStudents) * 100)
-                      : 0;
-                  return (
-                    <div
-                      key={g.name}
-                      className="rounded-xl bg-gray-50/80 dark:bg-slate-800/50 ring-1 ring-gray-100 dark:ring-slate-700/50 px-3 py-2"
-                    >
-                      <div className="flex items-center gap-1.5 mb-1.5">
-                        <span
-                          className={`w-2 h-2 rounded-full shrink-0 ${stateTone(g.key).dot}`}
-                        />
-                        <span className="text-[11px] text-gray-500 dark:text-slate-400 truncate">
-                          {g.name}
-                        </span>
-                      </div>
-                      <p className="text-base sm:text-lg font-bold tabular-nums text-gray-900 dark:text-white leading-none">
-                        {g.students.toLocaleString("uz-UZ")}
-                      </p>
-                      <p className="text-[10.5px] text-gray-400 dark:text-slate-500 mt-1">
-                        {pct}%
-                      </p>
-                    </div>
-                  );
-                })}
-              </div>
-            </>
-          ) : (
-            <EmptyText />
-          )}
-        </SectionCard>
+        <OnlineUsersSection />
       </div>
 
       {/* Eng katta sessiyalar + Kelayotgan sessiyalar */}
@@ -821,6 +752,234 @@ function LiveProgress() {
   );
 }
 
+/** ISO sana → nisbiy vaqt ("hozir", "5 daqiqa oldin", "2 soat oldin"). */
+function relTime(iso: string): string {
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return "—";
+  const diffSec = Math.max(0, Math.floor((Date.now() - then) / 1000));
+  if (diffSec < 60) return "hozirgina";
+  const min = Math.floor(diffSec / 60);
+  if (min < 60) return `${min} daqiqa oldin`;
+  const hours = Math.floor(min / 60);
+  if (hours < 24) return `${hours} soat oldin`;
+  const days = Math.floor(hours / 24);
+  return `${days} kun oldin`;
+}
+
+const ONLINE_POLL_MS = 20000;
+
+/**
+ * Online foydalanuvchilar bo'limi — hozir aktiv login sessiyasi bor
+ * foydalanuvchilar va ularning qurilmalari. Username tanlanganda shu
+ * foydalanuvchining qurilmalari (nechta device'dan online ekani) ko'rsatiladi.
+ * Har 20 soniyada avtomatik yangilanib turadi.
+ */
+function OnlineUsersSection() {
+  const [data, setData] = useState<OnlineUsersResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [denied, setDenied] = useState(false);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async (silent: boolean) => {
+      if (!silent) setLoading(true);
+      try {
+        const res = await getOnlineUsersApi();
+        if (cancelled) return;
+        setData(res);
+        setDenied(false);
+      } catch (err) {
+        if (cancelled) return;
+        const status = (err as { response?: { status?: number } })?.response
+          ?.status;
+        if (status === 403 || status === 401) setDenied(true);
+      } finally {
+        if (!cancelled && !silent) setLoading(false);
+      }
+    };
+    load(false);
+    pollRef.current = setInterval(() => load(true), ONLINE_POLL_MS);
+    return () => {
+      cancelled = true;
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, []);
+
+  const users = data?.users ?? [];
+  const selected: OnlineUser | null =
+    users.find((u) => u.user_id === selectedId) ??
+    (users.length > 0 ? users[0] : null);
+
+  return (
+    <div className="glass-card p-4 sm:p-5">
+      {/* Sarlavha + jonli ko'rsatkichlar */}
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <span className="relative flex w-2.5 h-2.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
+          </span>
+          <h3 className="text-[14px] font-bold text-gray-800 dark:text-slate-100 leading-tight">
+            Online foydalanuvchilar
+          </h3>
+        </div>
+        {data && (
+          <div className="flex items-center gap-2 text-[11.5px] font-semibold">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
+              <UserDotIcon className="w-3.5 h-3.5" />
+              {data.online_users} online
+            </span>
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-sky-50 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300">
+              <MonitorIcon className="w-3.5 h-3.5" />
+              {data.online_devices} qurilma
+            </span>
+          </div>
+        )}
+      </div>
+
+      {loading ? (
+        <p className="text-sm text-gray-400 dark:text-slate-500 py-6 text-center">
+          Yuklanmoqda…
+        </p>
+      ) : denied ? (
+        <EmptyText label="Bu ma'lumotni ko'rish uchun ruxsat yo'q" />
+      ) : users.length === 0 ? (
+        <EmptyText label="Hozircha online foydalanuvchi yo'q" />
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5">
+          {/* Foydalanuvchilar ro'yxati */}
+          <div className="space-y-1.5 max-h-80 overflow-y-auto -mr-1 pr-1">
+            {users.map((u) => {
+              const active = selected?.user_id === u.user_id;
+              return (
+                <button
+                  key={u.user_id}
+                  type="button"
+                  onClick={() => setSelectedId(u.user_id)}
+                  className={`w-full flex items-center justify-between gap-3 p-2.5 rounded-xl text-left transition-all ring-1 ${
+                    active
+                      ? "bg-primary-50 dark:bg-primary-900/25 ring-primary-200/70 dark:ring-primary-700/50"
+                      : "bg-gray-50/70 dark:bg-slate-800/40 ring-transparent hover:ring-gray-200 dark:hover:ring-slate-700/60"
+                  }`}
+                >
+                  <span className="flex items-center gap-2.5 min-w-0">
+                    <span
+                      className={`relative w-9 h-9 rounded-full flex items-center justify-center shrink-0 font-bold text-[13px] ${
+                        u.is_online
+                          ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
+                          : "bg-gray-100 text-gray-500 dark:bg-slate-700/60 dark:text-slate-300"
+                      }`}
+                    >
+                      {u.username.charAt(0).toUpperCase()}
+                      {u.is_online && (
+                        <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-slate-900" />
+                      )}
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-[13px] font-semibold text-gray-900 dark:text-white truncate">
+                        {u.username}
+                      </span>
+                      <span className="block text-[11px] text-gray-400 dark:text-slate-500 truncate">
+                        {u.full_name || u.role || "—"}
+                      </span>
+                    </span>
+                  </span>
+                  <span className="flex items-center gap-1.5 shrink-0 text-[11px] font-semibold text-gray-500 dark:text-slate-400">
+                    <MonitorIcon className="w-3.5 h-3.5" />
+                    {u.online_device_count}/{u.device_count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Tanlangan foydalanuvchining qurilmalari */}
+          <div className="rounded-xl bg-gray-50/60 dark:bg-slate-800/40 ring-1 ring-gray-100 dark:ring-slate-700/50 p-3.5">
+            {selected ? (
+              <>
+                <div className="flex items-center justify-between gap-2 mb-3 pb-3 border-b border-gray-100 dark:border-slate-700/50">
+                  <div className="min-w-0">
+                    <p className="text-[13px] font-bold text-gray-900 dark:text-white truncate">
+                      {selected.username}
+                    </p>
+                    <p className="text-[11px] text-gray-400 dark:text-slate-500">
+                      {selected.online_device_count} ta qurilmadan online ·{" "}
+                      {selected.device_count} ta sessiya
+                    </p>
+                  </div>
+                  <span
+                    className={`shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold ${
+                      selected.is_online
+                        ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
+                        : "bg-gray-100 text-gray-500 dark:bg-slate-700/50 dark:text-slate-300"
+                    }`}
+                  >
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full ${
+                        selected.is_online ? "bg-emerald-500" : "bg-gray-400"
+                      }`}
+                    />
+                    {selected.is_online ? "Online" : "Faolsiz"}
+                  </span>
+                </div>
+                <div className="space-y-2 max-h-64 overflow-y-auto -mr-1 pr-1">
+                  {selected.devices.map((d, i) => (
+                    <div
+                      key={d.family_id}
+                      className="flex items-center gap-3 rounded-lg bg-white dark:bg-slate-900/50 ring-1 ring-gray-100 dark:ring-slate-700/50 px-3 py-2"
+                    >
+                      <div
+                        className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                          d.is_online
+                            ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
+                            : "bg-gray-100 text-gray-400 dark:bg-slate-700/60 dark:text-slate-400"
+                        }`}
+                      >
+                        <MonitorIcon className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[12.5px] font-semibold text-gray-800 dark:text-slate-100 leading-tight">
+                          Qurilma {i + 1}
+                          <span className="ml-1.5 text-[10.5px] font-normal text-gray-400 dark:text-slate-500">
+                            #{d.family_id.slice(0, 8)}
+                          </span>
+                        </p>
+                        <p className="text-[11px] text-gray-400 dark:text-slate-500">
+                          Oxirgi faollik: {relTime(d.last_active)}
+                        </p>
+                      </div>
+                      <span
+                        className={`shrink-0 inline-flex items-center gap-1 text-[10.5px] font-bold ${
+                          d.is_online
+                            ? "text-emerald-600 dark:text-emerald-400"
+                            : "text-gray-400 dark:text-slate-500"
+                        }`}
+                      >
+                        <span
+                          className={`w-1.5 h-1.5 rounded-full ${
+                            d.is_online ? "bg-emerald-500" : "bg-gray-400"
+                          }`}
+                        />
+                        {d.is_online ? "online" : "faolsiz"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <p className="text-sm text-gray-400 dark:text-slate-500 py-6 text-center">
+                Foydalanuvchini tanlang
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ============== Iconlar ============== */
 
 function CalendarIcon({ className = "w-5 h-5" }: { className?: string }) {
@@ -883,6 +1042,32 @@ function ListIcon({ className = "w-4 h-4" }: { className?: string }) {
         strokeLinejoin="round"
         strokeWidth={2}
         d="M4 6h16M4 12h16M4 18h16"
+      />
+    </svg>
+  );
+}
+
+function MonitorIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+      />
+    </svg>
+  );
+}
+
+function UserDotIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
       />
     </svg>
   );
