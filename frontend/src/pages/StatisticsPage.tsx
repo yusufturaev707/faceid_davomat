@@ -155,6 +155,9 @@ export default function StatisticsPage() {
   const [excelAlphabet, setExcelAlphabet] = useState<"cyrillic" | "latin">(
     "cyrillic",
   );
+  // Excel viloyatlar tartibi — dtm (region raqami, default) | vm (k_number) |
+  // iiv (s_number)
+  const [excelOrder, setExcelOrder] = useState<"dtm" | "vm" | "iiv">("dtm");
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Viloyat card bosilganda — shu region zonalari modal'da ko'rsatiladi.
@@ -168,6 +171,19 @@ export default function StatisticsPage() {
 
   // Barcha viloyatlarni bitta jadval-modalda ko'rish
   const [showAllRegions, setShowAllRegions] = useState(false);
+
+  // Tanlangan tartib (DTM/VM/IIV) bo'yicha viloyatlarni qayta saralash — Excel
+  // hisoboti bilan bir xil kalitda. Kartalar joylashuvi ham shunga moslashadi.
+  const orderedRegions = useMemo(() => {
+    const regions = stats?.regions ?? [];
+    const sortKey =
+      excelOrder === "vm"
+        ? (r: RegionStatItem) => r.region_k_number
+        : excelOrder === "iiv"
+          ? (r: RegionStatItem) => r.region_s_number
+          : (r: RegionStatItem) => r.region_number;
+    return [...regions].sort((a, b) => sortKey(a) - sortKey(b));
+  }, [stats, excelOrder]);
 
   // === Statuslar (SessionState) ro'yxatini yuklash ===
   useEffect(() => {
@@ -288,6 +304,7 @@ export default function StatisticsPage() {
         sessionSmenaId: selectedSmenaId,
         day: selectedDay,
         alphabet: excelAlphabet,
+        orderBy: excelOrder,
       });
     } catch (err) {
       setError(extractErrorMessage(err));
@@ -301,6 +318,7 @@ export default function StatisticsPage() {
     selectedSmenaId,
     selectedDay,
     excelAlphabet,
+    excelOrder,
   ]);
 
   // === Smenalar va kunlar tanlovi uchun yordamchilar ===
@@ -623,7 +641,12 @@ export default function StatisticsPage() {
             <span className="text-[12px] sm:text-[12.5px] font-medium text-gray-600 dark:text-slate-300">
               {scopeContextLabel(stats)}
             </span>
-            <div className="ml-auto flex items-center gap-2">
+            <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+              <OrderToggle
+                value={excelOrder}
+                onChange={setExcelOrder}
+                disabled={exporting}
+              />
               <AlphabetToggle
                 value={excelAlphabet}
                 onChange={setExcelAlphabet}
@@ -696,7 +719,8 @@ export default function StatisticsPage() {
             <EmptyHint text="Bu sessiya/smena uchun talabgorlar topilmadi" />
           ) : (
             <RegionGrid
-              regions={stats.regions}
+              regions={orderedRegions}
+              orderKey={excelOrder}
               onRegionClick={(r) => setOpenedRegionId(r.region_id)}
             />
           )}
@@ -707,6 +731,7 @@ export default function StatisticsPage() {
       {openedRegion && (
         <RegionZonesModal
           region={openedRegion}
+          orderKey={excelOrder}
           onClose={() => setOpenedRegionId(null)}
         />
       )}
@@ -714,9 +739,10 @@ export default function StatisticsPage() {
       {/* Barcha viloyatlar — bitta jadval modali */}
       {showAllRegions && stats && (
         <AllRegionsModal
-          regions={stats.regions}
+          regions={orderedRegions}
           summary={stats.summary}
           contextLabel={scopeContextLabel(stats)}
+          orderKey={excelOrder}
           onClose={() => setShowAllRegions(false)}
         />
       )}
@@ -938,6 +964,60 @@ function AlphabetToggle({
   );
 }
 
+/**
+ * Excel hisobotidagi viloyatlar tartibini tanlash — DTM (region raqami),
+ * VM (k_number) yoki IIV (s_number) ketma-ketligida. AlphabetToggle bilan bir
+ * xil MD3 segmented uslubda, har tugmada tartiblash izohi (title) bilan.
+ */
+function OrderToggle({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: "dtm" | "vm" | "iiv";
+  onChange: (o: "dtm" | "vm" | "iiv") => void;
+  disabled?: boolean;
+}) {
+  const options: {
+    key: "dtm" | "vm" | "iiv";
+    label: string;
+    title: string;
+  }[] = [
+    { key: "dtm", label: "DTM", title: "Viloyat raqami tartibida" },
+    { key: "vm", label: "VM", title: "K-raqami (k_number) tartibida" },
+    { key: "iiv", label: "IIV", title: "S-raqami (s_number) tartibida" },
+  ];
+  return (
+    <div
+      role="group"
+      aria-label="Excel hisobotida viloyatlar tartibi"
+      title="Viloyatlar tartibi"
+      className="inline-flex rounded-full bg-gray-100 dark:bg-slate-800/60 p-0.5 ring-1 ring-gray-200/70 dark:ring-slate-700/60"
+    >
+      {options.map((o) => {
+        const active = value === o.key;
+        return (
+          <button
+            key={o.key}
+            type="button"
+            aria-pressed={active}
+            disabled={disabled}
+            onClick={() => onChange(o.key)}
+            title={o.title}
+            className={`inline-flex items-center justify-center px-2.5 h-7 rounded-full text-[11.5px] font-semibold transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed ${
+              active
+                ? "bg-white dark:bg-slate-900 text-primary-700 dark:text-primary-300 shadow-sm ring-1 ring-primary-200/60 dark:ring-primary-700/50"
+                : "text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200"
+            }`}
+          >
+            {o.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 type Variant = "primary" | "success" | "warning" | "danger";
 
 const VARIANT_STYLES: Record<
@@ -1143,6 +1223,16 @@ function GenderChip({ gender, count }: { gender: Gender; count: number }) {
   );
 }
 
+/** Tanlangan tartib (DTM/VM/IIV) bo'yicha viloyatning ko'rsatiladigan raqami. */
+function regionDisplayNumber(
+  r: RegionStatItem,
+  orderKey: "dtm" | "vm" | "iiv",
+): number {
+  if (orderKey === "vm") return r.region_k_number;
+  if (orderKey === "iiv") return r.region_s_number;
+  return r.region_number;
+}
+
 /**
  * RegionGrid — viloyatlarni MD3 uslubidagi 2-ustunli vertikal tartiblangan
  * gridda chiqaradi. Region.number tartibi vertikal yo'naltirilgan:
@@ -1154,9 +1244,11 @@ function GenderChip({ gender, count }: { gender: Gender; count: number }) {
 function RegionGrid({
   regions,
   onRegionClick,
+  orderKey,
 }: {
   regions: RegionStatItem[];
   onRegionClick: (r: RegionStatItem) => void;
+  orderKey: "dtm" | "vm" | "iiv";
 }) {
   const mid = Math.ceil(regions.length / 2);
   const leftCol = regions.slice(0, mid);
@@ -1168,6 +1260,7 @@ function RegionGrid({
         <RegionCard
           key={r.region_id}
           item={r}
+          orderKey={orderKey}
           onClick={() => onRegionClick(r)}
         />
       ))}
@@ -1186,10 +1279,14 @@ function RegionGrid({
 function RegionCard({
   item,
   onClick,
+  orderKey = "dtm",
 }: {
   item: RegionStatItem;
   onClick?: () => void;
+  orderKey?: "dtm" | "vm" | "iiv";
 }) {
+  // Badge'da ko'rsatiladigan raqam — tanlangan tartibga (DTM/VM/IIV) mos
+  const displayNumber = regionDisplayNumber(item, orderKey);
   const total = item.stats.total.total;
   const attended = item.stats.attended.total;
   const attendancePercent =
@@ -1238,7 +1335,7 @@ function RegionCard({
           {/* MD3 filled-tonal badge */}
           <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-primary-500 to-primary-700 text-white font-bold flex items-center justify-center shadow-sm shadow-primary-500/25 ring-1 ring-white/20 shrink-0">
             <span className="text-[12px] tabular-nums leading-none">
-              {item.region_number}
+              {displayNumber}
             </span>
           </div>
           <p
@@ -1424,11 +1521,14 @@ function MiniCheating({ cheating }: { cheating: StatGroup["cheating"] }) {
 function RegionZonesModal({
   region,
   onClose,
+  orderKey = "dtm",
 }: {
   region: RegionStatItem;
   onClose: () => void;
+  orderKey?: "dtm" | "vm" | "iiv";
 }) {
   const { closing, close } = useModalClose(onClose);
+  const displayNumber = regionDisplayNumber(region, orderKey);
 
   const total = region.stats.total.total;
   const attended = region.stats.attended.total;
@@ -1466,7 +1566,7 @@ function RegionZonesModal({
             <div className="flex items-center gap-3 min-w-0">
               <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-primary-500 to-primary-700 text-white font-bold flex items-center justify-center shadow-md shadow-primary-500/25 ring-1 ring-white/20 shrink-0">
                 <span className="text-base tabular-nums leading-none">
-                  {region.region_number}
+                  {displayNumber}
                 </span>
               </div>
               <div className="min-w-0">
@@ -1601,11 +1701,13 @@ function AllRegionsModal({
   summary,
   contextLabel,
   onClose,
+  orderKey = "dtm",
 }: {
   regions: RegionStatItem[];
   summary: StatGroup;
   contextLabel: string;
   onClose: () => void;
+  orderKey?: "dtm" | "vm" | "iiv";
 }) {
   const { closing, close } = useModalClose(onClose);
 
@@ -1699,7 +1801,7 @@ function AllRegionsModal({
                   >
                     <td className="px-2.5 py-2 text-center">
                       <span className="inline-flex items-center justify-center w-6 h-6 rounded-lg bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 text-[11px] font-bold tabular-nums">
-                        {r.region_number}
+                        {regionDisplayNumber(r, orderKey)}
                       </span>
                     </td>
                     <td className="px-2.5 py-2 text-left font-semibold text-gray-800 dark:text-slate-100 text-[13px]">

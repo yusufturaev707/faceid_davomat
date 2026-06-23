@@ -927,6 +927,13 @@ def export_session_dashboard_stats(
         "cyrillic",
         description="Hisobot alifbosi: cyrillic (krill) | latin (o'zbek lotin)",
     ),
+    order_by: str = Query(
+        "dtm",
+        description=(
+            "Viloyatlar tartibi: dtm (region raqami — DTM) | "
+            "vm (k_number — VM) | iiv (s_number — IIV)"
+        ),
+    ),
     db: Session = Depends(get_db),
     _: User = Depends(PermissionChecker(P.STATISTICS_READ.code)),
 ):
@@ -951,6 +958,16 @@ def export_session_dashboard_stats(
         )
     except DashboardStatsError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+    # Viloyatlar tartibi — dtm: region.number (default, servis allaqachon shunday
+    # tartibladi) | vm: region.k_number | iiv: region.s_number. T/r (A ustuni)
+    # tartib bo'yicha qayta raqamlanadi. Front kartalari ham xuddi shu kalitda
+    # tartiblanadi, shuning uchun hisobot ekrandagi tartibga mos keladi.
+    order_key = order_by.strip().lower()
+    if order_key == "vm":
+        stats.regions.sort(key=lambda r: r.region_k_number)
+    elif order_key == "iiv":
+        stats.regions.sort(key=lambda r: r.region_s_number)
 
     # Sarlavha: test sessiya nomi + test nomi (servis krillga o'tkazadi)
     session_name = session.name or ""
@@ -983,6 +1000,8 @@ def export_session_dashboard_stats(
     elif stats.scope == "overall":
         parts.append("umumiy")
     parts.append("lotin" if latin else "krill")
+    if order_key in ("dtm", "vm", "iiv"):
+        parts.append(order_key)
     filename = "_".join(parts) + ".xlsx"
     headers = {
         "Content-Disposition": f'attachment; filename="{filename}"',

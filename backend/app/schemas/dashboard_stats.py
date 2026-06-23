@@ -69,6 +69,10 @@ class RegionStatItem(BaseModel):
     region_id: int
     region_number: int
     region_name: str
+    # Muqobil tartiblash identifikatorlari (DTM=number, VM=k_number, IIV=s_number).
+    # Front kartalarni va Excel hisobotini bir xil kalit bo'yicha tartiblaydi.
+    region_s_number: int = 0
+    region_k_number: int = 0
     stats: StatGroup
     # Region ichidagi binolar — modal'da ko'rsatiladi (lozim bo'lganda).
     # Tartibi: zone.number bo'yicha.

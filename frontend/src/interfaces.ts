@@ -365,6 +365,9 @@ export interface RegionStatItem {
   region_id: number;
   region_number: number;
   region_name: string;
+  // Muqobil tartiblash identifikatorlari (DTM=number, VM=k_number, IIV=s_number)
+  region_s_number: number;
+  region_k_number: number;
   stats: StatGroup;
   zones: ZoneStatItem[];
 }

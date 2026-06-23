@@ -383,6 +383,8 @@ export async function exportSessionDashboardStatsApi(
     sessionSmenaId?: number | null;
     day?: string | null;
     alphabet?: "cyrillic" | "latin";
+    // Viloyatlar tartibi: dtm (region raqami) | vm (k_number) | iiv (s_number)
+    orderBy?: "dtm" | "vm" | "iiv";
   },
 ): Promise<void> {
   const params: Record<string, string | number> = { scope: opts.scope };
@@ -394,6 +396,9 @@ export async function exportSessionDashboardStatsApi(
   }
   if (opts.alphabet) {
     params.alphabet = opts.alphabet;
+  }
+  if (opts.orderBy) {
+    params.order_by = opts.orderBy;
   }
   try {
     const res = await apiClient.get(

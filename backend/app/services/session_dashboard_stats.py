@@ -255,6 +255,8 @@ def get_dashboard_stats(
                 Zone.name.label("zone_name"),
                 Region.number.label("region_number"),
                 Region.name.label("region_name"),
+                Region.s_number.label("region_s_number"),
+                Region.k_number.label("region_k_number"),
                 Gender.key.label("gender_key"),
             )
             .select_from(Student)
@@ -291,7 +293,8 @@ def get_dashboard_stats(
     summary = _Tally()
     by_region: dict[int, _Tally] = defaultdict(_Tally)
     by_zone: dict[int, _Tally] = defaultdict(_Tally)
-    region_meta: dict[int, tuple[int, str]] = {}    # region_id → (number, name)
+    # region_id → (number, name, s_number, k_number)
+    region_meta: dict[int, tuple[int, str, int, int]] = {}
     zone_meta: dict[int, tuple[int, str]] = {}      # zone_id → (number, name)
     # Region → ichidagi zone ID'lari ro'yxati (unique, kelishi tartibida).
     zones_by_region: dict[int, list[int]] = defaultdict(list)
@@ -301,7 +304,13 @@ def get_dashboard_stats(
         region_id = int(row.region_id)
         zone_id = int(row.zone_id)
         region_meta.setdefault(
-            region_id, (int(row.region_number or 0), str(row.region_name or ""))
+            region_id,
+            (
+                int(row.region_number or 0),
+                str(row.region_name or ""),
+                int(row.region_s_number or 0),
+                int(row.region_k_number or 0),
+            ),
         )
         zone_meta.setdefault(
             zone_id, (int(row.zone_number or 0), str(row.zone_name or ""))
@@ -337,11 +346,11 @@ def get_dashboard_stats(
     # region ichidagi zonalar zone.number bo'yicha.
     region_items = sorted(
         by_region.items(),
-        key=lambda kv: region_meta.get(kv[0], (0, ""))[0],
+        key=lambda kv: region_meta.get(kv[0], (0, "", 0, 0))[0],
     )
     regions: list[RegionStatItem] = []
     for region_id, tally in region_items:
-        num, name = region_meta.get(region_id, (0, ""))
+        num, name, s_num, k_num = region_meta.get(region_id, (0, "", 0, 0))
         zone_ids = sorted(
             zones_by_region.get(region_id, []),
             key=lambda zid: zone_meta.get(zid, (0, ""))[0],
@@ -360,6 +369,8 @@ def get_dashboard_stats(
                 region_id=region_id,
                 region_number=num,
                 region_name=name,
+                region_s_number=s_num,
+                region_k_number=k_num,
                 stats=_tally_to_stat_group(tally),
                 zones=zones_list,
             )
