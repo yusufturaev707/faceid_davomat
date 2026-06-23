@@ -449,11 +449,6 @@ export default function TestDashboardPage() {
         </SectionCard>
       </div>
 
-      {/* Online foydalanuvchilar — aktiv sessiyalar va qurilmalar */}
-      <div className="mb-5 sm:mb-6">
-        <OnlineUsersSection />
-      </div>
-
       {/* Eng katta sessiyalar + Kelayotgan sessiyalar */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5 sm:gap-4 mb-5 sm:mb-6">
         {/* Eng katta sessiyalar */}
@@ -629,6 +624,11 @@ export default function TestDashboardPage() {
           </table>
         </div>
       </SectionCard>
+
+      {/* Online foydalanuvchilar — aktiv sessiyalar va qurilmalar (oxirgi qator) */}
+      <div className="mt-5 sm:mt-6">
+        <OnlineUsersSection />
+      </div>
     </div>
   );
 }
