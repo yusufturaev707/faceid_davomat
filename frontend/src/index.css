@@ -314,6 +314,29 @@
     animation: slideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   }
 
+  /* Modal overlay + panel — enter / exit */
+  .animate-modal-overlay {
+    animation: modalOverlay 0.25s ease-out both;
+  }
+  .animate-modal-overlay-out {
+    animation: modalOverlayOut 0.22s ease-in both;
+  }
+
+  .animate-modal-panel {
+    animation: modalPanelMobile 0.44s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .animate-modal-panel-out {
+    animation: modalPanelMobileOut 0.28s cubic-bezier(0.4, 0, 0.8, 0.6) both;
+  }
+  @media (min-width: 640px) {
+    .animate-modal-panel {
+      animation: modalPanelDesktop 0.36s cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+    .animate-modal-panel-out {
+      animation: modalPanelDesktopOut 0.22s cubic-bezier(0.4, 0, 0.8, 0.6) both;
+    }
+  }
+
   /* Safe area helpers for notched devices */
   .safe-pt {
     padding-top: max(env(safe-area-inset-top), 0px);
@@ -370,4 +393,48 @@
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
+}
+
+@keyframes modalOverlay {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes modalOverlayOut {
+  to { opacity: 0; }
+}
+
+/* Mobile: haqiqiy bottom-sheet — panelning o'z balandligidan pastdan chiqadi */
+@keyframes modalPanelMobile {
+  from {
+    opacity: 0;
+    transform: translateY(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes modalPanelMobileOut {
+  to {
+    opacity: 0;
+    transform: translateY(72px);
+  }
+}
+
+/* Desktop: markazdan kengayib chiqadi */
+@keyframes modalPanelDesktop {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+@keyframes modalPanelDesktopOut {
+  to {
+    opacity: 0;
+    transform: scale(0.96) translateY(8px);
+  }
 }

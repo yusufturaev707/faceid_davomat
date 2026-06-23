@@ -101,9 +101,27 @@ export default function LookupCrudPage<T extends { id: number; is_active?: boole
   // qo'llab-quvvatlamaydi, ro'yxat odatda kichik).
   const [page, setPage] = useState(1);
 
+  const hasStatus = items.some((i) => "is_active" in i);
+
   useEffect(() => {
     load();
   }, []);
+
+  // Modal ochiq bo'lganda orqa fon scroll'ini bloklaymiz — scrollbar
+  // yo'qolib sahifa "sakramasligi" uchun kengligini padding bilan to'ldiramiz.
+  useEffect(() => {
+    const anyOpen = showModal || deleteId !== null;
+    if (!anyOpen) return;
+    const scrollbarW = window.innerWidth - document.documentElement.clientWidth;
+    const prevOverflow = document.body.style.overflow;
+    const prevPad = document.body.style.paddingRight;
+    document.body.style.overflow = "hidden";
+    if (scrollbarW > 0) document.body.style.paddingRight = `${scrollbarW}px`;
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      document.body.style.paddingRight = prevPad;
+    };
+  }, [showModal, deleteId]);
 
   const filteredItems = useMemo(() => {
     if (!searchKeys || searchKeys.length === 0) return items;
@@ -224,8 +242,14 @@ export default function LookupCrudPage<T extends { id: number; is_active?: boole
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500" />
+      <div>
+        <div className="page-header">
+          <div className="min-w-0">
+            <h2 className="section-title">{title}</h2>
+            <p className="section-subtitle">{subtitle}</p>
+          </div>
+        </div>
+        <TableSkeleton cols={columns.length + (hasStatus ? 2 : 1)} />
       </div>
     );
   }
@@ -249,8 +273,13 @@ export default function LookupCrudPage<T extends { id: number; is_active?: boole
       </div>
 
       {error && (
-        <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-xl text-sm flex items-start justify-between gap-3">
-          <span>{error}</span>
+        <div className="mb-4 p-3.5 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-2xl text-sm flex items-start justify-between gap-3 ring-1 ring-red-200/60 dark:ring-red-800/40">
+          <span className="flex items-center gap-2">
+            <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M5 13a7 7 0 1114 0v6a2 2 0 01-2 2H7a2 2 0 01-2-2v-6z" />
+            </svg>
+            {error}
+          </span>
           <button onClick={() => setError("")} className="underline shrink-0">Yopish</button>
         </div>
       )}
@@ -260,7 +289,7 @@ export default function LookupCrudPage<T extends { id: number; is_active?: boole
         <div className="mb-4">
           <div className="relative max-w-md">
             <svg
-              className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"
+              className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -277,12 +306,12 @@ export default function LookupCrudPage<T extends { id: number; is_active?: boole
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder={searchPlaceholder || "Qidirish..."}
-              className="input-field !py-2 !pl-9 !text-sm w-full"
+              className="w-full h-11 pl-10 pr-10 rounded-full border border-gray-300 dark:border-slate-600 bg-surface dark:bg-slate-800 text-sm text-gray-900 dark:text-slate-100 placeholder-gray-400 dark:placeholder-slate-500 focus:ring-4 focus:ring-primary-500/15 focus:border-primary-500 outline-none transition-all"
             />
             {search && (
               <button
                 onClick={() => setSearch("")}
-                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600 dark:hover:text-slate-300"
+                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:text-slate-300 dark:hover:bg-slate-700/60 transition-colors"
                 title="Tozalash"
               >
                 <svg
@@ -307,72 +336,82 @@ export default function LookupCrudPage<T extends { id: number; is_active?: boole
       {/* Table */}
       <div className="glass-card overflow-hidden">
         <div className="overflow-x-auto" style={{ WebkitOverflowScrolling: "touch" }}>
-        <table className="w-full min-w-[600px]">
+        <table className="w-full min-w-[600px] border-collapse">
           <thead>
-            <tr className="border-b border-gray-100 dark:border-slate-700">
-              {columns.map((col) => (
-                <th key={col.key} className="text-left px-5 py-3 text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+            <tr className="bg-gray-50/80 dark:bg-slate-800/60 border-b border-gray-200/70 dark:border-slate-700/60">
+              {columns.map((col, ci) => (
+                <th
+                  key={col.key}
+                  className={`text-left px-5 py-3.5 text-[11px] font-bold text-gray-500 dark:text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap ${
+                    ci === 0 ? "first:rounded-tl-2xl" : ""
+                  }`}
+                >
                   {col.label}
                 </th>
               ))}
-              {items.some((i) => "is_active" in i) && (
-                <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+              {hasStatus && (
+                <th className="text-left px-5 py-3.5 text-[11px] font-bold text-gray-500 dark:text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">
                   Holat
                 </th>
               )}
-              <th className="text-right px-5 py-3 text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+              <th className="text-right px-5 py-3.5 text-[11px] font-bold text-gray-500 dark:text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">
                 Amallar
               </th>
             </tr>
           </thead>
           <tbody>
             {pagedItems.map((item) => (
-              <tr key={item.id} className="border-b border-gray-50 dark:border-slate-700/50 hover:bg-gray-50/50 dark:hover:bg-slate-700/30 transition-colors">
-                {columns.map((col) => (
-                  <td key={col.key} className="px-5 py-3.5 text-sm text-gray-700 dark:text-slate-300">
-                    {col.render ? col.render((item as any)[col.key], item) : String((item as any)[col.key] ?? "—")}
+              <tr
+                key={item.id}
+                className="group border-b border-gray-100/80 dark:border-slate-700/40 last:border-0 hover:bg-primary-50/40 dark:hover:bg-primary-900/10 transition-colors"
+              >
+                {columns.map((col, ci) => (
+                  <td
+                    key={col.key}
+                    className={`px-5 py-3.5 text-sm ${
+                      ci === 0
+                        ? "text-gray-400 dark:text-slate-500 font-mono tabular-nums text-[12.5px]"
+                        : "text-gray-700 dark:text-slate-200"
+                    }`}
+                  >
+                    {col.render
+                      ? col.render((item as any)[col.key], item)
+                      : ci === 0
+                        ? `#${(item as any)[col.key]}`
+                        : (col.key === "name" ? (
+                            <span className="font-semibold text-gray-900 dark:text-white">
+                              {String((item as any)[col.key] ?? "—")}
+                            </span>
+                          ) : (
+                            String((item as any)[col.key] ?? "—")
+                          ))}
                   </td>
                 ))}
-                {"is_active" in item && (
+                {hasStatus && (
                   <td className="px-5 py-3.5">
                     <PermissionGate
                       permission={updatePermission}
-                      fallback={
-                        <span
-                          className={`inline-flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded-full ${
-                            (item as any).is_active
-                              ? "bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400"
-                              : "bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400"
-                          }`}
-                        >
-                          <span className={`w-1.5 h-1.5 rounded-full ${(item as any).is_active ? "bg-green-500" : "bg-red-500"}`} />
-                          {(item as any).is_active ? "Faol" : "Nofaol"}
-                        </span>
-                      }
+                      fallback={<StatusPill active={!!(item as any).is_active} />}
                     >
                       <button
                         onClick={() => toggleActive(item)}
-                        className={`inline-flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded-full transition-colors ${
-                          (item as any).is_active
-                            ? "bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/30"
-                            : "bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30"
-                        }`}
+                        title="Holatni o'zgartirish"
+                        className="transition-transform active:scale-95"
                       >
-                        <span className={`w-1.5 h-1.5 rounded-full ${(item as any).is_active ? "bg-green-500" : "bg-red-500"}`} />
-                        {(item as any).is_active ? "Faol" : "Nofaol"}
+                        <StatusPill active={!!(item as any).is_active} interactive />
                       </button>
                     </PermissionGate>
                   </td>
                 )}
-                <td className="px-5 py-3.5 text-right">
-                  <div className="flex items-center justify-end gap-2">
+                <td className="px-5 py-3 text-right">
+                  <div className="flex items-center justify-end gap-1.5">
                     <PermissionGate permission={updatePermission}>
                       <button
                         onClick={() => openEdit(item)}
-                        className="p-1.5 rounded-lg text-gray-400 hover:text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors"
+                        className="inline-flex items-center justify-center w-9 h-9 rounded-full text-gray-400 hover:text-primary-600 hover:bg-primary-100/70 dark:hover:bg-primary-900/30 transition-colors"
                         title="Tahrirlash"
                       >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                         </svg>
                       </button>
@@ -380,10 +419,10 @@ export default function LookupCrudPage<T extends { id: number; is_active?: boole
                     <PermissionGate permission={deletePermission}>
                       <button
                         onClick={() => setDeleteId(item.id)}
-                        className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                        className="inline-flex items-center justify-center w-9 h-9 rounded-full text-gray-400 hover:text-red-600 hover:bg-red-100/70 dark:hover:bg-red-900/30 transition-colors"
                         title="O'chirish"
                       >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                         </svg>
                       </button>
@@ -394,10 +433,17 @@ export default function LookupCrudPage<T extends { id: number; is_active?: boole
             ))}
             {filteredItems.length === 0 && (
               <tr>
-                <td colSpan={columns.length + 2} className="px-5 py-12 text-center text-gray-400 dark:text-slate-500">
-                  {search.trim()
-                    ? "Qidiruv bo'yicha topilmadi"
-                    : "Ma'lumot yo'q"}
+                <td colSpan={columns.length + (hasStatus ? 2 : 1)} className="px-5 py-16 text-center">
+                  <div className="flex flex-col items-center gap-3 text-gray-400 dark:text-slate-500">
+                    <div className="w-14 h-14 rounded-2xl bg-gray-100 dark:bg-slate-800 flex items-center justify-center">
+                      <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+                      </svg>
+                    </div>
+                    <p className="text-sm font-medium">
+                      {search.trim() ? "Qidiruv bo'yicha topilmadi" : "Ma'lumot yo'q"}
+                    </p>
+                  </div>
                 </td>
               </tr>
             )}
@@ -416,56 +462,121 @@ export default function LookupCrudPage<T extends { id: number; is_active?: boole
 
       {/* Create / Edit Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/40 dark:bg-black/60 backdrop-blur-[2px] flex items-end sm:items-center justify-center z-50 p-0 sm:p-4 animate-fade-in">
-          <div className="md3-dialog w-full sm:max-w-md max-h-[92vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl p-5 sm:p-6 safe-pb">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-              {editingItem ? "Tahrirlash" : "Yangi qo'shish"}
-            </h3>
-
-            {formError && (
-              <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-xl text-sm">
-                {formError}
+        <div
+          className="fixed inset-0 bg-black/45 dark:bg-black/65 backdrop-blur-[3px] flex items-end sm:items-center justify-center z-50 p-0 sm:p-4 animate-modal-overlay"
+          onClick={() => !saving && setShowModal(false)}
+        >
+          <div
+            className="md3-dialog w-full sm:max-w-md max-h-[92vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl safe-pb animate-modal-panel"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center gap-3 px-5 sm:px-6 pt-5 pb-4 border-b border-gray-100 dark:border-slate-700/60">
+              <div
+                className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 ring-1 ${
+                  editingItem
+                    ? "bg-amber-100 text-amber-600 ring-amber-200/60 dark:bg-amber-900/30 dark:text-amber-400 dark:ring-amber-800/40"
+                    : "bg-primary-100 text-primary-600 ring-primary-200/60 dark:bg-primary-900/30 dark:text-primary-400 dark:ring-primary-800/40"
+                }`}
+              >
+                {editingItem ? (
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                ) : (
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                  </svg>
+                )}
               </div>
-            )}
-
-            <div className="space-y-4">
-              {formFields.map((f) => (
-                <div key={f.key}>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
-                    {f.label} {f.required && "*"}
-                  </label>
-                  {f.type === "select" ? (
-                    <Md3Select
-                      value={form[f.key] != null ? String(form[f.key]) : ""}
-                      onChange={(v) => setForm({ ...form, [f.key]: v })}
-                      placeholder="Tanlang..."
-                      options={(f.options ?? []).map((o) => ({
-                        value: String(o.value),
-                        label: o.label,
-                      }))}
-                    />
-                  ) : (
-                    <input
-                      type={f.type}
-                      value={form[f.key] ?? ""}
-                      onChange={(e) => setForm({ ...form, [f.key]: e.target.value })}
-                      className="input-field w-full"
-                      placeholder={f.placeholder || f.label}
-                    />
-                  )}
-                </div>
-              ))}
+              <div className="min-w-0 flex-1">
+                <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white leading-tight">
+                  {editingItem ? "Tahrirlash" : "Yangi qo'shish"}
+                </h3>
+                <p className="text-[12px] text-gray-500 dark:text-slate-400 leading-tight mt-0.5 truncate">
+                  {title}
+                </p>
+              </div>
+              <button
+                onClick={() => !saving && setShowModal(false)}
+                className="p-2 -mr-1 rounded-full text-gray-400 hover:text-gray-700 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-slate-700/60 transition-colors shrink-0"
+                aria-label="Yopish"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
             </div>
 
-            <div className="flex justify-end gap-3 mt-6">
+            {/* Body */}
+            <div className="px-5 sm:px-6 py-5">
+              {formError && (
+                <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-xl text-sm flex items-center gap-2 ring-1 ring-red-200/60 dark:ring-red-800/40">
+                  <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M5 13a7 7 0 1114 0v6a2 2 0 01-2 2H7a2 2 0 01-2-2v-6z" />
+                  </svg>
+                  <span>{formError}</span>
+                </div>
+              )}
+
+              <div className="space-y-4">
+                {formFields.map((f) => (
+                  <div key={f.key}>
+                    <label className="block text-[13px] font-semibold text-gray-700 dark:text-slate-300 mb-1.5">
+                      {f.label}
+                      {f.required && <span className="text-red-500 ml-0.5">*</span>}
+                    </label>
+                    {f.type === "select" ? (
+                      <Md3Select
+                        value={form[f.key] != null ? String(form[f.key]) : ""}
+                        onChange={(v) => setForm({ ...form, [f.key]: v })}
+                        placeholder="Tanlang..."
+                        options={(f.options ?? []).map((o) => ({
+                          value: String(o.value),
+                          label: o.label,
+                        }))}
+                      />
+                    ) : (
+                      <input
+                        type={f.type}
+                        value={form[f.key] ?? ""}
+                        onChange={(e) => setForm({ ...form, [f.key]: e.target.value })}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && !saving) handleSave();
+                        }}
+                        className="input-field w-full"
+                        placeholder={f.placeholder || f.label}
+                        autoFocus={f === formFields[0]}
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex justify-end gap-2 px-5 sm:px-6 pb-5 pt-1">
               <button
                 onClick={() => setShowModal(false)}
-                className="px-4 py-2 text-sm font-medium text-gray-600 dark:text-slate-400 hover:text-gray-800 dark:hover:text-white transition-colors"
+                disabled={saving}
+                className="px-5 h-11 rounded-full text-sm font-medium text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700/60 disabled:opacity-50 transition-colors"
               >
                 Bekor qilish
               </button>
-              <button onClick={handleSave} disabled={saving} className="btn-primary">
-                {saving ? "Saqlanmoqda..." : editingItem ? "Saqlash" : "Yaratish"}
+              <button onClick={handleSave} disabled={saving} className="btn-primary min-w-[110px]">
+                {saving ? (
+                  <>
+                    <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth={4} />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    Saqlanmoqda...
+                  </>
+                ) : editingItem ? (
+                  "Saqlash"
+                ) : (
+                  "Yaratish"
+                )}
               </button>
             </div>
           </div>
@@ -474,25 +585,33 @@ export default function LookupCrudPage<T extends { id: number; is_active?: boole
 
       {/* Delete Confirm */}
       {deleteId !== null && (
-        <div className="fixed inset-0 bg-black/40 dark:bg-black/60 backdrop-blur-[2px] flex items-end sm:items-center justify-center z-50 p-0 sm:p-4 animate-fade-in">
-          <div className="md3-dialog w-full sm:max-w-sm rounded-t-3xl sm:rounded-3xl p-6 text-center safe-pb">
-            <div className="w-12 h-12 mx-auto mb-4 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
-              <svg className="w-6 h-6 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+        <div
+          className="fixed inset-0 bg-black/45 dark:bg-black/65 backdrop-blur-[3px] flex items-end sm:items-center justify-center z-50 p-0 sm:p-4 animate-modal-overlay"
+          onClick={() => setDeleteId(null)}
+        >
+          <div
+            className="md3-dialog w-full sm:max-w-sm rounded-t-3xl sm:rounded-3xl p-6 text-center safe-pb animate-modal-panel"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="w-14 h-14 mx-auto mb-4 rounded-2xl bg-red-100 dark:bg-red-900/30 ring-1 ring-red-200/60 dark:ring-red-800/40 flex items-center justify-center">
+              <svg className="w-7 h-7 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
               </svg>
             </div>
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">O'chirishni tasdiqlang</h3>
-            <p className="text-sm text-gray-500 dark:text-slate-400 mb-6">Bu amalni qaytarib bo'lmaydi</p>
-            <div className="flex justify-center gap-3">
+            <p className="text-sm text-gray-500 dark:text-slate-400 mb-6">
+              Bu amalni qaytarib bo'lmaydi. Yozuv butunlay o'chiriladi.
+            </p>
+            <div className="flex gap-2">
               <button
                 onClick={() => setDeleteId(null)}
-                className="px-4 py-2 text-sm font-medium text-gray-600 dark:text-slate-400 hover:text-gray-800 dark:hover:text-white transition-colors"
+                className="flex-1 h-11 rounded-full text-sm font-medium text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700/60 transition-colors"
               >
                 Bekor qilish
               </button>
               <button
                 onClick={() => handleDelete(deleteId)}
-                className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-xl transition-colors"
+                className="flex-1 h-11 rounded-full text-sm font-semibold text-white bg-red-600 hover:bg-red-700 active:bg-red-800 shadow-sm shadow-red-600/25 transition-colors"
               >
                 O'chirish
               </button>
@@ -500,6 +619,46 @@ export default function LookupCrudPage<T extends { id: number; is_active?: boole
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/** Faol / Nofaol holat chipi — MD3 tonal pill. */
+function StatusPill({ active, interactive = false }: { active: boolean; interactive?: boolean }) {
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full ring-1 transition-colors ${
+        active
+          ? "bg-emerald-50 text-emerald-700 ring-emerald-200/60 dark:bg-emerald-900/20 dark:text-emerald-400 dark:ring-emerald-800/40"
+          : "bg-gray-100 text-gray-500 ring-gray-200/70 dark:bg-slate-700/40 dark:text-slate-400 dark:ring-slate-600/50"
+      } ${interactive ? (active ? "hover:bg-emerald-100 dark:hover:bg-emerald-900/30" : "hover:bg-gray-200 dark:hover:bg-slate-700/60") : ""}`}
+    >
+      <span className={`w-1.5 h-1.5 rounded-full ${active ? "bg-emerald-500" : "bg-gray-400 dark:bg-slate-500"}`} />
+      {active ? "Faol" : "Nofaol"}
+    </span>
+  );
+}
+
+/** Yuklanish paytidagi skeleton jadval — layout shift'ni kamaytiradi. */
+function TableSkeleton({ cols }: { cols: number }) {
+  return (
+    <div className="glass-card overflow-hidden">
+      <div className="bg-gray-50/80 dark:bg-slate-800/60 border-b border-gray-200/70 dark:border-slate-700/60 px-5 py-3.5">
+        <div className="h-3 w-24 rounded bg-gray-200 dark:bg-slate-700 animate-pulse" />
+      </div>
+      <div className="divide-y divide-gray-100/80 dark:divide-slate-700/40">
+        {Array.from({ length: 8 }).map((_, r) => (
+          <div key={r} className="flex items-center gap-4 px-5 py-4">
+            {Array.from({ length: cols }).map((_, c) => (
+              <div
+                key={c}
+                className="h-3.5 rounded bg-gray-200 dark:bg-slate-700 animate-pulse"
+                style={{ width: c === 0 ? "2rem" : c === 1 ? "40%" : "20%", animationDelay: `${(r * cols + c) * 25}ms` }}
+              />
+            ))}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

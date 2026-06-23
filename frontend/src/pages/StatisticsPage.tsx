@@ -1,4 +1,45 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+/**
+ * Modal hayot-sikli yordamchisi:
+ *  - `close()` exit animation'ni o'ynatib (310ms) so'ng `onClose`'ni bajaradi.
+ *  - ESC bilan yopish.
+ *  - Body scroll'ni lock qiladi va scrollbar kengligini padding bilan
+ *    kompensatsiya qiladi — modal ochilib/yopilganda orqa fon o'ngga
+ *    "sakramasligi" uchun (asosiy noqulaylik shu edi).
+ */
+function useModalClose(onClose: () => void) {
+  const [closing, setClosing] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const close = useCallback(() => {
+    setClosing(true);
+    timerRef.current = setTimeout(onClose, 310);
+  }, [onClose]);
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") close();
+    };
+    document.addEventListener("keydown", handler);
+
+    // Scrollbar yo'qolishi → layout shift'ni oldini olish
+    const scrollbarW = window.innerWidth - document.documentElement.clientWidth;
+    const prevOverflow = document.body.style.overflow;
+    const prevPadRight = document.body.style.paddingRight;
+    document.body.style.overflow = "hidden";
+    if (scrollbarW > 0) document.body.style.paddingRight = `${scrollbarW}px`;
+
+    return () => {
+      document.removeEventListener("keydown", handler);
+      document.body.style.overflow = prevOverflow;
+      document.body.style.paddingRight = prevPadRight;
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, [close]);
+
+  return { closing, close };
+}
 import type {
   DashboardStatsResponse,
   GenderStat,
@@ -946,23 +987,23 @@ function SummaryCard({
   const s = VARIANT_STYLES[variant];
   return (
     <div
-      className={`relative overflow-hidden rounded-xl ring-1 ${s.bg} ${s.ring} p-2.5 sm:p-3 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200`}
+      className={`relative overflow-hidden rounded-xl ring-1 ${s.bg} ${s.ring} p-2 sm:p-2.5 shadow-sm hover:shadow-md transition-all duration-200`}
     >
-      <div className="flex items-center justify-between gap-2 mb-1.5">
-        <p className="text-[11px] sm:text-[11.5px] font-semibold text-gray-700 dark:text-slate-300 leading-none">
-          {title}
-        </p>
+      <div className="flex items-center gap-2">
         <div
-          className={`w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center shrink-0 ${s.iconBg}`}
+          className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${s.iconBg}`}
         >
           {icon}
         </div>
+        <p className="min-w-0 flex-1 truncate text-[10.5px] sm:text-[11px] font-semibold text-gray-600 dark:text-slate-400 leading-tight">
+          {title}
+        </p>
+        <p
+          className={`text-lg sm:text-2xl font-bold tabular-nums leading-none ${s.valueColor}`}
+        >
+          {breakdown.total.toLocaleString("uz-UZ")}
+        </p>
       </div>
-      <p
-        className={`text-xl sm:text-2xl xl:text-3xl font-bold tabular-nums leading-none ${s.valueColor}`}
-      >
-        {breakdown.total.toLocaleString("uz-UZ")}
-      </p>
       <div className="mt-1.5 flex flex-wrap items-center gap-1 text-[10.5px] sm:text-[11px]">
         <GenderChip gender="male" count={breakdown.male} />
         <GenderChip gender="female" count={breakdown.female} />
@@ -978,40 +1019,42 @@ function CheatingCard({ cheating }: { cheating: StatGroup["cheating"] }) {
   const s = VARIANT_STYLES.danger;
   return (
     <div
-      className={`relative overflow-hidden rounded-xl ring-1 ${s.bg} ${s.ring} p-2.5 sm:p-3 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200`}
+      className={`relative overflow-hidden rounded-xl ring-1 ${s.bg} ${s.ring} p-2 sm:p-2.5 shadow-sm hover:shadow-md transition-all duration-200`}
     >
-      <div className="flex items-center justify-between gap-2 mb-1.5">
-        <p className="text-[11px] sm:text-[11.5px] font-semibold text-gray-700 dark:text-slate-300 leading-none">
-          Chetlatilgan
-        </p>
+      <div className="flex items-center gap-2">
         <div
-          className={`w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center shrink-0 ${s.iconBg}`}
+          className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${s.iconBg}`}
         >
           <ShieldIcon />
         </div>
+        <p className="min-w-0 flex-1 truncate text-[10.5px] sm:text-[11px] font-semibold text-gray-600 dark:text-slate-400 leading-tight">
+          Chetlatilgan
+        </p>
+        <p
+          className={`text-lg sm:text-2xl font-bold tabular-nums leading-none ${s.valueColor}`}
+        >
+          {cheating.total.toLocaleString("uz-UZ")}
+        </p>
       </div>
-      <p
-        className={`text-xl sm:text-2xl xl:text-3xl font-bold tabular-nums leading-none ${s.valueColor}`}
-      >
-        {cheating.total.toLocaleString("uz-UZ")}
-      </p>
-      <div className="mt-1.5 grid grid-cols-2 gap-1 text-[10px] sm:text-[10.5px]">
-        <div className="bg-white/70 dark:bg-slate-800/60 rounded-md px-1.5 py-1 ring-1 ring-red-100/60 dark:ring-red-900/30">
-          <p className="text-gray-500 dark:text-slate-400 leading-none">
-            Kirishda
-          </p>
-          <p className="font-bold text-red-700 dark:text-red-300 tabular-nums leading-tight mt-0.5">
+      <div className="mt-1.5 flex flex-wrap items-center gap-1 text-[10.5px] sm:text-[11px]">
+        <span
+          title="Binoga kirishda"
+          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md font-medium leading-none bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300"
+        >
+          <KeyIcon className="w-3 h-3 shrink-0 opacity-90" />
+          <span className="tabular-nums font-bold">
             {cheating.at_entry.toLocaleString("uz-UZ")}
-          </p>
-        </div>
-        <div className="bg-white/70 dark:bg-slate-800/60 rounded-md px-1.5 py-1 ring-1 ring-red-100/60 dark:ring-red-900/30">
-          <p className="text-gray-500 dark:text-slate-400 leading-none">
-            Testda
-          </p>
-          <p className="font-bold text-red-700 dark:text-red-300 tabular-nums leading-tight mt-0.5">
+          </span>
+        </span>
+        <span
+          title="Test jarayonida"
+          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md font-medium leading-none bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300"
+        >
+          <BookIcon className="w-3 h-3 shrink-0 opacity-90" />
+          <span className="tabular-nums font-bold">
             {cheating.during_test.toLocaleString("uz-UZ")}
-          </p>
-        </div>
+          </span>
+        </span>
       </div>
     </div>
   );
@@ -1180,7 +1223,7 @@ function RegionCard({
           onClick();
         }
       }}
-      className={`glass-card p-3 sm:p-3.5 hover:-translate-y-0.5 transition-all duration-200 group ${
+      className={`glass-card p-2.5 sm:p-3 hover:-translate-y-0.5 transition-all duration-200 group ${
         onClick
           ? "cursor-pointer hover:shadow-md hover:ring-1 hover:ring-primary-200 dark:hover:ring-primary-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400"
           : ""
@@ -1190,45 +1233,33 @@ function RegionCard({
       }`}
     >
       {/* Header: badge + nom + davomat % */}
-      <header className="flex items-center justify-between gap-2.5 mb-2.5">
-        <div className="flex items-center gap-2.5 min-w-0">
+      <header className="flex items-center justify-between gap-2 mb-2">
+        <div className="flex items-center gap-2 min-w-0">
           {/* MD3 filled-tonal badge */}
-          <div className="relative shrink-0">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary-500 to-primary-700 text-white font-bold flex items-center justify-center shadow-md shadow-primary-500/25 ring-1 ring-white/20">
-              <span className="text-[13px] tabular-nums leading-none">
-                {item.region_number}
-              </span>
-            </div>
+          <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-primary-500 to-primary-700 text-white font-bold flex items-center justify-center shadow-sm shadow-primary-500/25 ring-1 ring-white/20 shrink-0">
+            <span className="text-[12px] tabular-nums leading-none">
+              {item.region_number}
+            </span>
           </div>
-          <div className="min-w-0">
-            <p
-              className="text-[13px] sm:text-sm font-semibold text-gray-900 dark:text-white truncate leading-tight"
-              title={item.region_name || `Region #${item.region_number}`}
-            >
-              {item.region_name || `Region #${item.region_number}`}
-            </p>
-            <p className="text-[10.5px] text-gray-500 dark:text-slate-400 leading-none mt-0.5">
-              Region №{item.region_number}
-            </p>
-          </div>
+          <p
+            className="min-w-0 truncate text-[13px] sm:text-sm font-semibold text-gray-900 dark:text-white leading-tight"
+            title={item.region_name || `Region #${item.region_number}`}
+          >
+            {item.region_name || `Region #${item.region_number}`}
+          </p>
         </div>
 
         {/* Davomat foizi — semantik rangda */}
-        <div className="flex flex-col items-end shrink-0">
-          <span
-            className={`text-base sm:text-[17px] font-bold tabular-nums leading-none ${percentText}`}
-          >
-            {attendancePercent}%
-          </span>
-          <span className="text-[10.5px] font-medium text-gray-600 dark:text-slate-300 leading-none mt-0.5">
-            davomat
-          </span>
-        </div>
+        <span
+          className={`shrink-0 text-base sm:text-[17px] font-bold tabular-nums leading-none ${percentText}`}
+        >
+          {attendancePercent}%
+        </span>
       </header>
 
       {/* Linear progress — MD3 thin track */}
       <div
-        className="h-1 rounded-full bg-gray-100 dark:bg-slate-700/50 overflow-hidden mb-2.5"
+        className="h-1 rounded-full bg-gray-100 dark:bg-slate-700/50 overflow-hidden mb-2"
         role="progressbar"
         aria-valuenow={attendancePercent}
         aria-valuemin={0}
@@ -1241,7 +1272,7 @@ function RegionCard({
       </div>
 
       {/* 4 stat tile */}
-      <div className="grid grid-cols-4 gap-1.5 sm:gap-2">
+      <div className="grid grid-cols-4 gap-1 sm:gap-1.5">
         <MiniStat
           label="Umumiy"
           breakdown={item.stats.total}
@@ -1262,7 +1293,7 @@ function RegionCard({
 
       {/* Footer — binolar soni + "ko'rsatish" affordance (faqat clickable bo'lsa) */}
       {onClick && (
-        <div className="mt-2.5 flex items-center justify-between text-[11px] text-gray-500 dark:text-slate-400">
+        <div className="mt-2 flex items-center justify-between text-[11px] text-gray-500 dark:text-slate-400">
           <span className="inline-flex items-center gap-1">
             <BuildingIcon className="w-3.5 h-3.5" />
             <span>
@@ -1304,29 +1335,29 @@ function MiniStat({
   const s = VARIANT_STYLES[accent];
   return (
     <div
-      className={`rounded-xl ring-1 ${s.bg} ${s.ring} px-2 py-1.5 sm:px-2.5 sm:py-2 transition-shadow duration-200 hover:shadow-sm`}
+      className={`rounded-lg ring-1 ${s.bg} ${s.ring} px-1.5 py-1 sm:px-2 sm:py-1.5 transition-shadow duration-200 hover:shadow-sm`}
     >
-      <p className="text-[10.5px] sm:text-[11px] font-semibold text-gray-600 dark:text-slate-300 leading-none">
+      <p className="text-[10px] sm:text-[10.5px] font-semibold text-gray-600 dark:text-slate-300 leading-none">
         {label}
       </p>
       <p
-        className={`text-base sm:text-lg font-bold tabular-nums leading-tight mt-1 ${s.valueColor}`}
+        className={`text-[15px] sm:text-lg font-bold tabular-nums leading-tight mt-0.5 ${s.valueColor}`}
       >
         {breakdown.total.toLocaleString("uz-UZ")}
       </p>
-      <div className="flex items-center gap-1.5 mt-1 text-[10px] sm:text-[10.5px] text-gray-600 dark:text-slate-300 leading-none">
+      <div className="flex items-center gap-1.5 mt-0.5 text-[10px] sm:text-[10.5px] text-gray-600 dark:text-slate-300 leading-none">
         <span
-          className="inline-flex items-center gap-0.5"
+          className="inline-flex items-center gap-0.5 text-sky-600 dark:text-sky-400"
           title={`Erkak: ${breakdown.male}`}
         >
-          <span className="w-1.5 h-1.5 rounded-full bg-sky-500" />
+          <MaleIcon className="w-3 h-3 shrink-0 opacity-90" />
           <span className="tabular-nums font-semibold">{breakdown.male}</span>
         </span>
         <span
-          className="inline-flex items-center gap-0.5"
+          className="inline-flex items-center gap-0.5 text-pink-600 dark:text-pink-400"
           title={`Ayol: ${breakdown.female}`}
         >
-          <span className="w-1.5 h-1.5 rounded-full bg-pink-500" />
+          <FemaleIcon className="w-3 h-3 shrink-0 opacity-90" />
           <span className="tabular-nums font-semibold">{breakdown.female}</span>
         </span>
         {breakdown.unknown > 0 && (
@@ -1334,7 +1365,7 @@ function MiniStat({
             className="inline-flex items-center gap-0.5 text-gray-400"
             title={`Jinsi noma'lum: ${breakdown.unknown}`}
           >
-            <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+            <span className="font-bold leading-none">?</span>
             <span className="tabular-nums">{breakdown.unknown}</span>
           </span>
         )}
@@ -1348,17 +1379,17 @@ function MiniCheating({ cheating }: { cheating: StatGroup["cheating"] }) {
   const s = VARIANT_STYLES.danger;
   return (
     <div
-      className={`rounded-xl ring-1 ${s.bg} ${s.ring} px-2 py-1.5 sm:px-2.5 sm:py-2 transition-shadow duration-200 hover:shadow-sm`}
+      className={`rounded-lg ring-1 ${s.bg} ${s.ring} px-1.5 py-1 sm:px-2 sm:py-1.5 transition-shadow duration-200 hover:shadow-sm`}
     >
-      <p className="text-[10.5px] sm:text-[11px] font-semibold text-gray-600 dark:text-slate-300 leading-none">
+      <p className="text-[10px] sm:text-[10.5px] font-semibold text-gray-600 dark:text-slate-300 leading-none">
         Chetlat.
       </p>
       <p
-        className={`text-base sm:text-lg font-bold tabular-nums leading-tight mt-1 ${s.valueColor}`}
+        className={`text-[15px] sm:text-lg font-bold tabular-nums leading-tight mt-0.5 ${s.valueColor}`}
       >
         {cheating.total.toLocaleString("uz-UZ")}
       </p>
-      <div className="flex items-center gap-1.5 mt-1 text-[10px] sm:text-[10.5px] text-gray-600 dark:text-slate-300 leading-none">
+      <div className="flex items-center gap-1.5 mt-0.5 text-[10px] sm:text-[10.5px] text-gray-600 dark:text-slate-300 leading-none">
         <span
           title="Binoga kirishda"
           className="inline-flex items-center gap-0.5"
@@ -1397,20 +1428,7 @@ function RegionZonesModal({
   region: RegionStatItem;
   onClose: () => void;
 }) {
-  // ESC bosilganda yopish
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", handler);
-    // Body scroll'ni vaqtincha to'xtatamiz — modal scrollida adashmaslik uchun
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.removeEventListener("keydown", handler);
-      document.body.style.overflow = prev;
-    };
-  }, [onClose]);
+  const { closing, close } = useModalClose(onClose);
 
   const total = region.stats.total.total;
   const attended = region.stats.attended.total;
@@ -1432,14 +1450,14 @@ function RegionZonesModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/45 dark:bg-black/65 backdrop-blur-[3px] animate-fade-in p-0 sm:p-4"
-      onClick={onClose}
+      className={`fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/45 dark:bg-black/65 backdrop-blur-[3px] p-0 sm:p-4 ${closing ? "animate-modal-overlay-out" : "animate-modal-overlay"}`}
+      onClick={close}
       role="dialog"
       aria-modal="true"
       aria-label={`${region.region_name} — binolar bo'yicha taqsimot`}
     >
       <div
-        className="md3-dialog w-full sm:max-w-4xl max-h-[92vh] overflow-hidden rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col safe-pb"
+        className={`md3-dialog w-full sm:max-w-4xl max-h-[92vh] overflow-hidden rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col safe-pb ${closing ? "animate-modal-panel-out" : "animate-modal-panel"}`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -1462,7 +1480,7 @@ function RegionZonesModal({
             </div>
 
             <button
-              onClick={onClose}
+              onClick={close}
               className="p-2 rounded-full text-gray-400 hover:text-gray-700 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-slate-700/60 transition-colors shrink-0"
               aria-label="Yopish"
             >
@@ -1589,18 +1607,7 @@ function AllRegionsModal({
   contextLabel: string;
   onClose: () => void;
 }) {
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", handler);
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.removeEventListener("keydown", handler);
-      document.body.style.overflow = prev;
-    };
-  }, [onClose]);
+  const { closing, close } = useModalClose(onClose);
 
   const pct = (att: number, tot: number) =>
     tot > 0 ? Math.round((att / tot) * 1000) / 10 : 0;
@@ -1624,14 +1631,14 @@ function AllRegionsModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/45 dark:bg-black/65 backdrop-blur-[3px] animate-fade-in p-0 sm:p-4"
-      onClick={onClose}
+      className={`fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/45 dark:bg-black/65 backdrop-blur-[3px] p-0 sm:p-4 ${closing ? "animate-modal-overlay-out" : "animate-modal-overlay"}`}
+      onClick={close}
       role="dialog"
       aria-modal="true"
       aria-label="Barcha viloyatlar bo'yicha taqsimot"
     >
       <div
-        className="md3-dialog w-full sm:max-w-6xl max-h-[92vh] overflow-hidden rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col safe-pb"
+        className={`md3-dialog w-full sm:max-w-7xl max-h-[96vh] overflow-hidden rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col safe-pb ${closing ? "animate-modal-panel-out" : "animate-modal-panel"}`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -1652,7 +1659,7 @@ function AllRegionsModal({
             </div>
 
             <button
-              onClick={onClose}
+              onClick={close}
               className="p-2 rounded-full text-gray-400 hover:text-gray-700 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-slate-700/60 transition-colors shrink-0"
               aria-label="Yopish"
             >

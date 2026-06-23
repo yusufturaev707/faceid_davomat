@@ -10,4 +10,6 @@ class Region(Base):
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     name: Mapped[str] = mapped_column(String(100))
     number: Mapped[int] = mapped_column(unique=True)
+    s_number: Mapped[int] = mapped_column(unique=True, default=0)
+    k_number: Mapped[int] = mapped_column(unique=True, default=0)
     is_active: Mapped[bool] = mapped_column(default=True)

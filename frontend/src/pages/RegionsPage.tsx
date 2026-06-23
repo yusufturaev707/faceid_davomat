@@ -11,10 +11,14 @@ export default function RegionsPage() {
         { key: "id", label: "ID" },
         { key: "name", label: "Nomi" },
         { key: "number", label: "Raqam" },
+        { key: "s_number", label: "S-raqam" },
+        { key: "k_number", label: "K-raqam" },
       ]}
       formFields={[
         { key: "name", label: "Nomi", type: "text", required: true },
         { key: "number", label: "Raqam", type: "number", required: true },
+        { key: "s_number", label: "S-raqam", type: "number", required: true },
+        { key: "k_number", label: "K-raqam", type: "number", required: true },
       ]}
       fetchAll={getRegionsListApi}
       createItem={createRegionApi}

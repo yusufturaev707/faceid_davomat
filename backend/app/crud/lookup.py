@@ -24,6 +24,8 @@ from app.models.zone import Zone
 
 _UNIQUE_FIELD_LABELS: dict[str, str] = {
     "number": "Raqam",
+    "s_number": "S-raqam",
+    "k_number": "K-raqam",
     "key": "Kalit",
     "name": "Nomi",
     "username": "Foydalanuvchi nomi",

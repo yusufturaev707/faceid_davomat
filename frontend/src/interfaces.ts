@@ -492,17 +492,23 @@ export interface LookupSessionStateResponse {
 export interface LookupRegionCreate {
   name: string;
   number: number;
+  s_number: number;
+  k_number: number;
   is_active?: boolean;
 }
 export interface LookupRegionUpdate {
   name?: string;
   number?: number;
+  s_number?: number;
+  k_number?: number;
   is_active?: boolean;
 }
 export interface LookupRegionResponse {
   id: number;
   name: string;
   number: number;
+  s_number: number;
+  k_number: number;
   is_active: boolean;
   created_at: string;
 }

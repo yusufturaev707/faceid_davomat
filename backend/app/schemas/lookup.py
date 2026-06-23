@@ -69,17 +69,23 @@ class SessionStateResponse(BaseModel):
 class RegionCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     number: int
+    s_number: int
+    k_number: int
     is_active: bool = True
 
 class RegionUpdate(BaseModel):
     name: str | None = Field(default=None, max_length=100)
     number: int | None = None
+    s_number: int | None = None
+    k_number: int | None = None
     is_active: bool | None = None
 
 class RegionResponse(BaseModel):
     id: int
     name: str
     number: int
+    s_number: int
+    k_number: int
     is_active: bool
     created_at: datetime
     model_config = {"from_attributes": True}
