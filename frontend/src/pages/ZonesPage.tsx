@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import LookupCrudPage, { type Column, type FormField } from "../components/LookupCrudPage";
 import { getZonesListApi, createZoneApi, updateZoneApi, deleteZoneApi, getRegionsListApi } from "../api";
-import type { LookupRegionResponse } from "../interfaces";
+import type { LookupRegionResponse, LookupZoneResponse } from "../interfaces";
 import { PERM } from "../permissions";
 
 export default function ZonesPage() {
@@ -14,6 +14,21 @@ export default function ZonesPage() {
   }, []);
 
   const regionMap = Object.fromEntries(regions.map((r) => [r.id, r.name]));
+
+  // Tartib: avval viloyat raqami (region.number), so'ng shu viloyatning bino
+  // raqami (zone.number) bo'yicha. Viloyat raqami topilmasa oxiriga suriladi.
+  const sortItems = useCallback(
+    (items: LookupZoneResponse[]) => {
+      const numMap = new Map(regions.map((r) => [r.id, r.number]));
+      return [...items].sort((a, b) => {
+        const ra = numMap.get(a.region_id) ?? Number.MAX_SAFE_INTEGER;
+        const rb = numMap.get(b.region_id) ?? Number.MAX_SAFE_INTEGER;
+        if (ra !== rb) return ra - rb;
+        return (a.number ?? 0) - (b.number ?? 0);
+      });
+    },
+    [regions],
+  );
 
   const columns: Column[] = [
     { key: "id", label: "ID" },
@@ -45,6 +60,7 @@ export default function ZonesPage() {
       columns={columns}
       formFields={formFields}
       fetchAll={getZonesListApi}
+      sortItems={sortItems}
       createItem={createZoneApi}
       updateItem={updateZoneApi}
       deleteItem={deleteZoneApi}

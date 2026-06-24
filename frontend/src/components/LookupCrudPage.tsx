@@ -61,6 +61,10 @@ interface Props<T extends { id: number }> {
    *  (case-insensitive substring match). Pagination + total auto-update. */
   searchKeys?: string[];
   searchPlaceholder?: string;
+  /** Ixtiyoriy: ro'yxatni ko'rsatishdan oldin tartiblash (masalan, Binolar —
+   *  viloyat raqami, so'ng bino raqami bo'yicha). Filtr va paginatsiyadan oldin
+   *  qo'llanadi. */
+  sortItems?: (items: T[]) => T[];
 }
 
 export default function LookupCrudPage<T extends { id: number; is_active?: boolean }>({
@@ -77,6 +81,7 @@ export default function LookupCrudPage<T extends { id: number; is_active?: boole
   deletePermission,
   searchKeys,
   searchPlaceholder,
+  sortItems,
 }: Props<T>) {
   const [items, setItems] = useState<T[]>([]);
   const [loading, setLoading] = useState(true);
@@ -123,17 +128,23 @@ export default function LookupCrudPage<T extends { id: number; is_active?: boole
     };
   }, [showModal, deleteId]);
 
+  // Tartiblangan ro'yxat — `sortItems` berilsa qo'llanadi (filtr/paginatsiyadan oldin)
+  const sortedItems = useMemo(
+    () => (sortItems ? sortItems(items) : items),
+    [items, sortItems],
+  );
+
   const filteredItems = useMemo(() => {
-    if (!searchKeys || searchKeys.length === 0) return items;
+    if (!searchKeys || searchKeys.length === 0) return sortedItems;
     const q = search.trim().toLowerCase();
-    if (!q) return items;
-    return items.filter((it) =>
+    if (!q) return sortedItems;
+    return sortedItems.filter((it) =>
       searchKeys.some((k) => {
         const val = (it as any)[k];
         return val != null && String(val).toLowerCase().includes(q);
       }),
     );
-  }, [items, search, searchKeys]);
+  }, [sortedItems, search, searchKeys]);
 
   const totalPages = Math.max(1, Math.ceil(filteredItems.length / PAGE_SIZE));
 
@@ -338,48 +349,52 @@ export default function LookupCrudPage<T extends { id: number; is_active?: boole
         <div className="overflow-x-auto" style={{ WebkitOverflowScrolling: "touch" }}>
         <table className="w-full min-w-[600px] border-collapse">
           <thead>
-            <tr className="bg-gray-50/80 dark:bg-slate-800/60 border-b border-gray-200/70 dark:border-slate-700/60">
-              {columns.map((col, ci) => (
+            <tr className="bg-gray-50/70 dark:bg-slate-800/40 border-b border-gray-200/70 dark:border-slate-700/50">
+              {columns.map((col) => (
                 <th
                   key={col.key}
-                  className={`text-left px-5 py-3.5 text-[11px] font-bold text-gray-500 dark:text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap ${
-                    ci === 0 ? "first:rounded-tl-2xl" : ""
-                  }`}
+                  className="text-left px-5 py-3.5 text-[11px] font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap"
                 >
                   {col.label}
                 </th>
               ))}
               {hasStatus && (
-                <th className="text-left px-5 py-3.5 text-[11px] font-bold text-gray-500 dark:text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">
+                <th className="text-left px-5 py-3.5 text-[11px] font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">
                   Holat
                 </th>
               )}
-              <th className="text-right px-5 py-3.5 text-[11px] font-bold text-gray-500 dark:text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">
+              <th className="text-right px-5 py-3.5 text-[11px] font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-[0.08em] whitespace-nowrap">
                 Amallar
               </th>
             </tr>
           </thead>
           <tbody>
-            {pagedItems.map((item) => (
+            {pagedItems.map((item, idx) => (
               <tr
                 key={item.id}
-                className="group border-b border-gray-100/80 dark:border-slate-700/40 last:border-0 hover:bg-primary-50/40 dark:hover:bg-primary-900/10 transition-colors"
+                className={`group border-b border-gray-100/70 dark:border-slate-700/30 last:border-0 transition-colors duration-150 ${
+                  idx % 2 === 1
+                    ? "bg-gray-50/40 dark:bg-slate-800/20"
+                    : ""
+                } hover:bg-primary-50/50 dark:hover:bg-primary-900/15`}
               >
                 {columns.map((col, ci) => (
                   <td
                     key={col.key}
-                    className={`px-5 py-3.5 text-sm ${
-                      ci === 0
-                        ? "text-gray-400 dark:text-slate-500 font-mono tabular-nums text-[12.5px]"
-                        : "text-gray-700 dark:text-slate-200"
+                    className={`px-5 py-4 text-sm leading-relaxed ${
+                      ci === 0 ? "" : "text-gray-600 dark:text-slate-300"
                     }`}
                   >
                     {col.render
                       ? col.render((item as any)[col.key], item)
                       : ci === 0
-                        ? `#${(item as any)[col.key]}`
+                        ? (
+                            <span className="inline-flex items-center justify-center min-w-[2.25rem] px-2 py-0.5 rounded-md bg-gray-100 dark:bg-slate-700/50 text-gray-500 dark:text-slate-400 font-mono tabular-nums text-[11px] font-medium ring-1 ring-inset ring-gray-200/50 dark:ring-slate-600/40 group-hover:bg-primary-100/60 group-hover:text-primary-700 dark:group-hover:bg-primary-900/30 dark:group-hover:text-primary-300 transition-colors">
+                              {(item as any)[col.key]}
+                            </span>
+                          )
                         : (col.key === "name" ? (
-                            <span className="font-semibold text-gray-900 dark:text-white">
+                            <span className="font-semibold text-gray-800 dark:text-slate-100">
                               {String((item as any)[col.key] ?? "—")}
                             </span>
                           ) : (
@@ -388,7 +403,7 @@ export default function LookupCrudPage<T extends { id: number; is_active?: boole
                   </td>
                 ))}
                 {hasStatus && (
-                  <td className="px-5 py-3.5">
+                  <td className="px-5 py-4">
                     <PermissionGate
                       permission={updatePermission}
                       fallback={<StatusPill active={!!(item as any).is_active} />}
@@ -403,7 +418,7 @@ export default function LookupCrudPage<T extends { id: number; is_active?: boole
                     </PermissionGate>
                   </td>
                 )}
-                <td className="px-5 py-3 text-right">
+                <td className="px-5 py-4 text-right">
                   <div className="flex items-center justify-end gap-1.5">
                     <PermissionGate permission={updatePermission}>
                       <button
