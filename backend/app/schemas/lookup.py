@@ -71,6 +71,7 @@ class RegionCreate(BaseModel):
     number: int
     s_number: int
     k_number: int
+    is_have_part: bool = False
     is_active: bool = True
 
 class RegionUpdate(BaseModel):
@@ -78,6 +79,7 @@ class RegionUpdate(BaseModel):
     number: int | None = None
     s_number: int | None = None
     k_number: int | None = None
+    is_have_part: bool | None = None
     is_active: bool | None = None
 
 class RegionResponse(BaseModel):
@@ -86,6 +88,7 @@ class RegionResponse(BaseModel):
     number: int
     s_number: int
     k_number: int
+    is_have_part: bool
     is_active: bool
     created_at: datetime
     model_config = {"from_attributes": True}
@@ -96,12 +99,14 @@ class ZoneCreate(BaseModel):
     region_id: int
     name: str = Field(..., min_length=1, max_length=100)
     number: int
+    is_part: bool = False
     is_active: bool = True
 
 class ZoneUpdate(BaseModel):
     region_id: int | None = None
     name: str | None = Field(default=None, max_length=100)
     number: int | None = None
+    is_part: bool | None = None
     is_active: bool | None = None
 
 class ZoneResponse(BaseModel):
@@ -109,6 +114,7 @@ class ZoneResponse(BaseModel):
     region_id: int
     name: str
     number: int
+    is_part: bool
     is_active: bool
     created_at: datetime
     model_config = {"from_attributes": True}

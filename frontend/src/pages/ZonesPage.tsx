@@ -39,6 +39,7 @@ export default function ZonesPage() {
       label: "Hudud",
       render: (val: number) => regionMap[val] || `#${val}`,
     },
+    { key: "is_part", label: "Bo'lim" },
   ];
 
   const formFields: FormField[] = [
@@ -51,6 +52,7 @@ export default function ZonesPage() {
       required: true,
       options: regions.map((r) => ({ value: r.id, label: r.name })),
     },
+    { key: "is_part", label: "Bo'limga tegishli", type: "checkbox" },
   ];
 
   return (
@@ -76,6 +78,14 @@ export default function ZonesPage() {
           options: [
             { value: "true", label: "Faol" },
             { value: "false", label: "Nofaol" },
+          ],
+        },
+        {
+          key: "is_part",
+          label: "Bo'lim",
+          options: [
+            { value: "true", label: "Ha" },
+            { value: "false", label: "Yo'q" },
           ],
         },
       ]}

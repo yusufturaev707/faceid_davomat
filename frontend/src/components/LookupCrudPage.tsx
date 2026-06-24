@@ -38,7 +38,7 @@ export interface Column {
 export interface FormField {
   key: string;
   label: string;
-  type: "text" | "number" | "select";
+  type: "text" | "number" | "select" | "checkbox";
   required?: boolean;
   placeholder?: string;
   options?: { value: string | number; label: string }[];
@@ -216,7 +216,7 @@ export default function LookupCrudPage<T extends { id: number; is_active?: boole
   function openCreate() {
     const initial: Record<string, any> = {};
     formFields.forEach((f) => {
-      initial[f.key] = f.type === "number" ? "" : "";
+      initial[f.key] = f.type === "checkbox" ? false : "";
     });
     setForm(initial);
     setEditingItem(null);
@@ -227,7 +227,10 @@ export default function LookupCrudPage<T extends { id: number; is_active?: boole
   function openEdit(item: T) {
     const values: Record<string, any> = {};
     formFields.forEach((f) => {
-      values[f.key] = (item as any)[f.key] ?? "";
+      values[f.key] =
+        f.type === "checkbox"
+          ? !!(item as any)[f.key]
+          : (item as any)[f.key] ?? "";
     });
     setForm(values);
     setEditingItem(item);
@@ -252,6 +255,8 @@ export default function LookupCrudPage<T extends { id: number; is_active?: boole
         const val = form[f.key];
         if (f.type === "number") {
           payload[f.key] = val === "" ? undefined : Number(val);
+        } else if (f.type === "checkbox") {
+          payload[f.key] = Boolean(val);
         } else {
           payload[f.key] = val;
         }
@@ -472,13 +477,15 @@ export default function LookupCrudPage<T extends { id: number; is_active?: boole
                               {rowNumbering ? rowNumber : (item as any)[col.key]}
                             </span>
                           )
-                        : (col.key === "name" ? (
+                        : col.key === "name" ? (
                             <span className="font-semibold text-gray-800 dark:text-slate-100">
                               {String((item as any)[col.key] ?? "—")}
                             </span>
+                          ) : typeof (item as any)[col.key] === "boolean" ? (
+                            <YesNoPill value={(item as any)[col.key]} />
                           ) : (
                             String((item as any)[col.key] ?? "—")
-                          ))}
+                          )}
                   </td>
                 ))}
                 {hasStatus && (
@@ -617,37 +624,46 @@ export default function LookupCrudPage<T extends { id: number; is_active?: boole
               )}
 
               <div className="space-y-4">
-                {formFields.map((f) => (
-                  <div key={f.key}>
-                    <label className="block text-[13px] font-semibold text-gray-700 dark:text-slate-300 mb-1.5">
-                      {f.label}
-                      {f.required && <span className="text-red-500 ml-0.5">*</span>}
-                    </label>
-                    {f.type === "select" ? (
-                      <Md3Select
-                        value={form[f.key] != null ? String(form[f.key]) : ""}
-                        onChange={(v) => setForm({ ...form, [f.key]: v })}
-                        placeholder="Tanlang..."
-                        options={(f.options ?? []).map((o) => ({
-                          value: String(o.value),
-                          label: o.label,
-                        }))}
-                      />
-                    ) : (
-                      <input
-                        type={f.type}
-                        value={form[f.key] ?? ""}
-                        onChange={(e) => setForm({ ...form, [f.key]: e.target.value })}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" && !saving) handleSave();
-                        }}
-                        className="input-field w-full"
-                        placeholder={f.placeholder || f.label}
-                        autoFocus={f === formFields[0]}
-                      />
-                    )}
-                  </div>
-                ))}
+                {formFields.map((f) =>
+                  f.type === "checkbox" ? (
+                    <ToggleField
+                      key={f.key}
+                      label={f.label}
+                      checked={!!form[f.key]}
+                      onChange={(c) => setForm({ ...form, [f.key]: c })}
+                    />
+                  ) : (
+                    <div key={f.key}>
+                      <label className="block text-[13px] font-semibold text-gray-700 dark:text-slate-300 mb-1.5">
+                        {f.label}
+                        {f.required && <span className="text-red-500 ml-0.5">*</span>}
+                      </label>
+                      {f.type === "select" ? (
+                        <Md3Select
+                          value={form[f.key] != null ? String(form[f.key]) : ""}
+                          onChange={(v) => setForm({ ...form, [f.key]: v })}
+                          placeholder="Tanlang..."
+                          options={(f.options ?? []).map((o) => ({
+                            value: String(o.value),
+                            label: o.label,
+                          }))}
+                        />
+                      ) : (
+                        <input
+                          type={f.type}
+                          value={form[f.key] ?? ""}
+                          onChange={(e) => setForm({ ...form, [f.key]: e.target.value })}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && !saving) handleSave();
+                          }}
+                          className="input-field w-full"
+                          placeholder={f.placeholder || f.label}
+                          autoFocus={f === formFields[0]}
+                        />
+                      )}
+                    </div>
+                  ),
+                )}
               </div>
             </div>
 
@@ -733,6 +749,73 @@ function StatusPill({ active, interactive = false }: { active: boolean; interact
       <span className={`w-1.5 h-1.5 rounded-full ${active ? "bg-emerald-500" : "bg-gray-400 dark:bg-slate-500"}`} />
       {active ? "Faol" : "Nofaol"}
     </span>
+  );
+}
+
+/** Ha / Yo'q tonal pill — boolean ustun qiymatlari uchun (masalan Bo'limli). */
+function YesNoPill({ value }: { value: boolean }) {
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full ring-1 ${
+        value
+          ? "bg-primary-50 text-primary-700 ring-primary-200/60 dark:bg-primary-900/20 dark:text-primary-300 dark:ring-primary-800/40"
+          : "bg-gray-100 text-gray-500 ring-gray-200/70 dark:bg-slate-700/40 dark:text-slate-400 dark:ring-slate-600/50"
+      }`}
+    >
+      <span
+        className={`w-1.5 h-1.5 rounded-full ${
+          value ? "bg-primary-500" : "bg-gray-400 dark:bg-slate-500"
+        }`}
+      />
+      {value ? "Ha" : "Yo'q"}
+    </span>
+  );
+}
+
+/** MD3 switch qatori — checkbox tipidagi form maydoni uchun (label + toggle). */
+function ToggleField({
+  label,
+  checked,
+  onChange,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      onClick={() => onChange(!checked)}
+      className="w-full flex items-center justify-between gap-3 px-3.5 h-12 rounded-xl border border-gray-300 dark:border-slate-600 bg-surface dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-700/40 transition-colors text-left"
+    >
+      <span className="text-[13px] font-semibold text-gray-700 dark:text-slate-300">
+        {label}
+      </span>
+      <span className="flex items-center gap-2.5 shrink-0">
+        <span
+          className={`text-[12px] font-semibold ${
+            checked
+              ? "text-primary-600 dark:text-primary-400"
+              : "text-gray-400 dark:text-slate-500"
+          }`}
+        >
+          {checked ? "Ha" : "Yo'q"}
+        </span>
+        <span
+          className={`relative w-11 h-6 rounded-full transition-colors ${
+            checked ? "bg-primary-600" : "bg-gray-300 dark:bg-slate-600"
+          }`}
+        >
+          <span
+            className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${
+              checked ? "translate-x-5" : ""
+            }`}
+          />
+        </span>
+      </span>
+    </button>
   );
 }
 

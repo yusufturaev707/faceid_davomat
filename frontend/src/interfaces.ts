@@ -528,6 +528,7 @@ export interface LookupRegionCreate {
   number: number;
   s_number: number;
   k_number: number;
+  is_have_part?: boolean;
   is_active?: boolean;
 }
 export interface LookupRegionUpdate {
@@ -535,6 +536,7 @@ export interface LookupRegionUpdate {
   number?: number;
   s_number?: number;
   k_number?: number;
+  is_have_part?: boolean;
   is_active?: boolean;
 }
 export interface LookupRegionResponse {
@@ -543,6 +545,7 @@ export interface LookupRegionResponse {
   number: number;
   s_number: number;
   k_number: number;
+  is_have_part: boolean;
   is_active: boolean;
   created_at: string;
 }
@@ -551,12 +554,14 @@ export interface LookupZoneCreate {
   region_id: number;
   name: string;
   number: number;
+  is_part?: boolean;
   is_active?: boolean;
 }
 export interface LookupZoneUpdate {
   region_id?: number;
   name?: string;
   number?: number;
+  is_part?: boolean;
   is_active?: boolean;
 }
 export interface LookupZoneResponse {
@@ -564,6 +569,7 @@ export interface LookupZoneResponse {
   region_id: number;
   name: string;
   number: number;
+  is_part: boolean;
   is_active: boolean;
   created_at: string;
 }

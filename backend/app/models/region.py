@@ -12,4 +12,5 @@ class Region(Base):
     number: Mapped[int] = mapped_column(unique=True)
     s_number: Mapped[int] = mapped_column(unique=True, default=0)
     k_number: Mapped[int] = mapped_column(unique=True, default=0)
+    is_have_part: Mapped[bool] = mapped_column(default=False)
     is_active: Mapped[bool] = mapped_column(default=True)
