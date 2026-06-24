@@ -75,6 +75,9 @@ interface Props<T extends { id: number }> {
   /** Ixtiyoriy: dropdown filtrlari (masalan Binolar — Hudud bo'yicha). Qidiruv
    *  bilan birga, AND mantiqida qo'llanadi. */
   filters?: FilterField[];
+  /** Birinchi ustun (ID) o'rniga joriy saralash/filtr/sahifa tartibidagi tartib
+   *  raqamini ko'rsatadi (1, 2, 3...). */
+  rowNumbering?: boolean;
   /** Ixtiyoriy: ro'yxatni ko'rsatishdan oldin tartiblash (masalan, Binolar —
    *  viloyat raqami, so'ng bino raqami bo'yicha). Filtr va paginatsiyadan oldin
    *  qo'llanadi. */
@@ -96,6 +99,7 @@ export default function LookupCrudPage<T extends { id: number; is_active?: boole
   searchKeys,
   searchPlaceholder,
   filters,
+  rowNumbering,
   sortItems,
 }: Props<T>) {
   const [items, setItems] = useState<T[]>([]);
@@ -442,7 +446,9 @@ export default function LookupCrudPage<T extends { id: number; is_active?: boole
             </tr>
           </thead>
           <tbody>
-            {pagedItems.map((item, idx) => (
+            {pagedItems.map((item, idx) => {
+              const rowNumber = (page - 1) * PAGE_SIZE + idx + 1;
+              return (
               <tr
                 key={item.id}
                 className={`group border-b border-gray-100/70 dark:border-slate-700/30 last:border-0 transition-colors duration-150 ${
@@ -463,7 +469,7 @@ export default function LookupCrudPage<T extends { id: number; is_active?: boole
                       : ci === 0
                         ? (
                             <span className="inline-flex items-center justify-center min-w-[2.25rem] px-2 py-0.5 rounded-md bg-gray-100 dark:bg-slate-700/50 text-gray-500 dark:text-slate-400 font-mono tabular-nums text-[11px] font-medium ring-1 ring-inset ring-gray-200/50 dark:ring-slate-600/40 group-hover:bg-primary-100/60 group-hover:text-primary-700 dark:group-hover:bg-primary-900/30 dark:group-hover:text-primary-300 transition-colors">
-                              {(item as any)[col.key]}
+                              {rowNumbering ? rowNumber : (item as any)[col.key]}
                             </span>
                           )
                         : (col.key === "name" ? (
@@ -518,7 +524,8 @@ export default function LookupCrudPage<T extends { id: number; is_active?: boole
                   </div>
                 </td>
               </tr>
-            ))}
+              );
+            })}
             {filteredItems.length === 0 && (
               <tr>
                 <td colSpan={columns.length + (hasStatus ? 2 : 1)} className="px-5 py-16 text-center">

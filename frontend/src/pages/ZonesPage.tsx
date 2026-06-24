@@ -31,7 +31,7 @@ export default function ZonesPage() {
   );
 
   const columns: Column[] = [
-    { key: "id", label: "ID" },
+    { key: "id", label: "T/r" },
     { key: "name", label: "Nomi" },
     { key: "number", label: "Raqam" },
     {
@@ -63,11 +63,20 @@ export default function ZonesPage() {
       sortItems={sortItems}
       searchKeys={["name", "number"]}
       searchPlaceholder="Bino nomi yoki raqami..."
+      rowNumbering
       filters={[
         {
           key: "region_id",
           label: "Hudud",
           options: regions.map((r) => ({ value: r.id, label: r.name })),
+        },
+        {
+          key: "is_active",
+          label: "Holat",
+          options: [
+            { value: "true", label: "Faol" },
+            { value: "false", label: "Nofaol" },
+          ],
         },
       ]}
       createItem={createZoneApi}
