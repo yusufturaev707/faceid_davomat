@@ -62,6 +62,9 @@ class ZoneStatItem(BaseModel):
     zone_id: int
     zone_number: int
     zone_name: str
+    # Bino bo'limga (qismga) tegishlimi. Region `is_have_part=true` bo'lganda
+    # front zonalarni `is_part` bo'yicha ikki guruhga ajratadi.
+    is_part: bool = False
     stats: StatGroup
 
 
@@ -73,6 +76,10 @@ class RegionStatItem(BaseModel):
     # Front kartalarni va Excel hisobotini bir xil kalit bo'yicha tartiblaydi.
     region_s_number: int = 0
     region_k_number: int = 0
+    # Viloyat bo'limlarga (qismlarga) bo'linganmi. True bo'lsa front zonalarni
+    # `is_part` (false/true) bo'yicha alohida ajratib, har guruhning birlashgan
+    # davomatini ko'rsatadi.
+    is_have_part: bool = False
     stats: StatGroup
     # Region ichidagi binolar — modal'da ko'rsatiladi (lozim bo'lganda).
     # Tartibi: zone.number bo'yicha.

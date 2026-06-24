@@ -817,7 +817,6 @@ function StepField({
   );
 }
 
-
 function EmptyHint({ text }: { text: string }) {
   return (
     <div className="glass-card p-8 sm:p-12 text-center text-gray-500 dark:text-slate-400">
@@ -1226,11 +1225,15 @@ function AttendanceDonut({ pct }: { pct: number }) {
           strokeLinecap="round"
           stroke={tone.hex}
           strokeDasharray={`${dash} ${circ}`}
-          style={{ transition: "stroke-dasharray 700ms cubic-bezier(0.4,0,0.2,1)" }}
+          style={{
+            transition: "stroke-dasharray 700ms cubic-bezier(0.4,0,0.2,1)",
+          }}
         />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className={`text-2xl sm:text-[28px] font-extrabold tabular-nums leading-none ${tone.text}`}>
+        <span
+          className={`text-2xl sm:text-[28px] font-extrabold tabular-nums leading-none ${tone.text}`}
+        >
           {pct}%
         </span>
         <span className="mt-1 text-[10.5px] font-semibold text-gray-500 dark:text-slate-400">
@@ -1305,7 +1308,9 @@ function RegionHighlight({
         </p>
       </div>
       {region && (
-        <span className={`shrink-0 text-sm font-bold tabular-nums ${tone!.text}`}>
+        <span
+          className={`shrink-0 text-sm font-bold tabular-nums ${tone!.text}`}
+        >
           {region.pct}%
         </span>
       )}
@@ -1345,9 +1350,7 @@ function OverviewPanel({ stats }: { stats: DashboardStatsResponse }) {
       name: r.region_name,
       number: r.region_number,
       pct:
-        Math.round(
-          (r.stats.attended.total / r.stats.total.total) * 1000,
-        ) / 10,
+        Math.round((r.stats.attended.total / r.stats.total.total) * 1000) / 10,
     }))
     .sort((a, b) => b.pct - a.pct);
   const best = ranked.length ? ranked[0] : null;
@@ -1401,7 +1404,7 @@ function OverviewPanel({ stats }: { stats: DashboardStatsResponse }) {
           <InsightTile
             icon={<CheckIcon />}
             value={participated.toLocaleString("uz-UZ")}
-            label="Haqiqiy ishtirok"
+            label="Ishtirok etganlar"
             accent="text-emerald-700 dark:text-emerald-300"
           />
           <InsightTile
@@ -1672,6 +1675,15 @@ function RegionCard({
           >
             {item.region_name || `Region #${item.region_number}`}
           </p>
+          {item.is_have_part && (
+            <span
+              className="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[9.5px] font-bold bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300 ring-1 ring-violet-200/60 dark:ring-violet-800/40"
+              title="Bo'limlarga bo'lingan viloyat — binolar bo'lim bo'yicha ajratiladi"
+            >
+              <LayersIcon className="w-3 h-3" />
+              Qo'shimcha hududga ega
+            </span>
+          )}
         </div>
 
         {/* Davomat foizi — semantik rangda */}
@@ -1932,7 +1944,7 @@ function RegionZonesModal({
           <div className="mt-4">
             <div className="flex items-end justify-between mb-1.5">
               <span className="text-[12px] font-semibold text-gray-700 dark:text-slate-300">
-                Region davomati
+                Viloyat davomati
               </span>
               <span
                 className={`text-xl font-bold tabular-nums leading-none ${percentText}`}
@@ -1967,13 +1979,31 @@ function RegionZonesModal({
           </div>
         </div>
 
-        {/* Body: zonalar */}
+        {/* Body: zonalar — bo'limli viloyatda (is_have_part) is_part bo'yicha
+            ikki guruhga ajraladi, har biri birlashgan davomati bilan. */}
         <div className="overflow-y-auto px-3 sm:px-4 py-3 sm:py-4">
           {region.zones.length === 0 ? (
             <div className="py-12 text-center text-gray-500 dark:text-slate-400 text-sm">
               <BuildingIcon className="w-10 h-10 mx-auto mb-2 text-gray-300 dark:text-slate-600" />
               Bu region uchun bino ma'lumotlari topilmadi
             </div>
+          ) : region.is_have_part ? (
+            <>
+              <ZoneGroupSection
+                title="Asosiy hudud"
+                subtitle="Qo'shimcha hududga kirmaydigan binolar"
+                tone="primary"
+                icon={<BuildingIcon className="w-4 h-4" />}
+                zones={region.zones.filter((z) => !z.is_part)}
+              />
+              <ZoneGroupSection
+                title="Qo'shimcha hudud"
+                subtitle="Qo'shimcha hududga tegishli binolar"
+                tone="violet"
+                icon={<LayersIcon className="w-4 h-4" />}
+                zones={region.zones.filter((z) => z.is_part)}
+              />
+            </>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2 sm:gap-2.5">
               {region.zones.map((z) => (
@@ -1991,7 +2021,12 @@ function RegionZonesModal({
 
 function TableIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <svg
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+    >
       <path
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -2093,7 +2128,12 @@ function AllRegionsModal({
               className="p-2 rounded-full text-gray-400 hover:text-gray-700 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-slate-700/60 transition-colors shrink-0"
               aria-label="Yopish"
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg
+                className="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -2319,6 +2359,152 @@ function ZoneCard({ item }: { item: ZoneStatItem }) {
   );
 }
 
+/* ============== Zone guruhlash (is_part) ============== */
+
+/** Zonalar ro'yxatining birlashgan statistikasi — is_part guruhi davomati uchun. */
+function aggregateZoneStats(zones: ZoneStatItem[]): StatGroup {
+  const g = (): GenderStat => ({ total: 0, male: 0, female: 0, unknown: 0 });
+  const total = g();
+  const attended = g();
+  const not_attended = g();
+  const cheating = {
+    total: 0,
+    at_entry: 0,
+    during_test: 0,
+    other: 0,
+    male: 0,
+    female: 0,
+    unknown: 0,
+  };
+  for (const z of zones) {
+    const s = z.stats;
+    for (const k of ["total", "male", "female", "unknown"] as const) {
+      total[k] += s.total[k];
+      attended[k] += s.attended[k];
+      not_attended[k] += s.not_attended[k];
+    }
+    cheating.total += s.cheating.total;
+    cheating.at_entry += s.cheating.at_entry;
+    cheating.during_test += s.cheating.during_test;
+    cheating.other += s.cheating.other;
+    cheating.male += s.cheating.male;
+    cheating.female += s.cheating.female;
+    cheating.unknown += s.cheating.unknown;
+  }
+  return { total, attended, not_attended, cheating };
+}
+
+/**
+ * Bo'limli viloyatlarda (region.is_have_part) zonalarni is_part bo'yicha ajratib
+ * ko'rsatadigan bo'lim — sarlavhada guruhning birlashgan davomati (foiz +
+ * progress + 4 mini stat), so'ng guruhdagi bino kartalari. MD3 surface.
+ */
+function ZoneGroupSection({
+  title,
+  subtitle,
+  tone,
+  icon,
+  zones,
+}: {
+  title: string;
+  subtitle: string;
+  tone: "primary" | "violet";
+  icon: React.ReactNode;
+  zones: ZoneStatItem[];
+}) {
+  const agg = aggregateZoneStats(zones);
+  const total = agg.total.total;
+  const attended = agg.attended.total;
+  const pct = total > 0 ? Math.round((attended / total) * 1000) / 10 : 0;
+
+  const percentTone =
+    pct >= 75
+      ? "from-emerald-400 to-emerald-600"
+      : pct >= 50
+        ? "from-amber-400 to-amber-500"
+        : "from-red-400 to-red-500";
+  const percentText =
+    pct >= 75
+      ? "text-emerald-700 dark:text-emerald-300"
+      : pct >= 50
+        ? "text-amber-700 dark:text-amber-300"
+        : "text-red-700 dark:text-red-300";
+
+  const toneStyles =
+    tone === "violet"
+      ? {
+          chip: "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300",
+          ring: "ring-violet-200/70 dark:ring-violet-800/40",
+          bar: "bg-violet-50/70 dark:bg-violet-900/10",
+        }
+      : {
+          chip: "bg-primary-100 text-primary-700 dark:bg-primary-900/40 dark:text-primary-300",
+          ring: "ring-primary-200/70 dark:ring-primary-800/40",
+          bar: "bg-primary-50/70 dark:bg-primary-900/10",
+        };
+
+  return (
+    <section className="mb-4 last:mb-0">
+      {/* Guruh sarlavhasi — birlashgan davomat */}
+      <div
+        className={`rounded-2xl ring-1 ${toneStyles.ring} ${toneStyles.bar} p-3 sm:p-3.5 mb-2.5`}
+      >
+        <div className="flex items-center justify-between gap-2 mb-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <span
+              className={`inline-flex items-center justify-center w-7 h-7 rounded-lg shrink-0 ${toneStyles.chip}`}
+            >
+              {icon}
+            </span>
+            <div className="min-w-0">
+              <p className="text-[13px] font-bold text-gray-900 dark:text-white leading-tight truncate">
+                {title}
+              </p>
+              <p className="text-[10.5px] text-gray-500 dark:text-slate-400 leading-none mt-0.5">
+                {subtitle} · {zones.length} ta bino
+              </p>
+            </div>
+          </div>
+          <span
+            className={`shrink-0 text-lg font-bold tabular-nums leading-none ${percentText}`}
+          >
+            {pct}%
+          </span>
+        </div>
+        <div className="h-1.5 rounded-full bg-white/70 dark:bg-slate-700/40 overflow-hidden mb-2.5">
+          <div
+            className={`h-full rounded-full bg-gradient-to-r ${percentTone} transition-[width] duration-500 ease-out`}
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+        <div className="grid grid-cols-4 gap-1.5">
+          <MiniStat label="Umumiy" breakdown={agg.total} accent="primary" />
+          <MiniStat label="Kelgan" breakdown={agg.attended} accent="success" />
+          <MiniStat
+            label="Kelmagan"
+            breakdown={agg.not_attended}
+            accent="warning"
+          />
+          <MiniCheating cheating={agg.cheating} />
+        </div>
+      </div>
+
+      {/* Guruhdagi binolar */}
+      {zones.length === 0 ? (
+        <p className="px-1 py-3 text-center text-[12px] text-gray-400 dark:text-slate-500">
+          Bu guruhda bino yo'q
+        </p>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 sm:gap-2.5">
+          {zones.map((z) => (
+            <ZoneCard key={z.zone_id} item={z} />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
 /* ============== Helpers ============== */
 
 function formatSmenaOption(sm: TestSessionSmenaResponse): string {
@@ -2481,7 +2667,12 @@ function BuildingIcon({ className = "w-4 h-4" }: { className?: string }) {
 /** Joylashuv belgisi (map pin) — viloyatlar soni uchun. */
 function MapPinIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <svg
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+    >
       <path
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -2501,7 +2692,12 @@ function MapPinIcon({ className = "w-4 h-4" }: { className?: string }) {
 /** O'sish strelkasi — eng faol viloyat uchun. */
 function TrendUpIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <svg
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+    >
       <path
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -2515,7 +2711,12 @@ function TrendUpIcon({ className = "w-4 h-4" }: { className?: string }) {
 /** Pasayish strelkasi — eng past davomat uchun. */
 function TrendDownIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <svg
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+    >
       <path
         strokeLinecap="round"
         strokeLinejoin="round"

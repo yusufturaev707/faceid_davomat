@@ -253,10 +253,12 @@ def get_dashboard_stats(
                 Zone.region_id,
                 Zone.number.label("zone_number"),
                 Zone.name.label("zone_name"),
+                Zone.is_part.label("zone_is_part"),
                 Region.number.label("region_number"),
                 Region.name.label("region_name"),
                 Region.s_number.label("region_s_number"),
                 Region.k_number.label("region_k_number"),
+                Region.is_have_part.label("region_is_have_part"),
                 Gender.key.label("gender_key"),
             )
             .select_from(Student)
@@ -293,9 +295,10 @@ def get_dashboard_stats(
     summary = _Tally()
     by_region: dict[int, _Tally] = defaultdict(_Tally)
     by_zone: dict[int, _Tally] = defaultdict(_Tally)
-    # region_id → (number, name, s_number, k_number)
-    region_meta: dict[int, tuple[int, str, int, int]] = {}
-    zone_meta: dict[int, tuple[int, str]] = {}      # zone_id → (number, name)
+    # region_id → (number, name, s_number, k_number, is_have_part)
+    region_meta: dict[int, tuple[int, str, int, int, bool]] = {}
+    # zone_id → (number, name, is_part)
+    zone_meta: dict[int, tuple[int, str, bool]] = {}
     # Region → ichidagi zone ID'lari ro'yxati (unique, kelishi tartibida).
     zones_by_region: dict[int, list[int]] = defaultdict(list)
     seen_zones: set[int] = set()
@@ -310,10 +313,16 @@ def get_dashboard_stats(
                 str(row.region_name or ""),
                 int(row.region_s_number or 0),
                 int(row.region_k_number or 0),
+                bool(row.region_is_have_part),
             ),
         )
         zone_meta.setdefault(
-            zone_id, (int(row.zone_number or 0), str(row.zone_name or ""))
+            zone_id,
+            (
+                int(row.zone_number or 0),
+                str(row.zone_name or ""),
+                bool(row.zone_is_part),
+            ),
         )
         if zone_id not in seen_zones:
             seen_zones.add(zone_id)
@@ -346,20 +355,23 @@ def get_dashboard_stats(
     # region ichidagi zonalar zone.number bo'yicha.
     region_items = sorted(
         by_region.items(),
-        key=lambda kv: region_meta.get(kv[0], (0, "", 0, 0))[0],
+        key=lambda kv: region_meta.get(kv[0], (0, "", 0, 0, False))[0],
     )
     regions: list[RegionStatItem] = []
     for region_id, tally in region_items:
-        num, name, s_num, k_num = region_meta.get(region_id, (0, "", 0, 0))
+        num, name, s_num, k_num, is_have_part = region_meta.get(
+            region_id, (0, "", 0, 0, False)
+        )
         zone_ids = sorted(
             zones_by_region.get(region_id, []),
-            key=lambda zid: zone_meta.get(zid, (0, ""))[0],
+            key=lambda zid: zone_meta.get(zid, (0, "", False))[0],
         )
         zones_list = [
             ZoneStatItem(
                 zone_id=zid,
-                zone_number=zone_meta.get(zid, (0, ""))[0],
-                zone_name=zone_meta.get(zid, (0, ""))[1],
+                zone_number=zone_meta.get(zid, (0, "", False))[0],
+                zone_name=zone_meta.get(zid, (0, "", False))[1],
+                is_part=zone_meta.get(zid, (0, "", False))[2],
                 stats=_tally_to_stat_group(by_zone[zid]),
             )
             for zid in zone_ids
@@ -371,6 +383,7 @@ def get_dashboard_stats(
                 region_name=name,
                 region_s_number=s_num,
                 region_k_number=k_num,
+                is_have_part=is_have_part,
                 stats=_tally_to_stat_group(tally),
                 zones=zones_list,
             )

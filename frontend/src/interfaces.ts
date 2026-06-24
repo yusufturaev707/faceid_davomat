@@ -358,6 +358,8 @@ export interface ZoneStatItem {
   zone_id: number;
   zone_number: number;
   zone_name: string;
+  /** Bino bo'limga (qismga) tegishlimi — region.is_have_part bo'lsa guruhlash. */
+  is_part: boolean;
   stats: StatGroup;
 }
 
@@ -368,6 +370,8 @@ export interface RegionStatItem {
   // Muqobil tartiblash identifikatorlari (DTM=number, VM=k_number, IIV=s_number)
   region_s_number: number;
   region_k_number: number;
+  /** Viloyat bo'limlarga bo'linganmi — true bo'lsa zonalar is_part bo'yicha ajraladi. */
+  is_have_part: boolean;
   stats: StatGroup;
   zones: ZoneStatItem[];
 }

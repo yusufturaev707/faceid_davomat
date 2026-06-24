@@ -1,6 +1,15 @@
 import { useCallback, useEffect, useState } from "react";
-import LookupCrudPage, { type Column, type FormField } from "../components/LookupCrudPage";
-import { getZonesListApi, createZoneApi, updateZoneApi, deleteZoneApi, getRegionsListApi } from "../api";
+import LookupCrudPage, {
+  type Column,
+  type FormField,
+} from "../components/LookupCrudPage";
+import {
+  getZonesListApi,
+  createZoneApi,
+  updateZoneApi,
+  deleteZoneApi,
+  getRegionsListApi,
+} from "../api";
 import type { LookupRegionResponse, LookupZoneResponse } from "../interfaces";
 import { PERM } from "../permissions";
 
@@ -10,7 +19,9 @@ export default function ZonesPage() {
   useEffect(() => {
     getRegionsListApi()
       .then(setRegions)
-      .catch((err) => console.error("Hududlar ro'yxatini yuklashda xatolik", err));
+      .catch((err) =>
+        console.error("Hududlar ro'yxatini yuklashda xatolik", err),
+      );
   }, []);
 
   const regionMap = Object.fromEntries(regions.map((r) => [r.id, r.name]));
@@ -33,26 +44,30 @@ export default function ZonesPage() {
   const columns: Column[] = [
     { key: "id", label: "T/r" },
     { key: "name", label: "Nomi" },
-    { key: "number", label: "Raqam" },
+    { key: "number", label: "Nomer" },
     {
       key: "region_id",
       label: "Hudud",
       render: (val: number) => regionMap[val] || `#${val}`,
     },
-    { key: "is_part", label: "Bo'lim" },
+    { key: "is_part", label: "Qo'shimchami?" },
   ];
 
   const formFields: FormField[] = [
     { key: "name", label: "Nomi", type: "text", required: true },
-    { key: "number", label: "Raqam", type: "number", required: true },
+    { key: "number", label: "Nomer", type: "number", required: true },
     {
       key: "region_id",
-      label: "Hudud",
+      label: "Viloyat",
       type: "select",
       required: true,
       options: regions.map((r) => ({ value: r.id, label: r.name })),
     },
-    { key: "is_part", label: "Bo'limga tegishli", type: "checkbox" },
+    {
+      key: "is_part",
+      label: "Qo'shimcha hududga tegishlimi?",
+      type: "checkbox",
+    },
   ];
 
   return (
@@ -69,7 +84,7 @@ export default function ZonesPage() {
       filters={[
         {
           key: "region_id",
-          label: "Hudud",
+          label: "Viloyat",
           options: regions.map((r) => ({ value: r.id, label: r.name })),
         },
         {
@@ -82,7 +97,7 @@ export default function ZonesPage() {
         },
         {
           key: "is_part",
-          label: "Bo'lim",
+          label: "Qo'shimcha hududga tegishlimi?",
           options: [
             { value: "true", label: "Ha" },
             { value: "false", label: "Yo'q" },

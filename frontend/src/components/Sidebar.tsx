@@ -331,7 +331,7 @@ export default function Sidebar({ drawerOpen = false, onClose }: SidebarProps) {
                     d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
                   />
                 </svg>
-                Huquqlar
+                Ruxsatlar
               </NavLink>
             )}
 
@@ -370,7 +370,7 @@ export default function Sidebar({ drawerOpen = false, onClose }: SidebarProps) {
                       d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
                     />
                   </svg>
-                  Hududlar
+                  Viloyatlar
                 </NavLink>
 
                 <NavLink to="/manage-zones" className={navLinkClass}>
@@ -455,7 +455,7 @@ export default function Sidebar({ drawerOpen = false, onClose }: SidebarProps) {
                       d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
                     />
                   </svg>
-                  Sabablar
+                  Chetlatish sabablari
                 </NavLink>
 
                 <NavLink to="/manage-reason-types" className={navLinkClass}>
@@ -472,7 +472,7 @@ export default function Sidebar({ drawerOpen = false, onClose }: SidebarProps) {
                       d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
                     />
                   </svg>
-                  Sabab turi
+                  Chetlatish turi
                 </NavLink>
 
                 <NavLink to="/manage-genders" className={navLinkClass}>
@@ -533,7 +533,7 @@ export default function Sidebar({ drawerOpen = false, onClose }: SidebarProps) {
                     d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"
                   />
                 </svg>
-                Davomat bot foydalanuvchilari
+                Davomat bot
               </NavLink>
             )}
 
@@ -552,7 +552,7 @@ export default function Sidebar({ drawerOpen = false, onClose }: SidebarProps) {
                     d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"
                   />
                 </svg>
-                Statistika bot foydalanuvchilari
+                Statistika bot
               </NavLink>
             )}
           </>
