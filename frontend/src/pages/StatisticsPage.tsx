@@ -1759,42 +1759,78 @@ function RegionCard({
   );
 }
 
+/** Stat tile o'lchami — 3 bosqichli ierarxiya (viloyat → hudud → bino). */
+type MiniSize = "sm" | "md" | "lg";
+const MINI_SIZE: Record<
+  MiniSize,
+  { box: string; label: string; value: string; gender: string; gicon: string }
+> = {
+  sm: {
+    box: "px-1.5 py-1",
+    label: "text-[9px] sm:text-[9.5px]",
+    value: "text-[13px] sm:text-sm",
+    gender: "text-[9px] sm:text-[9.5px]",
+    gicon: "w-2.5 h-2.5",
+  },
+  md: {
+    box: "px-1.5 py-1 sm:px-2 sm:py-1.5",
+    label: "text-[10px] sm:text-[10.5px]",
+    value: "text-[15px] sm:text-lg",
+    gender: "text-[10px] sm:text-[10.5px]",
+    gicon: "w-3 h-3",
+  },
+  lg: {
+    box: "px-2.5 py-2 sm:px-3 sm:py-2.5",
+    label: "text-[11px] sm:text-xs",
+    value: "text-xl sm:text-2xl",
+    gender: "text-[11px]",
+    gicon: "w-3.5 h-3.5",
+  },
+};
+
 /** MD3 tonal-surface stat tile (Umumiy / Kelgan / Kelmagan). */
 function MiniStat({
   label,
   breakdown,
   accent,
+  size = "md",
 }: {
   label: string;
   breakdown: GenderStat;
   accent: Variant;
+  size?: MiniSize;
 }) {
   const s = VARIANT_STYLES[accent];
+  const z = MINI_SIZE[size];
   return (
     <div
-      className={`rounded-lg ring-1 ${s.bg} ${s.ring} px-1.5 py-1 sm:px-2 sm:py-1.5 transition-shadow duration-200 hover:shadow-sm`}
+      className={`rounded-lg ring-1 ${s.bg} ${s.ring} ${z.box} transition-shadow duration-200 hover:shadow-sm`}
     >
-      <p className="text-[10px] sm:text-[10.5px] font-semibold text-gray-600 dark:text-slate-300 leading-none">
+      <p
+        className={`font-semibold text-gray-600 dark:text-slate-300 leading-none ${z.label}`}
+      >
         {label}
       </p>
       <p
-        className={`text-[15px] sm:text-lg font-bold tabular-nums leading-tight mt-0.5 ${s.valueColor}`}
+        className={`font-bold tabular-nums leading-tight mt-0.5 ${z.value} ${s.valueColor}`}
       >
         {breakdown.total.toLocaleString("uz-UZ")}
       </p>
-      <div className="flex items-center gap-1.5 mt-0.5 text-[10px] sm:text-[10.5px] text-gray-600 dark:text-slate-300 leading-none">
+      <div
+        className={`flex items-center gap-1.5 mt-0.5 text-gray-600 dark:text-slate-300 leading-none ${z.gender}`}
+      >
         <span
           className="inline-flex items-center gap-0.5 text-sky-600 dark:text-sky-400"
           title={`Erkak: ${breakdown.male}`}
         >
-          <MaleIcon className="w-3 h-3 shrink-0 opacity-90" />
+          <MaleIcon className={`${z.gicon} shrink-0 opacity-90`} />
           <span className="tabular-nums font-semibold">{breakdown.male}</span>
         </span>
         <span
           className="inline-flex items-center gap-0.5 text-pink-600 dark:text-pink-400"
           title={`Ayol: ${breakdown.female}`}
         >
-          <FemaleIcon className="w-3 h-3 shrink-0 opacity-90" />
+          <FemaleIcon className={`${z.gicon} shrink-0 opacity-90`} />
           <span className="tabular-nums font-semibold">{breakdown.female}</span>
         </span>
         {breakdown.unknown > 0 && (
@@ -1812,26 +1848,37 @@ function MiniStat({
 }
 
 /** Chetlatilganlar uchun maxsus MD3 error-container uslub. */
-function MiniCheating({ cheating }: { cheating: StatGroup["cheating"] }) {
+function MiniCheating({
+  cheating,
+  size = "md",
+}: {
+  cheating: StatGroup["cheating"];
+  size?: MiniSize;
+}) {
   const s = VARIANT_STYLES.danger;
+  const z = MINI_SIZE[size];
   return (
     <div
-      className={`rounded-lg ring-1 ${s.bg} ${s.ring} px-1.5 py-1 sm:px-2 sm:py-1.5 transition-shadow duration-200 hover:shadow-sm`}
+      className={`rounded-lg ring-1 ${s.bg} ${s.ring} ${z.box} transition-shadow duration-200 hover:shadow-sm`}
     >
-      <p className="text-[10px] sm:text-[10.5px] font-semibold text-gray-600 dark:text-slate-300 leading-none">
+      <p
+        className={`font-semibold text-gray-600 dark:text-slate-300 leading-none ${z.label}`}
+      >
         Chetlat.
       </p>
       <p
-        className={`text-[15px] sm:text-lg font-bold tabular-nums leading-tight mt-0.5 ${s.valueColor}`}
+        className={`font-bold tabular-nums leading-tight mt-0.5 ${z.value} ${s.valueColor}`}
       >
         {cheating.total.toLocaleString("uz-UZ")}
       </p>
-      <div className="flex items-center gap-1.5 mt-0.5 text-[10px] sm:text-[10.5px] text-gray-600 dark:text-slate-300 leading-none">
+      <div
+        className={`flex items-center gap-1.5 mt-0.5 text-gray-600 dark:text-slate-300 leading-none ${z.gender}`}
+      >
         <span
           title="Binoga kirishda"
           className="inline-flex items-center gap-0.5"
         >
-          <KeyIcon className="w-3 h-3 text-red-500" />
+          <KeyIcon className={`${z.gicon} text-red-500`} />
           <span className="tabular-nums font-semibold">
             {cheating.at_entry}
           </span>
@@ -1840,7 +1887,7 @@ function MiniCheating({ cheating }: { cheating: StatGroup["cheating"] }) {
           title="Test jarayonida"
           className="inline-flex items-center gap-0.5"
         >
-          <BookIcon className="w-3 h-3 text-red-500" />
+          <BookIcon className={`${z.gicon} text-red-500`} />
           <span className="tabular-nums font-semibold">
             {cheating.during_test}
           </span>
@@ -1940,42 +1987,56 @@ function RegionZonesModal({
             </button>
           </div>
 
-          {/* Region summary: davomat % + progress + 4 mini stat */}
+          {/* Region summary — bo'limli viloyatda kattaroq "Viloyat davomati"
+              kartasi (tier 1, AttendanceSummary xl); aks holda ixcham ko'rinish. */}
           <div className="mt-4">
-            <div className="flex items-end justify-between mb-1.5">
-              <span className="text-[12px] font-semibold text-gray-700 dark:text-slate-300">
-                Viloyat davomati
-              </span>
-              <span
-                className={`text-xl font-bold tabular-nums leading-none ${percentText}`}
-              >
-                {attendancePercent}%
-              </span>
-            </div>
-            <div className="h-1.5 rounded-full bg-gray-100 dark:bg-slate-700/50 overflow-hidden">
-              <div
-                className={`h-full rounded-full bg-gradient-to-r ${percentTone} transition-[width] duration-500 ease-out`}
-                style={{ width: `${attendancePercent}%` }}
+            {region.is_have_part ? (
+              <AttendanceSummary
+                title="Viloyat davomati"
+                subtitle={`Barcha hududlar · ${region.zones.length} ta bino`}
+                tone="region"
+                size="xl"
+                icon={<MapPinIcon className="w-5 h-5" />}
+                stats={region.stats}
               />
-            </div>
-            <div className="grid grid-cols-4 gap-1.5 sm:gap-2 mt-3">
-              <MiniStat
-                label="Umumiy"
-                breakdown={region.stats.total}
-                accent="primary"
-              />
-              <MiniStat
-                label="Kelgan"
-                breakdown={region.stats.attended}
-                accent="success"
-              />
-              <MiniStat
-                label="Kelmagan"
-                breakdown={region.stats.not_attended}
-                accent="warning"
-              />
-              <MiniCheating cheating={region.stats.cheating} />
-            </div>
+            ) : (
+              <>
+                <div className="flex items-end justify-between mb-1.5">
+                  <span className="text-[12px] font-semibold text-gray-700 dark:text-slate-300">
+                    Viloyat davomati
+                  </span>
+                  <span
+                    className={`text-xl font-bold tabular-nums leading-none ${percentText}`}
+                  >
+                    {attendancePercent}%
+                  </span>
+                </div>
+                <div className="h-1.5 rounded-full bg-gray-100 dark:bg-slate-700/50 overflow-hidden">
+                  <div
+                    className={`h-full rounded-full bg-gradient-to-r ${percentTone} transition-[width] duration-500 ease-out`}
+                    style={{ width: `${attendancePercent}%` }}
+                  />
+                </div>
+                <div className="grid grid-cols-4 gap-1.5 sm:gap-2 mt-3">
+                  <MiniStat
+                    label="Umumiy"
+                    breakdown={region.stats.total}
+                    accent="primary"
+                  />
+                  <MiniStat
+                    label="Kelgan"
+                    breakdown={region.stats.attended}
+                    accent="success"
+                  />
+                  <MiniStat
+                    label="Kelmagan"
+                    breakdown={region.stats.not_attended}
+                    accent="warning"
+                  />
+                  <MiniCheating cheating={region.stats.cheating} />
+                </div>
+              </>
+            )}
           </div>
         </div>
 
@@ -2268,7 +2329,14 @@ function AllRegionsModal({
 }
 
 /** Bino (zone) statistika kartasi — region kartasiga o'xshash, ammo kompaktroq. */
-function ZoneCard({ item }: { item: ZoneStatItem }) {
+function ZoneCard({
+  item,
+  compact = false,
+}: {
+  item: ZoneStatItem;
+  /** Bo'limli viloyat guruhlari ichida — tier 3, hudud guruhidan kichikroq. */
+  compact?: boolean;
+}) {
   const total = item.stats.total.total;
   const attended = item.stats.attended.total;
   const attendancePercent =
@@ -2287,15 +2355,24 @@ function ZoneCard({ item }: { item: ZoneStatItem }) {
         ? "text-amber-700 dark:text-amber-300"
         : "text-red-700 dark:text-red-300";
 
+  // Tier 3 o'lchamlari — compact bo'lsa hudud guruhidan kichikroq.
+  const pad = compact ? "p-2.5" : "p-3 sm:p-3.5";
+  const badge = compact ? "w-7 h-7" : "w-9 h-9";
+  const badgeText = compact ? "text-[11px]" : "text-[13px]";
+  const pctText = compact ? "text-sm" : "text-base";
+  const miniSize: MiniSize = compact ? "sm" : "md";
+
   return (
     <article
-      className="rounded-2xl bg-white dark:bg-slate-800/70 ring-1 ring-gray-100 dark:ring-slate-700/60 p-3 sm:p-3.5 hover:ring-primary-200 dark:hover:ring-primary-700/50 hover:shadow-sm transition-all duration-200"
+      className={`rounded-2xl bg-white dark:bg-slate-800/70 ring-1 ring-gray-100 dark:ring-slate-700/60 hover:ring-primary-200 dark:hover:ring-primary-700/50 hover:shadow-sm transition-all duration-200 ${pad}`}
       aria-label={`Bino ${item.zone_number}: ${item.zone_name}`}
     >
       <header className="flex items-center justify-between gap-2.5 mb-2.5">
         <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-sky-500 to-sky-700 text-white font-bold flex items-center justify-center shadow-sm shadow-sky-500/20 ring-1 ring-white/20 shrink-0">
-            <span className="text-[13px] tabular-nums leading-none">
+          <div
+            className={`${badge} rounded-xl bg-gradient-to-br from-sky-500 to-sky-700 text-white font-bold flex items-center justify-center shadow-sm shadow-sky-500/20 ring-1 ring-white/20 shrink-0`}
+          >
+            <span className={`${badgeText} tabular-nums leading-none`}>
               {item.zone_number}
             </span>
           </div>
@@ -2314,7 +2391,7 @@ function ZoneCard({ item }: { item: ZoneStatItem }) {
 
         <div className="flex flex-col items-end shrink-0">
           <span
-            className={`text-base font-bold tabular-nums leading-none ${percentText}`}
+            className={`${pctText} font-bold tabular-nums leading-none ${percentText}`}
           >
             {attendancePercent}%
           </span>
@@ -2342,18 +2419,21 @@ function ZoneCard({ item }: { item: ZoneStatItem }) {
           label="Umumiy"
           breakdown={item.stats.total}
           accent="primary"
+          size={miniSize}
         />
         <MiniStat
           label="Kelgan"
           breakdown={item.stats.attended}
           accent="success"
+          size={miniSize}
         />
         <MiniStat
           label="Kelmagan"
           breakdown={item.stats.not_attended}
           accent="warning"
+          size={miniSize}
         />
-        <MiniCheating cheating={item.stats.cheating} />
+        <MiniCheating cheating={item.stats.cheating} size={miniSize} />
       </div>
     </article>
   );
@@ -2394,27 +2474,90 @@ function aggregateZoneStats(zones: ZoneStatItem[]): StatGroup {
   return { total, attended, not_attended, cheating };
 }
 
+type SummaryTone = "region" | "primary" | "violet";
+type SummarySize = "xl" | "md";
+
+const SUMMARY_TONES: Record<
+  SummaryTone,
+  { chip: string; ring: string; bar: string }
+> = {
+  // Viloyat davomati — Asosiy hudud uslubida, ammo to'qroq/prominent gradient.
+  region: {
+    chip: "bg-primary-100 text-primary-700 dark:bg-primary-900/40 dark:text-primary-300",
+    ring: "ring-primary-300/70 dark:ring-primary-700/50",
+    bar: "bg-gradient-to-br from-primary-50 to-white dark:from-primary-900/25 dark:to-slate-900",
+  },
+  primary: {
+    chip: "bg-primary-100 text-primary-700 dark:bg-primary-900/40 dark:text-primary-300",
+    ring: "ring-primary-200/70 dark:ring-primary-800/40",
+    bar: "bg-primary-50/70 dark:bg-primary-900/10",
+  },
+  violet: {
+    chip: "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300",
+    ring: "ring-violet-200/70 dark:ring-violet-800/40",
+    bar: "bg-violet-50/70 dark:bg-violet-900/10",
+  },
+};
+
+const SUMMARY_SIZE: Record<
+  SummarySize,
+  {
+    pad: string;
+    iconBox: string;
+    title: string;
+    subtitle: string;
+    pct: string;
+    bar: string;
+    grid: string;
+    mini: MiniSize;
+  }
+> = {
+  // Tier 1 — Viloyat davomati (eng katta)
+  xl: {
+    pad: "p-4 sm:p-5",
+    iconBox: "w-11 h-11 rounded-2xl",
+    title: "text-base sm:text-lg",
+    subtitle: "text-[11.5px]",
+    pct: "text-4xl sm:text-5xl",
+    bar: "h-2.5",
+    grid: "gap-2 sm:gap-2.5 mt-3.5",
+    mini: "lg",
+  },
+  // Tier 2 — hudud guruhi (ancha kichik)
+  md: {
+    pad: "p-3 sm:p-3.5",
+    iconBox: "w-7 h-7 rounded-lg",
+    title: "text-[13px]",
+    subtitle: "text-[10.5px]",
+    pct: "text-lg",
+    bar: "h-1.5",
+    grid: "gap-1.5 mt-2.5",
+    mini: "md",
+  },
+};
+
 /**
- * Bo'limli viloyatlarda (region.is_have_part) zonalarni is_part bo'yicha ajratib
- * ko'rsatadigan bo'lim — sarlavhada guruhning birlashgan davomati (foiz +
- * progress + 4 mini stat), so'ng guruhdagi bino kartalari. MD3 surface.
+ * Davomat xulosa kartasi (MD3 tonal surface) — sarlavha, foiz, progress va 4 ta
+ * stat tile. O'lcham (`size`) ierarxiyani belgilaydi: xl=Viloyat davomati,
+ * md=hudud guruhi. Bino kartalari undan ham kichik (ZoneCard compact).
  */
-function ZoneGroupSection({
+function AttendanceSummary({
   title,
   subtitle,
   tone,
+  size,
   icon,
-  zones,
+  stats,
 }: {
   title: string;
-  subtitle: string;
-  tone: "primary" | "violet";
+  subtitle?: string;
+  tone: SummaryTone;
+  size: SummarySize;
   icon: React.ReactNode;
-  zones: ZoneStatItem[];
+  stats: StatGroup;
 }) {
-  const agg = aggregateZoneStats(zones);
-  const total = agg.total.total;
-  const attended = agg.attended.total;
+  const total = stats.total.total;
+  const attended = stats.attended.total;
   const pct = total > 0 ? Math.round((attended / total) * 1000) / 10 : 0;
 
   const percentTone =
@@ -2430,74 +2573,119 @@ function ZoneGroupSection({
         ? "text-amber-700 dark:text-amber-300"
         : "text-red-700 dark:text-red-300";
 
-  const toneStyles =
-    tone === "violet"
-      ? {
-          chip: "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300",
-          ring: "ring-violet-200/70 dark:ring-violet-800/40",
-          bar: "bg-violet-50/70 dark:bg-violet-900/10",
-        }
-      : {
-          chip: "bg-primary-100 text-primary-700 dark:bg-primary-900/40 dark:text-primary-300",
-          ring: "ring-primary-200/70 dark:ring-primary-800/40",
-          bar: "bg-primary-50/70 dark:bg-primary-900/10",
-        };
+  const t = SUMMARY_TONES[tone];
+  const z = SUMMARY_SIZE[size];
+
+  return (
+    <div className={`rounded-2xl ring-1 ${t.ring} ${t.bar} ${z.pad}`}>
+      <div className="flex items-center justify-between gap-2.5 mb-2">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <span
+            className={`inline-flex items-center justify-center shrink-0 ${z.iconBox} ${t.chip}`}
+          >
+            {icon}
+          </span>
+          <div className="min-w-0">
+            <p
+              className={`font-bold text-gray-900 dark:text-white leading-tight truncate ${z.title}`}
+            >
+              {title}
+            </p>
+            {subtitle && (
+              <p
+                className={`text-gray-500 dark:text-slate-400 leading-none mt-0.5 truncate ${z.subtitle}`}
+              >
+                {subtitle}
+              </p>
+            )}
+          </div>
+        </div>
+        <span
+          className={`shrink-0 font-extrabold tabular-nums leading-none ${z.pct} ${percentText}`}
+        >
+          {pct}%
+        </span>
+      </div>
+      <div
+        className={`rounded-full bg-white/70 dark:bg-slate-700/40 overflow-hidden ${z.bar}`}
+        role="progressbar"
+        aria-valuenow={pct}
+        aria-valuemin={0}
+        aria-valuemax={100}
+      >
+        <div
+          className={`h-full rounded-full bg-gradient-to-r ${percentTone} transition-[width] duration-500 ease-out`}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <div className={`grid grid-cols-4 ${z.grid}`}>
+        <MiniStat
+          label="Umumiy"
+          breakdown={stats.total}
+          accent="primary"
+          size={z.mini}
+        />
+        <MiniStat
+          label="Kelgan"
+          breakdown={stats.attended}
+          accent="success"
+          size={z.mini}
+        />
+        <MiniStat
+          label="Kelmagan"
+          breakdown={stats.not_attended}
+          accent="warning"
+          size={z.mini}
+        />
+        <MiniCheating cheating={stats.cheating} size={z.mini} />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Bo'limli viloyatlarda (region.is_have_part) zonalarni is_part bo'yicha ajratib
+ * ko'rsatadigan bo'lim — sarlavhada guruhning birlashgan davomati (tier 2,
+ * AttendanceSummary md), so'ng guruhdagi bino kartalari (tier 3, ZoneCard compact).
+ */
+function ZoneGroupSection({
+  title,
+  subtitle,
+  tone,
+  icon,
+  zones,
+}: {
+  title: string;
+  subtitle: string;
+  tone: "primary" | "violet";
+  icon: React.ReactNode;
+  zones: ZoneStatItem[];
+}) {
+  const agg = aggregateZoneStats(zones);
 
   return (
     <section className="mb-4 last:mb-0">
-      {/* Guruh sarlavhasi — birlashgan davomat */}
-      <div
-        className={`rounded-2xl ring-1 ${toneStyles.ring} ${toneStyles.bar} p-3 sm:p-3.5 mb-2.5`}
-      >
-        <div className="flex items-center justify-between gap-2 mb-2">
-          <div className="flex items-center gap-2 min-w-0">
-            <span
-              className={`inline-flex items-center justify-center w-7 h-7 rounded-lg shrink-0 ${toneStyles.chip}`}
-            >
-              {icon}
-            </span>
-            <div className="min-w-0">
-              <p className="text-[13px] font-bold text-gray-900 dark:text-white leading-tight truncate">
-                {title}
-              </p>
-              <p className="text-[10.5px] text-gray-500 dark:text-slate-400 leading-none mt-0.5">
-                {subtitle} · {zones.length} ta bino
-              </p>
-            </div>
-          </div>
-          <span
-            className={`shrink-0 text-lg font-bold tabular-nums leading-none ${percentText}`}
-          >
-            {pct}%
-          </span>
-        </div>
-        <div className="h-1.5 rounded-full bg-white/70 dark:bg-slate-700/40 overflow-hidden mb-2.5">
-          <div
-            className={`h-full rounded-full bg-gradient-to-r ${percentTone} transition-[width] duration-500 ease-out`}
-            style={{ width: `${pct}%` }}
-          />
-        </div>
-        <div className="grid grid-cols-4 gap-1.5">
-          <MiniStat label="Umumiy" breakdown={agg.total} accent="primary" />
-          <MiniStat label="Kelgan" breakdown={agg.attended} accent="success" />
-          <MiniStat
-            label="Kelmagan"
-            breakdown={agg.not_attended}
-            accent="warning"
-          />
-          <MiniCheating cheating={agg.cheating} />
-        </div>
+      {/* Guruh sarlavhasi — birlashgan davomat (tier 2) */}
+      <div className="mb-2.5">
+        <AttendanceSummary
+          title={title}
+          subtitle={`${subtitle} · ${zones.length} ta bino`}
+          tone={tone}
+          size="md"
+          icon={icon}
+          stats={agg}
+        />
       </div>
 
-      {/* Guruhdagi binolar */}
+      {/* Guruhdagi binolar (tier 3 — eng kichik) */}
       {zones.length === 0 ? (
-        <p className="px-1 py-3 text-center text-[12px] text-gray-400 dark:text-slate-500">
+        <p className="px-1 py-2 text-center text-[12px] text-gray-400 dark:text-slate-500">
           Bu guruhda bino yo'q
         </p>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2 sm:gap-2.5">
           {zones.map((z) => (
-            <ZoneCard key={z.zone_id} item={z} />
+            <ZoneCard key={z.zone_id} item={z} compact />
           ))}
         </div>
       )}
