@@ -44,6 +44,17 @@ export interface FormField {
   options?: { value: string | number; label: string }[];
 }
 
+/** Dropdown filtri — ro'yxatni biror ustun (masalan Hudud) bo'yicha aniq qiymatga
+ *  cheklaydi. Bo'sh tanlov ("") = "barchasi". Client-side, qidiruv bilan birga
+ *  qo'llanadi. */
+export interface FilterField {
+  /** Filtrlanadigan item kaliti (masalan "region_id"). */
+  key: string;
+  /** Dropdown sarlavhasi (masalan "Hudud"). */
+  label: string;
+  options: { value: string | number; label: string }[];
+}
+
 interface Props<T extends { id: number }> {
   title: string;
   subtitle: string;
@@ -61,6 +72,9 @@ interface Props<T extends { id: number }> {
    *  (case-insensitive substring match). Pagination + total auto-update. */
   searchKeys?: string[];
   searchPlaceholder?: string;
+  /** Ixtiyoriy: dropdown filtrlari (masalan Binolar — Hudud bo'yicha). Qidiruv
+   *  bilan birga, AND mantiqida qo'llanadi. */
+  filters?: FilterField[];
   /** Ixtiyoriy: ro'yxatni ko'rsatishdan oldin tartiblash (masalan, Binolar —
    *  viloyat raqami, so'ng bino raqami bo'yicha). Filtr va paginatsiyadan oldin
    *  qo'llanadi. */
@@ -81,6 +95,7 @@ export default function LookupCrudPage<T extends { id: number; is_active?: boole
   deletePermission,
   searchKeys,
   searchPlaceholder,
+  filters,
   sortItems,
 }: Props<T>) {
   const [items, setItems] = useState<T[]>([]);
@@ -91,6 +106,10 @@ export default function LookupCrudPage<T extends { id: number; is_active?: boole
   // Client-side filter: lookup ro'yxatlari odatda kichik (1k atrofida),
   // shuning uchun debounce yoki backend search shart emas.
   const [search, setSearch] = useState("");
+
+  // Dropdown filtrlari — kalit -> tanlangan qiymat (string, "" = barchasi).
+  const [filterValues, setFilterValues] = useState<Record<string, string>>({});
+  const activeFilterCount = Object.values(filterValues).filter((v) => v !== "").length;
 
   // Modal
   const [showModal, setShowModal] = useState(false);
@@ -135,16 +154,32 @@ export default function LookupCrudPage<T extends { id: number; is_active?: boole
   );
 
   const filteredItems = useMemo(() => {
-    if (!searchKeys || searchKeys.length === 0) return sortedItems;
-    const q = search.trim().toLowerCase();
-    if (!q) return sortedItems;
-    return sortedItems.filter((it) =>
-      searchKeys.some((k) => {
-        const val = (it as any)[k];
-        return val != null && String(val).toLowerCase().includes(q);
-      }),
-    );
-  }, [sortedItems, search, searchKeys]);
+    let result = sortedItems;
+
+    // Dropdown filtrlari (AND mantiqi): har bir faol filter mos kelishi shart.
+    if (activeFilterCount > 0) {
+      result = result.filter((it) =>
+        Object.entries(filterValues).every(([k, v]) =>
+          v === "" ? true : String((it as any)[k]) === v,
+        ),
+      );
+    }
+
+    // Matnli qidiruv (`searchKeys` bo'yicha).
+    if (searchKeys && searchKeys.length > 0) {
+      const q = search.trim().toLowerCase();
+      if (q) {
+        result = result.filter((it) =>
+          searchKeys.some((k) => {
+            const val = (it as any)[k];
+            return val != null && String(val).toLowerCase().includes(q);
+          }),
+        );
+      }
+    }
+
+    return result;
+  }, [sortedItems, search, searchKeys, filterValues, activeFilterCount]);
 
   const totalPages = Math.max(1, Math.ceil(filteredItems.length / PAGE_SIZE));
 
@@ -152,10 +187,11 @@ export default function LookupCrudPage<T extends { id: number; is_active?: boole
     if (page > totalPages) setPage(totalPages);
   }, [page, totalPages]);
 
-  // Search o'zgarganda sahifa 1 ga qaytadi — natija ko'rinmay qolmasligi uchun.
+  // Qidiruv yoki filter o'zgarganda sahifa 1 ga qaytadi — natija ko'rinmay
+  // qolmasligi uchun.
   useEffect(() => {
     setPage(1);
-  }, [search]);
+  }, [search, filterValues]);
 
   const pagedItems = useMemo(() => {
     const start = (page - 1) * PAGE_SIZE;
@@ -295,52 +331,89 @@ export default function LookupCrudPage<T extends { id: number; is_active?: boole
         </div>
       )}
 
-      {/* Search */}
-      {searchKeys && searchKeys.length > 0 && (
-        <div className="mb-4">
-          <div className="relative max-w-md">
-            <svg
-              className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-              />
-            </svg>
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder={searchPlaceholder || "Qidirish..."}
-              className="w-full h-11 pl-10 pr-10 rounded-full border border-gray-300 dark:border-slate-600 bg-surface dark:bg-slate-800 text-sm text-gray-900 dark:text-slate-100 placeholder-gray-400 dark:placeholder-slate-500 focus:ring-4 focus:ring-primary-500/15 focus:border-primary-500 outline-none transition-all"
-            />
-            {search && (
-              <button
-                onClick={() => setSearch("")}
-                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:text-slate-300 dark:hover:bg-slate-700/60 transition-colors"
-                title="Tozalash"
+      {/* Toolbar — qidiruv + dropdown filtrlari */}
+      {((searchKeys && searchKeys.length > 0) || (filters && filters.length > 0)) && (
+        <div className="mb-4 flex flex-col sm:flex-row sm:items-center gap-3">
+          {searchKeys && searchKeys.length > 0 && (
+            <div className="relative w-full sm:max-w-md sm:flex-1">
+              <svg
+                className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
               >
-                <svg
-                  className="w-4 h-4"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                />
+              </svg>
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder={searchPlaceholder || "Qidirish..."}
+                className="w-full h-11 pl-10 pr-10 rounded-full border border-gray-300 dark:border-slate-600 bg-surface dark:bg-slate-800 text-sm text-gray-900 dark:text-slate-100 placeholder-gray-400 dark:placeholder-slate-500 focus:ring-4 focus:ring-primary-500/15 focus:border-primary-500 outline-none transition-all"
+              />
+              {search && (
+                <button
+                  onClick={() => setSearch("")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:text-slate-300 dark:hover:bg-slate-700/60 transition-colors"
+                  title="Tozalash"
                 >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M6 18L18 6M6 6l12 12"
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M6 18L18 6M6 6l12 12"
+                    />
+                  </svg>
+                </button>
+              )}
+            </div>
+          )}
+
+          {filters && filters.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2">
+              {filters.map((f) => (
+                <div key={f.key} className="min-w-[170px] flex-1 sm:flex-none">
+                  <Md3Select
+                    value={filterValues[f.key] ?? ""}
+                    onChange={(v) =>
+                      setFilterValues((prev) => ({ ...prev, [f.key]: v }))
+                    }
+                    clearable
+                    ariaLabel={f.label}
+                    placeholder={`${f.label}: barchasi`}
+                    buttonClassName="h-11 rounded-full"
+                    options={f.options.map((o) => ({
+                      value: String(o.value),
+                      label: o.label,
+                    }))}
                   />
-                </svg>
-              </button>
-            )}
-          </div>
+                </div>
+              ))}
+              {activeFilterCount > 0 && (
+                <button
+                  onClick={() => setFilterValues({})}
+                  className="inline-flex items-center gap-1.5 h-11 px-4 rounded-full text-sm font-medium text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-slate-700/60 transition-colors whitespace-nowrap"
+                  title="Filtrlarni tozalash"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                  Tozalash
+                </button>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -456,7 +529,9 @@ export default function LookupCrudPage<T extends { id: number; is_active?: boole
                       </svg>
                     </div>
                     <p className="text-sm font-medium">
-                      {search.trim() ? "Qidiruv bo'yicha topilmadi" : "Ma'lumot yo'q"}
+                      {search.trim() || activeFilterCount > 0
+                        ? "Filtr bo'yicha topilmadi"
+                        : "Ma'lumot yo'q"}
                     </p>
                   </div>
                 </td>
@@ -470,7 +545,7 @@ export default function LookupCrudPage<T extends { id: number; is_active?: boole
       <Pagination page={page} pages={totalPages} onPageChange={setPage} />
 
       <p className="mt-3 text-xs text-gray-400 dark:text-slate-500">
-        {search.trim() && searchKeys && searchKeys.length > 0
+        {(search.trim() && searchKeys && searchKeys.length > 0) || activeFilterCount > 0
           ? `Topildi: ${filteredItems.length} / ${items.length}`
           : `Jami: ${items.length}`}
       </p>

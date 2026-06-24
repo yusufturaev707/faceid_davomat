@@ -61,6 +61,15 @@ export default function ZonesPage() {
       formFields={formFields}
       fetchAll={getZonesListApi}
       sortItems={sortItems}
+      searchKeys={["name", "number"]}
+      searchPlaceholder="Bino nomi yoki raqami..."
+      filters={[
+        {
+          key: "region_id",
+          label: "Hudud",
+          options: regions.map((r) => ({ value: r.id, label: r.name })),
+        },
+      ]}
       createItem={createZoneApi}
       updateItem={updateZoneApi}
       deleteItem={deleteZoneApi}
