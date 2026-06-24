@@ -7,6 +7,8 @@ import type {
 } from "../interfaces";
 import { getOnlineUsersApi, getTestSessionsApi } from "../api";
 import PageLoader from "../components/PageLoader";
+import PermissionGate from "../components/PermissionGate";
+import { PERM } from "../permissions";
 
 /* ============================================================
  * Test Dashboard — test sessiyalari bo'yicha umumiy, tahliliy
@@ -625,10 +627,15 @@ export default function TestDashboardPage() {
         </div>
       </SectionCard>
 
-      {/* Online foydalanuvchilar — aktiv sessiyalar va qurilmalar (oxirgi qator) */}
-      <div className="mt-5 sm:mt-6">
-        <OnlineUsersSection />
-      </div>
+      {/* Online foydalanuvchilar — aktiv sessiyalar va qurilmalar (oxirgi qator).
+          Backend `/online-users` endpointi `online_users:read` talab qiladi — shu
+          sababli ruxsat bo'lmasa bo'lim umuman render qilinmaydi (keraksiz
+          so'rov/polling yo'q). */}
+      <PermissionGate permission={PERM.ONLINE_USERS_READ}>
+        <div className="mt-5 sm:mt-6">
+          <OnlineUsersSection />
+        </div>
+      </PermissionGate>
     </div>
   );
 }

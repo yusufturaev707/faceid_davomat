@@ -33,6 +33,9 @@ export const PERM = {
   USER_UPDATE: "user:update",
   USER_DELETE: "user:delete",
 
+  // Online foydalanuvchilar (aktiv login sessiyalari)
+  ONLINE_USERS_READ: "online_users:read",
+
   // Rollar
   ROLE_READ: "role:read",
   ROLE_CREATE: "role:create",

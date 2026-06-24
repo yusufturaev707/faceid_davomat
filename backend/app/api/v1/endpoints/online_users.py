@@ -80,7 +80,7 @@ class OnlineUsersResponse(BaseModel):
 )
 def list_online_users(
     db: Session = Depends(get_db),
-    _: User = Depends(PermissionChecker(P.USER_READ.code)),
+    _: User = Depends(PermissionChecker(P.ONLINE_USERS_READ.code)),
 ):
     """Hozir aktiv login sessiyasi (refresh token) bor foydalanuvchilar.
 

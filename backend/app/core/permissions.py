@@ -50,6 +50,11 @@ class P:
     USER_CREATE = _Perm("user:create", "Foydalanuvchi yaratish", "user")
     USER_UPDATE = _Perm("user:update", "Foydalanuvchini tahrirlash", "user")
     USER_DELETE = _Perm("user:delete", "Foydalanuvchini o'chirish", "user")
+    ONLINE_USERS_READ = _Perm(
+        "online_users:read",
+        "Online foydalanuvchilarni ko'rish",
+        "user",
+    )
 
     # === Roles ===
     ROLE_READ = _Perm("role:read", "Rollarni ko'rish", "role")
