@@ -136,6 +136,15 @@ class Settings(BaseSettings):
     API_IIV: str = ""
     API_IIV_TOKEN: str = ""
     API_GTSP: str = ""
+    # OTM binolari (zonalari) ro'yxati keladigan tashqi API. Admin "Yangilash"
+    # tugmasi orqali chaqiriladi — javob {id, region_number, name, number,
+    # order, status} strukturasidagi ro'yxat. Bo'sh bo'lsa endpoint 503 qaytaradi.
+    API_OTM_ZONES: str = ""
+    API_OTM_ZONES_TOKEN: str = ""
+    # OTM-DTM talabgorlari keladigan tashqi API (Test.key='otm-dtm'). CEFR
+    # kabi sahifalangan (paginated) javob kutiladi — URL'da {0}=sana, {1}=sahifa.
+    API_OTM_STUDENTS: str = ""
+    API_OTM_STUDENTS_TOKEN: str = ""
 
     # Statistika bot — tashqi statistika API (qabul ko'rsatkichlari).
     # Bot endi to'g'ridan-to'g'ri emas, shu backend orqali oladi.

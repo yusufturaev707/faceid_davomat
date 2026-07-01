@@ -1,6 +1,6 @@
 from datetime import date
 
-from sqlalchemy import BigInteger, ForeignKey, String, false
+from sqlalchemy import BigInteger, Date, ForeignKey, String, false
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -21,7 +21,7 @@ class Student(Base):
     gr_n: Mapped[int] = mapped_column(default=0)
     sp_n: Mapped[int] = mapped_column(default=0)
     s_code: Mapped[int] = mapped_column(BigInteger, default=0)
-    e_date: Mapped[date] = mapped_column()
+    e_date: Mapped[date] = mapped_column(Date)
 
     # ms
     subject_id: Mapped[int] = mapped_column(default=0)
@@ -32,11 +32,13 @@ class Student(Base):
     level_id: Mapped[int] = mapped_column(default=8)
 
     # state
-    is_ready: Mapped[bool] = mapped_column(default=False)
+    is_ready: Mapped[bool] = mapped_column(default=False)  # Talabgor test uchun tayyor
     is_face: Mapped[bool] = mapped_column(default=False)
     is_image: Mapped[bool] = mapped_column(default=False)
     is_cheating: Mapped[bool] = mapped_column(default=False)
     is_blacklist: Mapped[bool] = mapped_column(default=False)
     is_entered: Mapped[bool] = mapped_column(default=False)
-    is_applied: Mapped[bool] = mapped_column(default=False, server_default=false())
+    is_applied: Mapped[bool] = mapped_column(
+        default=False, server_default=false()
+    )  # Ariza bergan pulni qaytarib olishga
     desc_apply: Mapped[str | None] = mapped_column(String(255), nullable=True)

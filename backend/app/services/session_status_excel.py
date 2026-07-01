@@ -1,11 +1,20 @@
-"""Davomat bot — kelmaganlar ro'yxati Excel generator.
+"""Admin statistika — talabgorlar holati (kelmagan + chetlatilgan) Excel.
 
-Tanlangan kontekstda — bitta smena, bitta kun (barcha smenalar) yoki butun
-sessiya (barcha kun va smenalar) — foydalanuvchining biriktirilgan regionlar
-kesimida `is_entered=False` va `is_applied=False` bo'lgan talabgorlarni
-topadi va openpyxl orqali chiroyli formatlangan .xlsx hosil qiladi.
+Tanlangan kontekstda (smena / kun / umumiy) talabgorlarni status bo'yicha
+guruhlab .xlsx hosil qiladi. Guruhlar tartibi (Status ustuni qiymatlari):
 
-Tartib: kun → smena → viloyat → bino → guruh → joy.
+  1) "Kelmadi"                     — is_entered=False, is_cheating=False, is_applied=False
+  2) "Kirishda chetlatildi"        — is_cheating=True, reason_type.key=1
+  3) "Test jarayonida chetlatildi" — is_cheating=True, reason_type.key=2
+  4) "Chetlatildi"                 — is_cheating=True, boshqa/aniqlanmagan reason_type
+
+Har guruh ichida qatorlar: sana → region → zone → smena → guruh tartibida.
+Chetlatilganlar uchun "Sabab" ustunida chetlatish sababi (Reason.name)
+ko'rsatiladi.
+
+`davomat_bot_absentees.build_absentees_excel` (Telegram bot) dan farqli — bu
+hisobot admin statistika sahifasi uchun, chetlatilganlarni ham qamrab oladi.
+Smena hal qilish mantig'i shu moduldan qayta ishlatiladi.
 """
 
 from __future__ import annotations
@@ -16,32 +25,41 @@ from io import BytesIO
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
+from app.models.cheating_log import CheatingLog
+from app.models.reason import Reason
+from app.models.reason_type import ReasonType
 from app.models.region import Region
 from app.models.smena import Smena
 from app.models.student import Student
-from app.models.test_session import TestSession
 from app.models.test_session_smena import TestSessionSmena
 from app.models.zone import Zone
+from app.services.davomat_bot_absentees import AbsenteesError, _resolve_smenas
+from app.services.session_dashboard_stats import (
+    ENTRY_REASON_TYPE_KEY,
+    TEST_REASON_TYPE_KEY,
+)
 
-
-class AbsenteesError(Exception):
-    """Smena topilmadi yoki ruxsat etilgan region yo'q."""
-
-
-# Excel uslublari — bitta joyda, qayta foydalanish uchun.
-_TITLE_FILL = PatternFill("solid", fgColor="1B5E20")  # to'q yashil (title)
-_META_FILL = PatternFill("solid", fgColor="2E7D32")  # yashil (sana/smena)
-_HEADER_FILL = PatternFill("solid", fgColor="2E7D32")  # yashil (jadval header)
-_ZEBRA_FILL = PatternFill("solid", fgColor="E8F5E9")  # yashilning ochiq tovi (zebra)
+# Excel uslublari — davomat bot hisoboti bilan bir xil yashil palitra.
+_TITLE_FILL = PatternFill("solid", fgColor="1B5E20")
+_META_FILL = PatternFill("solid", fgColor="2E7D32")
+_HEADER_FILL = PatternFill("solid", fgColor="2E7D32")
+_ZEBRA_FILL = PatternFill("solid", fgColor="E8F5E9")
 
 _THIN = Side(style="thin", color="A5D6A7")
 _THICK = Side(style="medium", color="1B5E20")
-
 _BORDER_CELL = Border(left=_THIN, right=_THIN, top=_THIN, bottom=_THIN)
 _BORDER_HEADER = Border(left=_THIN, right=_THIN, top=_THICK, bottom=_THICK)
+
+# Status guruhlari — (tartib indeksi, ko'rsatiladigan matn, shrift rangi).
+# Tartib indeksi qatorlarni saralashda birlamchi kalit: kelmadi → kirishda →
+# test jarayonida → boshqa.
+_STATUS_NOT_ENTERED = (0, "Kelmadi", "EF6C00")
+_STATUS_ENTRY = (1, "Kirishda chetlatildi", "C62828")
+_STATUS_TEST = (2, "Test jarayonida chetlatildi", "B71C1C")
+_STATUS_OTHER = (3, "Chetlatildi", "C62828")
 
 
 def _safe(value: object) -> str:
@@ -50,104 +68,29 @@ def _safe(value: object) -> str:
     return str(value)
 
 
-def _resolve_smenas(
-    db: Session,
-    *,
-    session_id: int,
-    session_smena_id: int | None,
-    test_day: date | None,
-) -> tuple[TestSession, list[int], date | None, str, int, str]:
-    """Excel uchun smenalar to'plamini aniqlaydi.
-
-    Qaytaradi: (test_session, smena_ids, resolved_day, smena_name,
-    smena_number, scope).
-    """
-    test_session = db.get(TestSession, session_id)
-    if not test_session:
-        raise AbsenteesError("Test sessiyasi topilmadi")
-
-    if session_smena_id is not None:
-        tss = db.get(TestSessionSmena, session_smena_id)
-        if not tss:
-            raise AbsenteesError("Smena topilmadi")
-        if int(tss.test_session_id) != int(session_id):
-            raise AbsenteesError("Tanlangan smena bu sessiyaga tegishli emas")
-        smena = db.get(Smena, tss.test_smena_id)
-        smena_name = smena.name if smena else ""
-        smena_number = int(tss.number or (smena.number if smena else 0))
-        return test_session, [int(tss.id)], tss.day, smena_name, smena_number, "smena"
-
-    if test_day is not None:
-        rows = db.execute(
-            select(TestSessionSmena.id)
-            .where(
-                TestSessionSmena.test_session_id == session_id,
-                TestSessionSmena.day == test_day,
-                TestSessionSmena.is_active.is_(True),
-            )
-        ).all()
-        ids = [int(r.id) for r in rows]
-        if not ids:
-            raise AbsenteesError("Tanlangan kunda aktiv smenalar topilmadi")
-        return test_session, ids, test_day, "Kun yakuni", 0, "day"
-
-    rows = db.execute(
-        select(TestSessionSmena.id)
-        .where(
-            TestSessionSmena.test_session_id == session_id,
-            TestSessionSmena.is_active.is_(True),
-        )
-    ).all()
-    ids = [int(r.id) for r in rows]
-    if not ids:
-        raise AbsenteesError("Sessiyada aktiv smenalar topilmadi")
-    return test_session, ids, None, "Umumiy", 0, "total"
+def _status_for(is_cheating: bool, reason_type_key: int | None) -> tuple[int, str, str]:
+    """(group, matn, rang) — is_cheating va reason_type.key bo'yicha."""
+    if not is_cheating:
+        return _STATUS_NOT_ENTERED
+    if reason_type_key == ENTRY_REASON_TYPE_KEY:
+        return _STATUS_ENTRY
+    if reason_type_key == TEST_REASON_TYPE_KEY:
+        return _STATUS_TEST
+    return _STATUS_OTHER
 
 
-def _fetch_absentees(
-    db: Session,
-    *,
-    session_smena_ids: list[int],
-    allowed_region_ids: set[int],
-    order_region_first: bool = False,
+def _fetch_rows(
+    db: Session, *, session_smena_ids: list[int], allowed_region_ids: set[int]
 ) -> list[dict]:
-    """Ruxsat etilgan regionlar kesimida is_entered=False bo'lgan talabgorlar.
+    """Kelmagan VA chetlatilgan talabgorlarni (sabab bilan) qaytaradi.
 
-    Bir nechta smena bo'yicha ham ishlaydi — kun yoki sessiya bo'yicha
-    aggregat holatda barcha smenalardagi kelmaganlarni qaytaradi.
+    Qamrab olinadi:
+      - chetlatilganlar (is_cheating=True), yoki
+      - umuman kelmaganlar (is_entered=False AND is_applied=False).
 
-    is_applied=True bo'lganlar ham testga kira olmaydigan kategoriya — ularni
-    "kelmagan"lar ro'yxatiga kiritmaymiz (testga umuman kelmasligi
-    rejalashtirilgan).
-
-    Tartib (default): kun → smena_number → viloyat → bino → guruh → joy.
-    `order_region_first=True` bo'lsa: kun → viloyat → bino → smena → guruh → joy
-    (sana, region, zone, smena, guruh bo'yicha — admin statistika eksporti uchun).
+    Saralash (Python tarafida): status guruhi → sana → region → zone → smena →
+    guruh → joy.
     """
-    if order_region_first:
-        order_cols = (
-            TestSessionSmena.day,
-            Region.number,
-            Region.name,
-            Zone.number,
-            Zone.name,
-            TestSessionSmena.number,
-            Student.gr_n,
-            Student.sp_n,
-            Student.id,
-        )
-    else:
-        order_cols = (
-            TestSessionSmena.day,
-            TestSessionSmena.number,
-            Region.number,
-            Region.name,
-            Zone.number,
-            Zone.name,
-            Student.gr_n,
-            Student.sp_n,
-            Student.id,
-        )
     rows = db.execute(
         select(
             Student.id,
@@ -165,66 +108,96 @@ def _fetch_absentees(
             Zone.number.label("zone_number"),
             Region.name.label("region_name"),
             Region.number.label("region_number"),
+            Reason.name.label("reason_name"),
+            ReasonType.key.label("reason_type_key"),
         )
+        .select_from(Student)
         .join(TestSessionSmena, TestSessionSmena.id == Student.session_smena_id)
         .join(Smena, Smena.id == TestSessionSmena.test_smena_id)
         .join(Zone, Zone.id == Student.zone_id)
         .join(Region, Region.id == Zone.region_id)
+        .outerjoin(CheatingLog, CheatingLog.student_id == Student.id)
+        .outerjoin(Reason, Reason.id == CheatingLog.reason_id)
+        .outerjoin(ReasonType, ReasonType.id == Reason.reason_type_id)
         .where(
             Student.session_smena_id.in_(session_smena_ids),
             Region.id.in_(allowed_region_ids),
-            Student.is_entered.is_(False),
-            Student.is_applied.is_(False),
+            or_(
+                Student.is_cheating.is_(True),
+                and_(
+                    Student.is_entered.is_(False),
+                    Student.is_applied.is_(False),
+                ),
+            ),
         )
-        .order_by(*order_cols)
     ).all()
 
     result: list[dict] = []
     for r in rows:
+        is_cheating = bool(r.is_cheating)
+        group, status_text, status_color = _status_for(
+            is_cheating, r.reason_type_key
+        )
         fio = " ".join(
             p for p in [r.last_name, r.first_name, r.middle_name] if p
         ).strip()
         result.append(
             {
+                "group": group,
+                "status_text": status_text,
+                "status_color": status_color,
+                "reason": (r.reason_name or "") if is_cheating else "",
                 "fio": fio,
                 "imei": r.imei or "",
                 "gr_n": int(r.gr_n or 0),
                 "sp_n": int(r.sp_n or 0),
                 "region_name": r.region_name or "",
+                "region_number": int(r.region_number or 0),
                 "zone_name": r.zone_name or "",
+                "zone_number": int(r.zone_number or 0),
                 "test_day": r.test_day,
                 "smena_number": int(r.smena_number or 0),
                 "smena_name": r.smena_name or "",
-                "is_cheating": bool(r.is_cheating),
             }
         )
+
+    # Birlamchi: status guruhi; so'ng sana → region → zone → smena → guruh → joy.
+    result.sort(
+        key=lambda d: (
+            d["group"],
+            d["test_day"] or date.min,
+            d["region_number"],
+            d["region_name"],
+            d["zone_number"],
+            d["zone_name"],
+            d["smena_number"],
+            d["gr_n"],
+            d["sp_n"],
+        )
+    )
     return result
 
 
-def build_absentees_excel(
+def build_session_status_excel(
     db: Session,
     *,
     session_id: int,
     session_smena_id: int | None = None,
     test_day: date | None = None,
     allowed_region_ids: set[int],
-    order_region_first: bool = False,
 ) -> tuple[bytes, str, int]:
-    """Kelmaganlar ro'yxatini .xlsx bytes shaklida qaytaradi.
+    """Talabgorlar holati ro'yxatini .xlsx bytes shaklida qaytaradi.
 
-    Tanlangan kontekst:
+    Kontekst `build_absentees_excel` bilan bir xil aniqlanadi:
       - `session_smena_id` berilsa: bitta smena.
       - `test_day` berilsa: shu kunning barcha aktiv smenalari.
       - Ikkalasi `None` bo'lsa: sessiyaning barcha aktiv smenalari.
 
-    `order_region_first=True` bo'lsa qatorlar sana → region → zone → smena →
-    guruh tartibida saralanadi (admin statistika eksporti uchun).
-
     Returns:
-        (bytes, filename, absent_count)
+        (bytes, filename, row_count)
     """
     if not allowed_region_ids:
-        raise AbsenteesError("Foydalanuvchiga region biriktirilmagan")
+        raise AbsenteesError("Viloyatlar topilmadi")
 
     (
         test_session,
@@ -243,56 +216,46 @@ def build_absentees_excel(
         test_session.test.name if test_session.test else None
     ) or test_session.name
 
-    rows = _fetch_absentees(
+    rows = _fetch_rows(
         db,
         session_smena_ids=smena_ids,
         allowed_region_ids=allowed_region_ids,
-        order_region_first=order_region_first,
     )
 
     wb = Workbook()
     ws = wb.active
-    ws.title = "Kelmaganlar"
+    ws.title = "Talabgorlar holati"
 
-    # Aggregat (kun/sessiya) holatda Sana va Smena ustunlari ham qo'shiladi.
-    is_aggr = scope != "smena"
-    if is_aggr:
-        columns = [
-            ("№", 6),
-            ("Sana", 14),
-            ("Smena", 18),
-            ("Viloyat", 24),
-            ("Bino", 24),
-            ("FIO", 60),
-            ("IMEI (JShShIR)", 18),
-            ("Gr", 8),
-            ("Keldimi", 14),
-            ("Chetlatish", 16),
-        ]
-    else:
-        columns = [
-            ("№", 6),
-            ("Viloyat", 28),
-            ("Bino", 28),
-            ("FIO", 60),
-            ("IMEI (JShShIR)", 18),
-            ("Gr", 8),
-            ("Keldimi", 14),
-            ("Chetlatish", 16),
-        ]
+    columns = [
+        ("№", 6),
+        ("Sana", 13),
+        ("Smena", 18),
+        ("Viloyat", 24),
+        ("Bino", 24),
+        ("FIO", 52),
+        ("IMEI (JShShIR)", 18),
+        ("Gr", 8),
+        ("Status", 26),
+        ("Sabab", 42),
+    ]
     n_cols = len(columns)
     last_col = get_column_letter(n_cols)
+    col_status = 9
+    col_reason = 10
+    col_imei = 7
+    col_fio = 6
+    col_gr = 8
 
-    # ── Sarlavha bloki: test nomi (1-qator) ─────────────────────────────
+    # ── Sarlavha bloki ──────────────────────────────────────────────────
     if scope == "day":
         title_text = (
-            f"KELMAGANLAR — {test_name} • "
+            f"TALABGORLAR HOLATI — {test_name} • "
             f"{resolved_day.isoformat() if resolved_day else '—'}"
         )
     elif scope == "total":
-        title_text = f"KELMAGANLAR (UMUMIY) — {test_name}"
+        title_text = f"TALABGORLAR HOLATI (UMUMIY) — {test_name}"
     else:
-        title_text = f"KELMAGANLAR RO'YXATI — {test_name}"
+        title_text = f"TALABGORLAR HOLATI — {test_name}"
 
     ws.merge_cells(f"A1:{last_col}1")
     title_cell = ws["A1"]
@@ -335,17 +298,27 @@ def build_absentees_excel(
     smena_cell.alignment = Alignment(horizontal="center", vertical="center")
     ws.row_dimensions[3].height = 22
 
-    # 4-qator: jami sanab ko'rsatish (kelmaganlar soni)
+    # 4-qator: status bo'yicha umumiy hisob
+    not_entered = sum(1 for r in rows if r["group"] == _STATUS_NOT_ENTERED[0])
+    entry = sum(1 for r in rows if r["group"] == _STATUS_ENTRY[0])
+    test = sum(1 for r in rows if r["group"] == _STATUS_TEST[0])
+    other = sum(1 for r in rows if r["group"] == _STATUS_OTHER[0])
+    summary_parts = [f"Kelmadi: {not_entered}"]
+    summary_parts.append(f"Kirishda chetlatildi: {entry}")
+    summary_parts.append(f"Test jarayonida chetlatildi: {test}")
+    if other:
+        summary_parts.append(f"Boshqa chetlatish: {other}")
+    summary_parts.append(f"Jami: {len(rows)}")
+
     ws.merge_cells(f"A4:{last_col}4")
     total_cell = ws["A4"]
-    total_cell.value = f"Jami kelmaganlar: {len(rows)} ta"
+    total_cell.value = " • ".join(summary_parts)
     total_cell.font = Font(
         name="Calibri", size=11, bold=True, italic=True, color="1B5E20"
     )
     total_cell.alignment = Alignment(horizontal="center", vertical="center")
     ws.row_dimensions[4].height = 20
 
-    # 5-qator bo'sh oraliq
     ws.row_dimensions[5].height = 6
 
     # ── Jadval sarlavhalari (6-qator) ───────────────────────────────────
@@ -363,60 +336,28 @@ def build_absentees_excel(
 
     # ── Body ────────────────────────────────────────────────────────────
     data_start = header_row + 1
-    cheat_font = Font(name="Calibri", size=11, bold=True, color="C62828")
-    kelmadi_font = Font(name="Calibri", size=11, bold=True, color="EF6C00")
-    # Aggregat va smena variantlari uchun ustun indekslari farq qiladi —
-    # bitta joyda hisoblab olamiz.
-    if is_aggr:
-        col_imei = 7
-        col_fio = 6
-        col_keldi = 9
-        col_chet = 10
-        col_gr = 8
-    else:
-        col_imei = 5
-        col_fio = 4
-        col_keldi = 7
-        col_chet = 8
-        col_gr = 6
-
     for i, r in enumerate(rows, start=1):
         row_idx = data_start + i - 1
-        cheating = bool(r.get("is_cheating"))
-        if is_aggr:
-            day_str = (
-                r["test_day"].isoformat()
-                if isinstance(r.get("test_day"), date)
-                else _safe(r.get("test_day"))
-            )
-            sm_n = r.get("smena_number") or 0
-            sm_label = r.get("smena_name") or ""
-            smena_disp = (
-                f"#{sm_n} • {sm_label}" if sm_n else sm_label
-            )
-            values = [
-                i,
-                day_str,
-                smena_disp,
-                _safe(r["region_name"]),
-                _safe(r["zone_name"]),
-                _safe(r["fio"]),
-                _safe(r["imei"]),
-                r["gr_n"] or "",
-                "Kelmadi",
-                "Chetlatilgan" if cheating else "",
-            ]
-        else:
-            values = [
-                i,
-                _safe(r["region_name"]),
-                _safe(r["zone_name"]),
-                _safe(r["fio"]),
-                _safe(r["imei"]),
-                r["gr_n"] or "",
-                "Kelmadi",
-                "Chetlatilgan" if cheating else "",
-            ]
+        day_str = (
+            r["test_day"].isoformat()
+            if isinstance(r.get("test_day"), date)
+            else _safe(r.get("test_day"))
+        )
+        sm_n = r.get("smena_number") or 0
+        sm_label = r.get("smena_name") or ""
+        smena_disp = f"#{sm_n} • {sm_label}" if sm_n else sm_label
+        values = [
+            i,
+            day_str,
+            smena_disp,
+            _safe(r["region_name"]),
+            _safe(r["zone_name"]),
+            _safe(r["fio"]),
+            _safe(r["imei"]),
+            r["gr_n"] or "",
+            r["status_text"],
+            _safe(r["reason"]),
+        ]
         for col_idx, val in enumerate(values, start=1):
             cell = ws.cell(row=row_idx, column=col_idx, value=val)
             cell.font = Font(name="Calibri", size=11)
@@ -428,13 +369,15 @@ def build_absentees_excel(
                 cell.alignment = Alignment(
                     horizontal="left", vertical="center", wrap_text=False
                 )
-            elif col_idx == col_keldi:
-                cell.font = kelmadi_font
+            elif col_idx == col_status:
+                cell.font = Font(
+                    name="Calibri", size=11, bold=True, color=r["status_color"]
+                )
                 cell.alignment = Alignment(horizontal="center", vertical="center")
-            elif col_idx == col_chet:
-                if cheating:
-                    cell.font = cheat_font
-                cell.alignment = Alignment(horizontal="center", vertical="center")
+            elif col_idx == col_reason:
+                cell.alignment = Alignment(
+                    horizontal="left", vertical="center", wrap_text=True
+                )
             elif col_idx in (1, col_gr):
                 cell.alignment = Alignment(horizontal="center", vertical="center")
             else:
@@ -445,21 +388,21 @@ def build_absentees_excel(
                 cell.fill = _ZEBRA_FILL
         ws.row_dimensions[row_idx].height = 20
 
-    # Bo'sh holat — bitta xabar qatori
     if not rows:
         empty_row = data_start
         ws.merge_cells(
             start_row=empty_row, start_column=1, end_row=empty_row, end_column=n_cols
         )
         cell = ws.cell(
-            row=empty_row, column=1, value="✓ Bu kontekstda kelmagan talabgor yo'q"
+            row=empty_row,
+            column=1,
+            value="✓ Bu kontekstda kelmagan yoki chetlatilgan talabgor yo'q",
         )
         cell.font = Font(name="Calibri", size=12, italic=True, color="2E75B6")
         cell.alignment = Alignment(horizontal="center", vertical="center")
         cell.border = _BORDER_CELL
         ws.row_dimensions[empty_row].height = 28
 
-    # Freeze panes — sarlavha + header doim ko'rinib tursin.
     ws.freeze_panes = ws.cell(row=data_start, column=1)
     ws.sheet_view.showGridLines = False
     ws.print_options.horizontalCentered = True
@@ -473,10 +416,10 @@ def build_absentees_excel(
 
     if scope == "day":
         safe_day = resolved_day.isoformat() if resolved_day else "no-date"
-        filename = f"kelmaganlar_{safe_day}_umumiy.xlsx"
+        filename = f"talabgorlar_holati_{safe_day}_umumiy.xlsx"
     elif scope == "total":
-        filename = "kelmaganlar_umumiy.xlsx"
+        filename = "talabgorlar_holati_umumiy.xlsx"
     else:
         safe_day = resolved_day.isoformat() if resolved_day else "no-date"
-        filename = f"kelmaganlar_{safe_day}_smena_{smena_number or 'x'}.xlsx"
+        filename = f"talabgorlar_holati_{safe_day}_smena_{smena_number or 'x'}.xlsx"
     return buffer.getvalue(), filename, len(rows)

@@ -42,6 +42,10 @@ export interface FormField {
   required?: boolean;
   placeholder?: string;
   options?: { value: string | number; label: string }[];
+  /** Faqat `type: "number"` uchun — minimal/qadam qiymati (masalan musbat
+   *  butun son uchun min={1} step={1}). */
+  min?: number;
+  step?: number;
 }
 
 /** Dropdown filtri — ro'yxatni biror ustun (masalan Hudud) bo'yicha aniq qiymatga
@@ -82,6 +86,10 @@ interface Props<T extends { id: number }> {
    *  viloyat raqami, so'ng bino raqami bo'yicha). Filtr va paginatsiyadan oldin
    *  qo'llanadi. */
   sortItems?: (items: T[]) => T[];
+  /** Ixtiyoriy: sarlavhada "Qo'shish" tugmasidan oldin qo'shimcha amallar
+   *  (masalan Binolar — tashqi API'dan "Yangilash"). `reload` chaqirilsa
+   *  ro'yxat qayta yuklanadi. */
+  headerActions?: (reload: () => void | Promise<void>) => React.ReactNode;
 }
 
 export default function LookupCrudPage<T extends { id: number; is_active?: boolean }>({
@@ -101,6 +109,7 @@ export default function LookupCrudPage<T extends { id: number; is_active?: boole
   filters,
   rowNumbering,
   sortItems,
+  headerActions,
 }: Props<T>) {
   const [items, setItems] = useState<T[]>([]);
   const [loading, setLoading] = useState(true);
@@ -247,6 +256,23 @@ export default function LookupCrudPage<T extends { id: number; is_active?: boole
       }
     }
 
+    // Raqamli maydonlar uchun butun son / minimal qiymat tekshiruvi (paste
+    // orqali kiritilgan yaroqsiz qiymatlarni ham ushlaydi).
+    for (const f of formFields) {
+      if (f.type !== "number") continue;
+      const raw = form[f.key];
+      if (raw === "" || raw === undefined || raw === null) continue;
+      const num = Number(raw);
+      if (!Number.isFinite(num) || (f.step === 1 && !Number.isInteger(num))) {
+        setFormError(`${f.label} butun son bo'lishi kerak`);
+        return;
+      }
+      if (f.min !== undefined && num < f.min) {
+        setFormError(`${f.label} ${f.min} dan kichik bo'lishi mumkin emas`);
+        return;
+      }
+    }
+
     setSaving(true);
     setFormError("");
     try {
@@ -318,14 +344,17 @@ export default function LookupCrudPage<T extends { id: number; is_active?: boole
           <h2 className="section-title">{title}</h2>
           <p className="section-subtitle">{subtitle}</p>
         </div>
-        <PermissionGate permission={createPermission}>
-          <button onClick={openCreate} className="btn-primary self-start sm:self-auto">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-            </svg>
-            Qo'shish
-          </button>
-        </PermissionGate>
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          {headerActions?.(load)}
+          <PermissionGate permission={createPermission}>
+            <button onClick={openCreate} className="btn-primary">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+              </svg>
+              Qo'shish
+            </button>
+          </PermissionGate>
+        </div>
       </div>
 
       {error && (
@@ -652,9 +681,27 @@ export default function LookupCrudPage<T extends { id: number; is_active?: boole
                         <input
                           type={f.type}
                           value={form[f.key] ?? ""}
+                          min={f.type === "number" ? f.min : undefined}
+                          step={f.type === "number" ? f.step : undefined}
+                          inputMode={
+                            f.type === "number" && f.step === 1
+                              ? "numeric"
+                              : undefined
+                          }
                           onChange={(e) => setForm({ ...form, [f.key]: e.target.value })}
                           onKeyDown={(e) => {
-                            if (e.key === "Enter" && !saving) handleSave();
+                            if (e.key === "Enter" && !saving) {
+                              handleSave();
+                              return;
+                            }
+                            // Raqamli maydonlarda musbat butun sonlarni ta'minlash
+                            // uchun eksponenta/ishora belgilarini bloklaymiz;
+                            // step===1 bo'lsa kasr nuqtasini ham.
+                            if (f.type === "number") {
+                              const blocked = ["e", "E", "+", "-"];
+                              if (f.step === 1) blocked.push(".");
+                              if (blocked.includes(e.key)) e.preventDefault();
+                            }
                           }}
                           className="input-field w-full"
                           placeholder={f.placeholder || f.label}

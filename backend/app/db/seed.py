@@ -61,7 +61,11 @@ def _generate_admin_password() -> str:
 
 
 def _sync_roles(db: Session) -> dict[int, Role]:
-    existing = {r.key: r for r in db.execute(select(Role)).scalars().all()}
+    # Role.permissions lazy="joined" (collection) — JOIN dublikat qatorlar
+    # qaytaradi, shuning uchun .unique() majburiy.
+    existing = {
+        r.key: r for r in db.execute(select(Role)).unique().scalars().all()
+    }
     for data in DEFAULT_ROLES:
         if data["key"] not in existing:
             role = Role(name=data["name"], key=data["key"], is_active=True)
@@ -74,7 +78,7 @@ def _sync_roles(db: Session) -> dict[int, Role]:
 def _ensure_admin_user(db: Session, admin_role: Role) -> None:
     existing = db.execute(
         select(User).where(User.username == ADMIN_USERNAME)
-    ).scalar_one_or_none()
+    ).unique().scalar_one_or_none()
     if existing:
         if existing.role_id != admin_role.id:
             existing.role_id = admin_role.id

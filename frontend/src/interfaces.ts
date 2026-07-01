@@ -560,6 +560,8 @@ export interface LookupZoneCreate {
   number: number;
   is_part?: boolean;
   is_active?: boolean;
+  // Tashqi OTM API'dagi bino "id" qiymati (ixtiyoriy).
+  building_id?: number | null;
 }
 export interface LookupZoneUpdate {
   region_id?: number;
@@ -567,6 +569,7 @@ export interface LookupZoneUpdate {
   number?: number;
   is_part?: boolean;
   is_active?: boolean;
+  building_id?: number | null;
 }
 export interface LookupZoneResponse {
   id: number;
@@ -575,6 +578,7 @@ export interface LookupZoneResponse {
   number: number;
   is_part: boolean;
   is_active: boolean;
+  building_id: number | null;
   created_at: string;
 }
 

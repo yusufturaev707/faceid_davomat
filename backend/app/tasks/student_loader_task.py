@@ -16,6 +16,7 @@ from app.models.test_session import TestSession
 from app.services.student_loader import (
     StudentLoadError,
     load_students_for_session,
+    mark_progress_error,
 )
 
 logger = logging.getLogger("faceid.tasks.student_loader")
@@ -48,11 +49,9 @@ def load_students_task(
         session = db.get(TestSession, session_id)
         if not session:
             logger.error("TestSession #%d topilmadi", session_id)
-            return {
-                "loaded": 0,
-                "status": "error",
-                "message": f"Sessiya #{session_id} topilmadi",
-            }
+            msg = f"Sessiya #{session_id} topilmadi"
+            mark_progress_error(session_id, msg)
+            return {"loaded": 0, "status": "error", "message": msg}
 
         try:
             count = load_students_for_session(db, session)
@@ -62,6 +61,9 @@ def load_students_task(
                 session_id, e.message, previous_state_id,
             )
             _rollback_state(db, session_id, previous_state_id)
+            # Loader erta (progress yozilmasdan oldin) xato bergan bo'lsa ham
+            # frontend "idle"da qotib qolmasligi uchun xatoni Redis'ga yozamiz.
+            mark_progress_error(session_id, e.message)
             return {"loaded": 0, "status": "error", "message": e.message}
         except Exception as e:
             logger.exception(
@@ -69,6 +71,7 @@ def load_students_task(
                 session_id, previous_state_id,
             )
             _rollback_state(db, session_id, previous_state_id)
+            mark_progress_error(session_id, f"Kutilmagan xatolik: {e}")
             return {
                 "loaded": 0,
                 "status": "error",

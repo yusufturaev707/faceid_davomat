@@ -101,6 +101,9 @@ class ZoneCreate(BaseModel):
     number: int
     is_part: bool = False
     is_active: bool = True
+    # Tashqi OTM API'dagi bino "id" qiymati. Qo'lda yaratishda ixtiyoriy,
+    # ammo berilsa musbat butun son bo'lishi shart.
+    building_id: int | None = Field(default=None, gt=0)
 
 class ZoneUpdate(BaseModel):
     region_id: int | None = None
@@ -108,6 +111,7 @@ class ZoneUpdate(BaseModel):
     number: int | None = None
     is_part: bool | None = None
     is_active: bool | None = None
+    building_id: int | None = Field(default=None, gt=0)
 
 class ZoneResponse(BaseModel):
     id: int
@@ -116,8 +120,41 @@ class ZoneResponse(BaseModel):
     number: int
     is_part: bool
     is_active: bool
+    building_id: int | None
     created_at: datetime
     model_config = {"from_attributes": True}
+
+
+class ZoneSyncFieldChange(BaseModel):
+    """Bitta maydondagi o'zgarish (eski -> yangi)."""
+
+    field: str  # "name" | "number" | "region" | "is_active"
+    old: str | int | bool | None = None
+    new: str | int | bool | None = None
+
+
+class ZoneSyncEntry(BaseModel):
+    """Sinxronizatsiyada qo'shilgan yoki yangilangan bitta bino."""
+
+    building_id: int
+    name: str
+    number: int
+    region_name: str | None = None
+    # Faqat yangilanganlar uchun to'ldiriladi; qo'shilganlarda bo'sh.
+    changes: list[ZoneSyncFieldChange] = []
+
+
+class ZoneSyncResult(BaseModel):
+    """Tashqi OTM API'dan binolarni sinxronizatsiya qilish yakuni."""
+
+    received: int
+    created: int
+    updated: int
+    unchanged: int
+    skipped_no_region: int
+    invalid: int
+    created_items: list[ZoneSyncEntry] = []
+    updated_items: list[ZoneSyncEntry] = []
 
 
 # ---- Role ----

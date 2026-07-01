@@ -9,6 +9,11 @@ from app.crud.lookup import DuplicateError
 from app.dependencies import PermissionChecker, get_current_active_user, get_db
 from app.models.user import User
 from app.schemas import lookup as schemas
+from app.services.zone_sync import (
+    ZoneSyncError,
+    ZoneSyncNotConfigured,
+    sync_zones_from_otm,
+)
 
 router = APIRouter()
 
@@ -291,6 +296,35 @@ def list_my_region_zones(
             ),
         )
     return crud.get_zones(db, only_active=True, region_id=int(region_id))
+
+
+@router.post(
+    "/zones/sync-from-otm",
+    response_model=schemas.ZoneSyncResult,
+    tags=["zones"],
+    summary="OTM tashqi API'dan binolarni sinxronizatsiya qilish",
+)
+def sync_zones_from_otm_endpoint(
+    db: Session = Depends(get_db),
+    _: User = Depends(_LOOKUP_CREATE),
+):
+    """Tashqi `API_OTM_ZONES` dan binolar ro'yxatini olib, tizimda mavjud
+    bo'lmaganini insert qiladi.
+
+    Moslik: `region_number` -> `Region.number`, `status` -> `Zone.is_active`.
+    Mavjudlik kaliti: region ichida `name` + `number`. Mavjud bo'lsa o'tkazib
+    yuboriladi, yo'q bo'lsa qo'shiladi. Hozircha tashqi API ishlamasligi mumkin —
+    u holda 503/502 tushunarli xato qaytadi.
+    """
+    try:
+        return sync_zones_from_otm(db)
+    except ZoneSyncNotConfigured as e:
+        raise HTTPException(
+            status_code=503,
+            detail=f"OTM zonalar API sozlanmagan: {e}",
+        )
+    except ZoneSyncError as e:
+        raise HTTPException(status_code=502, detail=e.message)
 
 
 @router.post(

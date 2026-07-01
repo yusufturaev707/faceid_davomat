@@ -42,7 +42,7 @@ const emptyForm: Record<string, any> = {
   gr_n: 0,
   sp_n: 0,
   s_code: 0,
-  e_date: new Date().toISOString().slice(0, 16),
+  e_date: new Date().toISOString().slice(0, 10),
   subject_id: 0,
   subject_name: "",
   lang_id: 0,
@@ -354,7 +354,7 @@ export default function StudentsPage() {
       gr_n: full.gr_n,
       sp_n: full.sp_n,
       s_code: full.s_code,
-      e_date: full.e_date ? full.e_date.slice(0, 16) : "",
+      e_date: full.e_date ? full.e_date.slice(0, 10) : "",
       subject_id: full.subject_id,
       subject_name: full.subject_name || "",
       lang_id: full.lang_id,
@@ -1596,7 +1596,7 @@ export default function StudentsPage() {
                 </ModalField>
                 <ModalField label="Test sanasi">
                   <input
-                    type="datetime-local"
+                    type="date"
                     value={form.e_date}
                     onChange={(e) => setField("e_date", e.target.value)}
                     className="input-field w-full"

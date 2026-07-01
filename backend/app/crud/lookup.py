@@ -26,6 +26,7 @@ _UNIQUE_FIELD_LABELS: dict[str, str] = {
     "number": "Raqam",
     "s_number": "S-raqam",
     "k_number": "K-raqam",
+    "building_id": "Bino ID (OTM)",
     "key": "Kalit",
     "name": "Nomi",
     "username": "Foydalanuvchi nomi",

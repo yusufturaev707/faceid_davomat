@@ -325,6 +325,27 @@ def _build_gender_lookup(db: Session) -> dict[int, int]:
     return {int(k): int(i) for k, i in rows}
 
 
+def _gender_key_from_imei(imei: str | None) -> int:
+    """IMEI/JShShIR (PINFL) birinchi raqamidan jins kalitini aniqlash.
+
+    O'zbekiston JShShIR standartida 1-raqam tug'ilgan asr + jinsni bildiradi:
+      3, 5 → erkak  (Gender.key = 1)
+      4, 6 → ayol   (Gender.key = 2)
+    Bo'sh yoki boshqa raqam bo'lsa 0 (noma'lum — gender_id o'rnatilmaydi).
+
+    GTSP `sex` qaytarmaganda fallback sifatida ishlatiladi.
+    """
+    s = (imei or "").strip()
+    if not s:
+        return 0
+    first = s[0]
+    if first in ("3", "5"):
+        return 1
+    if first in ("4", "6"):
+        return 2
+    return 0
+
+
 # ─── Redis progress ───────────────────────────────────────────────────
 
 
@@ -500,9 +521,16 @@ def _apply_gtsp_result(
     result: Any,
     gender_map: dict[int, int],
 ) -> bool:
-    """Bitta student'ga GTSP natijasini DB'ga yozish. True = muvaffaqiyat."""
-    if result is None or isinstance(result, Exception):
-        return False
+    """Bitta student'ga GTSP natijasini DB'ga yozish.
+
+    Jins har doim aniqlanishga harakat qilinadi: GTSP `sex` (1/2) ustun, aks
+    holda (GTSP javob bermasa yoki sex kelmasa) student IMEI/JShShIR birinchi
+    raqamidan (`_gender_key_from_imei`) fallback bilan. Shu sababli GTSP
+    muvaffaqiyatsiz bo'lganda ham imkon qadar jins yoziladi.
+
+    Returns:
+        True = GTSP natijasi (FIO/rasm) muvaffaqiyatli qo'llandi.
+    """
     student = db.get(Student, student_id)
     if student is None:
         return False
@@ -510,6 +538,19 @@ def _apply_gtsp_result(
         select(StudentPsData).where(StudentPsData.student_id == student_id)
     ).scalar()
     if ps_data is None:
+        return False
+
+    has_gtsp = result is not None and not isinstance(result, Exception)
+
+    # Jins: GTSP sex (1/2) ustun, aks holda IMEI/JShShIR 1-raqamidan fallback.
+    sex = result.sex if has_gtsp else None
+    gender_key = sex if sex in (1, 2) else _gender_key_from_imei(student.imei)
+    gid = gender_map.get(gender_key)
+    if gid:
+        ps_data.gender_id = gid
+
+    # GTSP javob bermagan bo'lsa — FIO/rasm yangilanmaydi (faqat jins fallback).
+    if not has_gtsp:
         return False
 
     if result.last_name:
@@ -521,11 +562,6 @@ def _apply_gtsp_result(
     if result.photo:
         ps_data.ps_img = result.photo
         student.is_image = True
-
-    gender_key = result.sex if result.sex in (1, 2) else 0
-    gid = gender_map.get(gender_key)
-    if gid:
-        ps_data.gender_id = gid
     return True
 
 

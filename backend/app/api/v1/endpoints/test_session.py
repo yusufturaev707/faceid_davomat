@@ -69,7 +69,13 @@ from app.services.session_dashboard_stats import (
     get_dashboard_stats,
 )
 from app.services.session_stats_excel import build_session_stats_excel
-from app.services.student_loader import get_student_load_progress
+from app.services.davomat_bot_absentees import AbsenteesError
+from app.services.session_status_excel import build_session_status_excel
+from app.models.region import Region
+from app.services.student_loader import (
+    get_student_load_progress,
+    mark_progress_queued,
+)
 from app.tasks.excel_loader_task import excel_load_and_enrich_task
 from app.tasks.student_loader_task import load_students_task
 from app.tasks.verify_task import process_embeddings, process_retry_embeddings
@@ -568,6 +574,9 @@ def change_state(
     # Frontend `/student-load-progress` endpoint orqali progress polling qiladi.
     new_state = db.get(SessionState, body.test_state_id)
     if new_state and new_state.key == STATE_KEY_LOADING:
+        # Darhol "processing" progress yozamiz — worker task'ni olgunicha
+        # frontend "idle" ko'rib spinnerni abadiy aylantirmasligi uchun.
+        mark_progress_queued(session_id)
         load_students_task.delay(session_id, previous_state_id)
         logger.info(
             "Session #%d: student loading Celery task boshlandi", session_id
@@ -1003,6 +1012,73 @@ def export_session_dashboard_stats(
     if order_key in ("dtm", "vm", "iiv"):
         parts.append(order_key)
     filename = "_".join(parts) + ".xlsx"
+    headers = {
+        "Content-Disposition": f'attachment; filename="{filename}"',
+        "Cache-Control": "no-store",
+    }
+    return StreamingResponse(
+        BytesIO(content),
+        media_type=(
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        ),
+        headers=headers,
+    )
+
+
+@router.get(
+    "/{session_id}/dashboard-stats/absentees-export",
+    summary="Talabgorlar holati (kelmagan + chetlatilgan) Excel eksporti",
+)
+def export_session_absentees(
+    session_id: int,
+    scope: str = Query(
+        "smena",
+        description="Statistika ko'lami: smena | day | overall",
+    ),
+    session_smena_id: int | None = Query(
+        None,
+        description="TestSessionSmena.id — scope=smena uchun majburiy (kun+smena)",
+    ),
+    day: date | None = Query(
+        None,
+        description="Kun (YYYY-MM-DD) — scope=day uchun majburiy",
+    ),
+    db: Session = Depends(get_db),
+    _: User = Depends(PermissionChecker(P.STATISTICS_READ.code)),
+):
+    """Tanlangan ko'lam (scope) uchun talabgorlar holati ro'yxatini .xlsx ga eksport.
+
+    `/dashboard-stats/export` (МАЪЛУМОТ jadvali) bilan yonma-yon ishlatiladi.
+    Har bir talabgor alohida qatorda, "Status" ustuni bo'yicha guruhlangan:
+    avval kelmaganlar, so'ng kirishda chetlatilganlar, so'ng test jarayonida
+    chetlatilganlar; har guruh ichida sana → region → zone → smena → guruh
+    tartibida. Chetlatilganlarda "Sabab" ustuni to'ldiriladi. Admin barcha
+    viloyatlar kesimida ko'radi.
+    """
+    session = db.get(TestSession, session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Sessiya topilmadi")
+
+    # scope → servis parametrlari (smena: bitta smena, day: bitta kun,
+    # overall: butun sessiya — ikkalasi None).
+    scope_key = scope.strip().lower()
+    smena_id = session_smena_id if scope_key == "smena" else None
+    test_day = day if scope_key == "day" else None
+
+    # Admin statistika eksporti — barcha viloyatlar kesimida.
+    all_region_ids = set(db.execute(sa_select(Region.id)).scalars().all())
+
+    try:
+        content, filename, _count = build_session_status_excel(
+            db,
+            session_id=session_id,
+            session_smena_id=smena_id,
+            test_day=test_day,
+            allowed_region_ids=all_region_ids,
+        )
+    except AbsenteesError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
     headers = {
         "Content-Disposition": f'attachment; filename="{filename}"',
         "Cache-Control": "no-store",

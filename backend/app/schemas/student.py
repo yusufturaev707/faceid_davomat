@@ -37,7 +37,7 @@ class StudentCreate(BaseModel):
     gr_n: int = 0
     sp_n: int = 0
     s_code: int = 0
-    e_date: datetime
+    e_date: date
     subject_id: int = 0
     subject_name: str | None = Field(default=None, max_length=100)
     lang_id: int = 0
@@ -94,7 +94,7 @@ class StudentUpdate(BaseModel):
     gr_n: int | None = None
     sp_n: int | None = None
     s_code: int | None = None
-    e_date: datetime | None = None
+    e_date: date | None = None
     subject_id: int | None = None
     subject_name: str | None = Field(default=None, max_length=100)
     lang_id: int | None = None
@@ -128,7 +128,7 @@ class StudentResponse(BaseModel):
     gr_n: int
     sp_n: int
     s_code: int
-    e_date: datetime
+    e_date: date
     subject_id: int
     subject_name: str | None = None
     lang_id: int
@@ -281,7 +281,7 @@ class StudentLogResponse(BaseModel):
     gr_n: int | None = None
     is_cheating: bool | None = None
     is_blacklist: bool | None = None
-    e_date: datetime | None = None
+    e_date: date | None = None
     zone_id: int | None = None
     zone_name: str | None = None
     region_id: int | None = None

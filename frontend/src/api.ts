@@ -444,6 +444,58 @@ export async function exportSessionDashboardStatsApi(
 }
 
 /**
+ * Tanlangan ko'lam (scope) uchun kelmaganlar ro'yxatini .xlsx ga eksport qilib
+ * yuklab olish. Har bir kelmagan talabgor alohida qatorda, sana → region →
+ * zone → smena → guruh tartibida. Brauzer faylni saqlaydi.
+ */
+export async function exportSessionAbsenteesApi(
+  sessionId: number,
+  opts: {
+    scope: import("./interfaces").StatsScope;
+    sessionSmenaId?: number | null;
+    day?: string | null;
+  },
+): Promise<void> {
+  const params: Record<string, string | number> = { scope: opts.scope };
+  if (opts.scope === "smena" && opts.sessionSmenaId != null) {
+    params.session_smena_id = opts.sessionSmenaId;
+  }
+  if (opts.scope === "day" && opts.day) {
+    params.day = opts.day;
+  }
+  try {
+    const res = await apiClient.get(
+      `/test-sessions/${sessionId}/dashboard-stats/absentees-export`,
+      { params, responseType: "blob" },
+    );
+    const cd = (res.headers["content-disposition"] as string | undefined) ?? "";
+    const match = /filename="?([^";]+)"?/.exec(cd);
+    const filename = match ? match[1] : "kelmaganlar.xlsx";
+
+    const url = URL.createObjectURL(res.data);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    // Xato javob blob ko'rinishida keladi — ichidagi {detail} ni o'qib chiqaramiz
+    const data = (err as { response?: { data?: unknown } })?.response?.data;
+    if (data instanceof Blob) {
+      try {
+        const parsed = JSON.parse(await data.text());
+        throw new Error(parsed.detail || "Eksport amalga oshmadi");
+      } catch (e) {
+        if (e instanceof Error && e.message) throw e;
+      }
+    }
+    throw err;
+  }
+}
+
+/**
  * Test sessiyaga Excel orqali studentlarni yuklash. Backend Celery task
  * boshlaydi va darhol 202 qaytaradi — natijani `getStudentLoadProgressApi`
  * orqali polling qiling. Task yakunida sessiya state.key=2 ga o'tadi.
@@ -662,6 +714,33 @@ export async function updateZoneApi(id: number, data: import("./interfaces").Loo
 }
 export async function deleteZoneApi(id: number): Promise<void> {
   await apiClient.delete(`/lookup/zones/${id}`);
+}
+// OTM tashqi API'dan binolarni sinxronizatsiya qilish ("Yangilash" tugmasi).
+export interface ZoneSyncFieldChange {
+  field: "name" | "number" | "region" | "is_active" | string;
+  old: string | number | boolean | null;
+  new: string | number | boolean | null;
+}
+export interface ZoneSyncEntry {
+  building_id: number;
+  name: string;
+  number: number;
+  region_name: string | null;
+  changes: ZoneSyncFieldChange[];
+}
+export interface ZoneSyncResult {
+  received: number;
+  created: number;
+  updated: number;
+  unchanged: number;
+  skipped_no_region: number;
+  invalid: number;
+  created_items: ZoneSyncEntry[];
+  updated_items: ZoneSyncEntry[];
+}
+export async function syncZonesFromOtmApi(): Promise<ZoneSyncResult> {
+  const res = await apiClient.post("/lookup/zones/sync-from-otm");
+  return res.data;
 }
 
 // Roles

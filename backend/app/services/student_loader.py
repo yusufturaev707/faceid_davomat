@@ -11,7 +11,7 @@ Asosiy printsiplar:
 import base64
 import json
 import logging
-from datetime import datetime
+from datetime import date, datetime
 import httpx
 import redis
 from sqlalchemy import select
@@ -33,9 +33,10 @@ _API_URLS: dict[str, str] = {
     "cefr": settings.API_CEFR,
     "ms": settings.API_MS,
     "iiv": settings.API_IIV,
+    "otm-dtm": settings.API_OTM_STUDENTS,
 }
 
-_SUPPORTED_KEYS = {"cefr", "ms", "iiv"}
+_SUPPORTED_KEYS = {"cefr", "ms", "iiv", "otm-dtm"}
 
 # Bitta DB commit ichidagi qator soni. 500-1000 oraliq optimal — kattaroq qiymat
 # tranzaksiyani uzaytiradi va lock'larni ushlab turadi.
@@ -125,6 +126,36 @@ def get_student_load_progress(session_id: int) -> dict | None:
     return None
 
 
+def mark_progress_queued(
+    session_id: int, message: str = "Navbatda — ishga tushmoqda..."
+) -> None:
+    """Yuklash navbatga qo'yilganda darhol "processing" progress yozish.
+
+    Endpoint task'ni `.delay()` qilgach chaqiradi — worker task'ni olgunicha
+    frontend "idle" emas, "processing" ko'radi (cheksiz spinner oldini oladi).
+    """
+    _set_progress(
+        _get_redis(), session_id,
+        current=0, total=0, pages_done=0, pages_total=0,
+        skipped=0, status="processing", message=message,
+    )
+
+
+def mark_progress_error(session_id: int, message: str) -> None:
+    """Yuklash xatosini Redis'ga "error" sifatida yozish.
+
+    Loader o'zining ichki try/except'idan OLDIN xato bersa (masalan API
+    sozlanmagan, zona/smena yo'q), progress umuman yozilmay qolardi va frontend
+    "idle"da abadiy aylanardi. Task except handlerlari shu funksiyani chaqiradi —
+    natija (xato sababi) foydalanuvchiga ko'rsatiladi.
+    """
+    _set_progress(
+        _get_redis(), session_id,
+        current=0, total=0, pages_done=0, pages_total=0,
+        skipped=0, status="error", message=message,
+    )
+
+
 # ─── Yordamchi parserlar ────────────────────────────────────────────
 
 
@@ -144,6 +175,21 @@ def _b64_to_bytes(val) -> bytes | None:
         return None
 
 
+def _safe_int(val) -> int | None:
+    """Qiymatni butun songa keltirish (bool'ni rad etadi), bo'lmasa None."""
+    if isinstance(val, bool):
+        return None
+    if isinstance(val, int):
+        return val
+    if isinstance(val, float):
+        return int(val)
+    if isinstance(val, str):
+        s = val.strip()
+        if s.lstrip("-").isdigit():
+            return int(s)
+    return None
+
+
 def _build_region_zone_map(db: Session) -> dict[int, int]:
     """Region.number → Region ichidagi birinchi aktiv Zone.id mapping.
 
@@ -161,6 +207,21 @@ def _build_region_zone_map(db: Session) -> dict[int, int]:
         if region_number not in zone_map:
             zone_map[region_number] = zone_id
     return zone_map
+
+
+def _build_building_zone_map(db: Session) -> dict[int, int]:
+    """Zone.building_id → Zone.id mapping.
+
+    Tashqi API'dagi student `zone_id` = `Zone.building_id`. Shu map orqali
+    studentni AYNAN o'z binosiga (Zone.id) bog'laymiz — region ichidagi
+    "birinchi zona" fallback'iga tayanmasdan. `building_id` unikal bo'lgani
+    uchun har bir tashqi bino bitta zonaga to'g'ri keladi. Faol/nofaol
+    ajratilmaydi — tashqi tizim ko'rsatgan bino manba hisoblanadi.
+    """
+    rows = db.execute(
+        select(Zone.building_id, Zone.id).where(Zone.building_id.isnot(None))
+    ).all()
+    return {int(building_id): int(zone_id) for building_id, zone_id in rows}
 
 
 def _build_smena_map(db: Session, session_id: int) -> dict[tuple[int, str], int]:
@@ -184,7 +245,9 @@ def _build_smena_map(db: Session, session_id: int) -> dict[tuple[int, str], int]
 # ─── Tashqi API parserlar ───────────────────────────────────────────
 
 
-def _parse_cefr(item: dict, zone_map: dict[int, int]) -> tuple[dict, dict] | None:
+def _parse_cefr(
+    item: dict, zone_map: dict[int, int], building_map: dict[int, int]
+) -> tuple[dict, dict] | None:
     region_number = item.get("dtm_id", 0)
     zone_id = zone_map.get(region_number)
     if not zone_id:
@@ -192,9 +255,9 @@ def _parse_cefr(item: dict, zone_map: dict[int, int]) -> tuple[dict, dict] | Non
 
     e_date_str = item.get("e_date", "")
     try:
-        e_date = datetime.strptime(e_date_str, "%Y-%m-%d")
+        e_date = datetime.strptime(e_date_str, "%Y-%m-%d").date()
     except (ValueError, TypeError):
-        e_date = datetime.now()
+        e_date = date.today()
 
     student = {
         "zone_id": zone_id,
@@ -222,7 +285,9 @@ def _parse_cefr(item: dict, zone_map: dict[int, int]) -> tuple[dict, dict] | Non
     return student, ps_data
 
 
-def _parse_ms(item: dict, zone_map: dict[int, int]) -> tuple[dict, dict] | None:
+def _parse_ms(
+    item: dict, zone_map: dict[int, int], building_map: dict[int, int]
+) -> tuple[dict, dict] | None:
     region_number = item.get("test_region_id", 0)
     zone_id = zone_map.get(region_number)
     if not zone_id:
@@ -230,9 +295,9 @@ def _parse_ms(item: dict, zone_map: dict[int, int]) -> tuple[dict, dict] | None:
 
     day_str = item.get("test_day", "")
     try:
-        e_date = datetime.strptime(day_str, "%Y-%m-%d")
+        e_date = datetime.strptime(day_str, "%Y-%m-%d").date()
     except (ValueError, TypeError):
-        e_date = datetime.now()
+        e_date = date.today()
 
     student = {
         "zone_id": zone_id,
@@ -260,7 +325,9 @@ def _parse_ms(item: dict, zone_map: dict[int, int]) -> tuple[dict, dict] | None:
     return student, ps_data
 
 
-def _parse_iiv(item: dict, zone_map: dict[int, int]) -> tuple[dict, dict] | None:
+def _parse_iiv(
+    item: dict, zone_map: dict[int, int], building_map: dict[int, int]
+) -> tuple[dict, dict] | None:
     region_number = item.get("dtm_id", 0)
     zone_id = zone_map.get(region_number)
     if not zone_id:
@@ -268,9 +335,9 @@ def _parse_iiv(item: dict, zone_map: dict[int, int]) -> tuple[dict, dict] | None
 
     day_str = item.get("test_date", "")
     try:
-        e_date = datetime.strptime(day_str, "%Y-%m-%d")
+        e_date = datetime.strptime(day_str, "%Y-%m-%d").date()
     except (ValueError, TypeError):
-        e_date = datetime.now()
+        e_date = date.today()
 
     student = {
         "zone_id": zone_id,
@@ -298,10 +365,82 @@ def _parse_iiv(item: dict, zone_map: dict[int, int]) -> tuple[dict, dict] | None
     return student, ps_data
 
 
+def _parse_otm_dtm(
+    item: dict, zone_map: dict[int, int], building_map: dict[int, int]
+) -> tuple[dict, dict] | None:
+    """OTM-DTM tashqi API item'ini Student/StudentPsData dict'lariga aylantiradi.
+
+    Struktura::
+
+        {id, ps_ser, ps_num, imei, last_name, first_name, middle_name, e_date,
+         smen, region_number, zone_id, gr_n, sp_n, phone, gender, ps_img}
+
+    Bino (zona) aniqlash:
+    - Tashqi `zone_id` = `Zone.building_id`. Shu bo'yicha studentning AYNAN
+      binosi (Zone.id) topiladi — asosiy va aniq usul.
+    - `zone_id` kelmagan yoki tizimda mos bino topilmagan holatda `region_number`
+      -> Region.number orqali region ichidagi birinchi aktiv zonaga fallback
+      qilinadi (ma'lumot yo'qolib ketmasligi uchun).
+    - `gender` (1=erkak, 2=ayol) to'g'ridan-to'g'ri ishlatiladi; bo'lmasa
+      IMEI 1-raqamiga qarab aniqlanadi (processing bosqichida).
+    """
+    # 1) Aniq bino: tashqi `zone_id` (== Zone.building_id) bo'yicha.
+    building_ext_id = _safe_int(item.get("zone_id"))
+    zone_id = building_map.get(building_ext_id) if building_ext_id else None
+
+    # 2) Fallback: region_number -> region ichidagi birinchi aktiv zona.
+    if not zone_id:
+        region_number = _safe_int(item.get("region_number")) or 0
+        zone_id = zone_map.get(region_number)
+
+    if not zone_id:
+        return None
+
+    e_date_str = str(item.get("e_date", "") or "")
+    try:
+        e_date = datetime.strptime(e_date_str, "%Y-%m-%d").date()
+    except (ValueError, TypeError):
+        e_date = date.today()
+        e_date_str = e_date.isoformat()
+
+    try:
+        g = int(item.get("gender"))
+    except (TypeError, ValueError):
+        g = 0
+    gender_key = g if g in (1, 2) else None
+
+    student = {
+        "zone_id": zone_id,
+        "last_name": str(item.get("last_name", "")).strip().upper(),
+        "first_name": str(item.get("first_name", "")).strip().upper(),
+        "middle_name": str(item.get("middle_name", "")).strip().upper() or None,
+        "imei": str(item.get("imei", "") or "")[:14] or None,
+        "gr_n": int(item.get("gr_n", 0) or 0),
+        "sp_n": int(item.get("sp_n", 0) or 0),
+        "s_code": int(item.get("id", 0) or 0),
+        "e_date": e_date,
+        "subject_id": 0,
+        "subject_name": "OTM-DTM",
+        "lang_id": 0,
+        "level_id": 0,
+        "_smena_number": int(item.get("smen", 1) or 1),
+        "_day": e_date_str,
+        "_gender_key": gender_key,
+    }
+    ps_data = {
+        "ps_ser": str(item.get("ps_ser", "")).strip().upper(),
+        "ps_num": str(item.get("ps_num", "")).strip(),
+        "phone": str(item.get("phone", "") or "")[:13] or None,
+        "ps_img": _b64_to_bytes(item.get("ps_img")),
+    }
+    return student, ps_data
+
+
 _PARSERS = {
     "cefr": _parse_cefr,
     "ms": _parse_ms,
     "iiv": _parse_iiv,
+    "otm-dtm": _parse_otm_dtm,
 }
 
 
@@ -407,10 +546,16 @@ def load_students_for_session(db: Session, session: TestSession) -> int:
     headers: dict[str, str] = {}
     if test_key == "iiv" and settings.API_IIV_TOKEN:
         headers["Authorization"] = settings.API_IIV_TOKEN
+    elif test_key == "otm-dtm" and settings.API_OTM_STUDENTS_TOKEN:
+        headers["Authorization"] = settings.API_OTM_STUDENTS_TOKEN
 
     zone_map = _build_region_zone_map(db)
     if not zone_map:
         raise StudentLoadError("Hududlar yoki zonalar topilmadi")
+
+    # Tashqi student `zone_id` (== Zone.building_id) -> Zone.id. OTM-DTM
+    # loader'i studentni aynan o'z binosiga bog'lash uchun ishlatadi.
+    building_map = _build_building_zone_map(db)
 
     smena_map = _build_smena_map(db, session.id)
     if not smena_map:
@@ -541,7 +686,7 @@ def load_students_for_session(db: Session, session: TestSession) -> int:
         nonlocal total_loaded, total_skipped
         committed_now = 0
         for raw in raw_items:
-            parsed = parser(raw, zone_map)
+            parsed = parser(raw, zone_map, building_map)
             if not parsed:
                 total_skipped += 1
                 continue
@@ -550,6 +695,7 @@ def load_students_for_session(db: Session, session: TestSession) -> int:
 
             smena_number = student_data.pop("_smena_number", 1)
             item_day = student_data.pop("_day", day_str)
+            gender_key = student_data.pop("_gender_key", None)
 
             session_smena_id = smena_map.get((smena_number, item_day))
             if not session_smena_id:
@@ -563,8 +709,12 @@ def load_students_for_session(db: Session, session: TestSession) -> int:
             if imei_val and imei_val in blacklist_imeis:
                 student_data["is_blacklist"] = True
 
-            # Gender — IMEI 1-raqamiga qarab
-            if imei_val and imei_val[0] in ("3", "5"):
+            # Gender — avval API qiymati (OTM-DTM), bo'lmasa IMEI 1-raqamiga qarab
+            if gender_key == 1:
+                ps_data["gender_id"] = gender_male_id
+            elif gender_key == 2:
+                ps_data["gender_id"] = gender_female_id
+            elif imei_val and imei_val[0] in ("3", "5"):
                 ps_data["gender_id"] = gender_male_id
             elif imei_val and imei_val[0] in ("4", "6"):
                 ps_data["gender_id"] = gender_female_id

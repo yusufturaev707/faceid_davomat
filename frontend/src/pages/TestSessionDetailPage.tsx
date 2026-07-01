@@ -182,9 +182,37 @@ export default function TestSessionDetailPage() {
 
   // Student loading polling — Celery task'dan kelayotgan progressni Redis orqali oqish
   const startStudentLoadPolling = useCallback((sessionId: number) => {
+    // "idle" — Redis'da progress yo'q (task hali boshlanmagan, crash bo'lgan
+    // yoki TTL tugagan). Endpoint .delay() bilan birga darhol "processing"
+    // yozadi, shuning uchun normal holatda idle deyarli kelmaydi. Bir necha
+    // marta ketma-ket idle bo'lsa — task ishga tushmagan deb hisoblab,
+    // spinnerni abadiy aylantirmasdan to'xtatamiz.
+    let consecutiveIdle = 0;
     const poll = setInterval(async () => {
       try {
         const p = await getStudentLoadProgressApi(sessionId);
+
+        if (p.status === "idle") {
+          consecutiveIdle += 1;
+          if (consecutiveIdle >= 5) {
+            clearInterval(poll);
+            setLoadProgress(0);
+            setProgressLabel("");
+            setStateError(
+              "Talabalar yuklash jarayoni boshlanmadi (navbat/worker ishlamayapti yoki vaqt tugadi). Iltimos, qayta urinib ko'ring.",
+            );
+            try {
+              const refreshed = await getTestSessionApi(sessionId);
+              setSession(refreshed);
+            } catch {
+              /* ignore */
+            }
+            setChangingState(false);
+            setTargetStateId(null);
+          }
+          return;
+        }
+        consecutiveIdle = 0;
 
         // Progress bar — agar total ma'lum bo'lsa aniq foiz, aks holda
         // sahifalar bo'yicha. Backend kumulyativ totalCount yig'ib boradi,

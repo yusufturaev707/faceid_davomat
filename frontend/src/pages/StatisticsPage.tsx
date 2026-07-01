@@ -52,6 +52,7 @@ import type {
   ZoneStatItem,
 } from "../interfaces";
 import {
+  exportSessionAbsenteesApi,
   exportSessionDashboardStatsApi,
   getSessionDashboardStatsApi,
   getSessionStatesLookupApi,
@@ -151,6 +152,8 @@ export default function StatisticsPage() {
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [exporting, setExporting] = useState(false);
+  // Kelmaganlar ro'yxati (.xlsx) eksporti — МАЪЛУМОТ jadvalidan alohida tugma
+  const [exportingAbsentees, setExportingAbsentees] = useState(false);
   // Excel hisobot alifbosi — krill (default) yoki o'zbek lotin
   const [excelAlphabet, setExcelAlphabet] = useState<"cyrillic" | "latin">(
     "cyrillic",
@@ -319,6 +322,29 @@ export default function StatisticsPage() {
     selectedDay,
     excelAlphabet,
     excelOrder,
+  ]);
+
+  // === Kelmaganlar ro'yxatini (.xlsx) yuklab olish ===
+  const handleExportAbsentees = useCallback(async () => {
+    if (!selectedSessionId || exportingAbsentees) return;
+    setExportingAbsentees(true);
+    try {
+      await exportSessionAbsenteesApi(selectedSessionId, {
+        scope,
+        sessionSmenaId: selectedSmenaId,
+        day: selectedDay,
+      });
+    } catch (err) {
+      setError(extractErrorMessage(err));
+    } finally {
+      setExportingAbsentees(false);
+    }
+  }, [
+    selectedSessionId,
+    exportingAbsentees,
+    scope,
+    selectedSmenaId,
+    selectedDay,
   ]);
 
   // === Smenalar va kunlar tanlovi uchun yordamchilar ===
@@ -668,6 +694,25 @@ export default function StatisticsPage() {
                   <>
                     <DownloadIcon className="w-3.5 h-3.5" />
                     <span>Excel</span>
+                  </>
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={handleExportAbsentees}
+                disabled={exportingAbsentees}
+                className="inline-flex items-center gap-1.5 px-3 h-8 rounded-full text-[12.5px] font-semibold border border-emerald-600 text-emerald-700 hover:bg-emerald-600 hover:text-white hover:border-emerald-600 disabled:opacity-60 disabled:cursor-not-allowed bg-transparent shadow-sm transition-colors dark:text-emerald-400 dark:border-emerald-500 dark:hover:bg-emerald-500 dark:hover:text-white"
+                title="Tanlangan ko'lam uchun kelmaganlar ro'yxatini Excel (.xlsx) ga yuklab olish (sana → region → zone → smena → guruh tartibida)"
+              >
+                {exportingAbsentees ? (
+                  <>
+                    <Spinner className="w-3.5 h-3.5" />
+                    <span>Tayyorlanmoqda…</span>
+                  </>
+                ) : (
+                  <>
+                    <DownloadIcon className="w-3.5 h-3.5" />
+                    <span>Kelmaganlar</span>
                   </>
                 )}
               </button>
