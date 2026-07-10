@@ -16,7 +16,7 @@ keepalive = 5
 graceful_timeout = 60
 
 # Restart workers after this many requests (memory leak oldini olish)
-max_requests = 1000
+max_requests = 20000
 max_requests_jitter = 50
 
 # Logging

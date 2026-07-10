@@ -100,10 +100,19 @@ def _fetch_otm_zones(*, timeout: float = 20.0) -> list[dict]:
     except ValueError as e:  # JSON parse
         raise ZoneSyncError(f"OTM zonalar API javobi noto'g'ri (JSON emas): {e}") from e
 
-    # Javob to'g'ridan-to'g'ri ro'yxat yoki {"data": [...]} ko'rinishida bo'lishi
-    # mumkin — ikkalasini ham qo'llab-quvvatlaymiz.
+    # Javob to'g'ridan-to'g'ri ro'yxat, {"data": [...]} yoki OTM formati
+    # {"status": 1, "message": ..., "data": {"items": [...]}} bo'lishi
+    # mumkin — hammasini qo'llab-quvvatlaymiz.
     if isinstance(payload, dict):
+        # status=0 — xatolik, sababi "message" maydonida keladi.
+        if "status" in payload and _to_int(payload.get("status")) != 1:
+            raise ZoneSyncError(
+                f"OTM zonalar API xatolik qaytardi: "
+                f"{payload.get('message') or 'sabab ko‘rsatilmagan'}"
+            )
         items = payload.get("data") or payload.get("result") or payload.get("items")
+        if isinstance(items, dict):
+            items = items.get("items")
     else:
         items = payload
 

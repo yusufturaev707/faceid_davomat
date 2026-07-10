@@ -414,7 +414,7 @@ def _parse_otm_dtm(
         "last_name": str(item.get("last_name", "")).strip().upper(),
         "first_name": str(item.get("first_name", "")).strip().upper(),
         "middle_name": str(item.get("middle_name", "")).strip().upper() or None,
-        "imei": str(item.get("imei", "") or "")[:14] or None,
+        "imei": str(item.get("imie", "") or "")[:14] or None,
         "gr_n": int(item.get("gr_n", 0) or 0),
         "sp_n": int(item.get("sp_n", 0) or 0),
         "s_code": int(item.get("id", 0) or 0),
@@ -476,6 +476,13 @@ def _parse_response_body(
     Returns: (items, total_pages, total_count)
     """
     if data_wrapper:
+        # OTM konvert semantikasi: status=1 — success, status=0 — xatolik
+        # sababi "message" maydonida keladi.
+        if "status" in body and _safe_int(body.get("status")) != 1:
+            raise StudentLoadError(
+                f"Tashqi API xatolik qaytardi: "
+                f"{body.get('message') or 'sabab ko‘rsatilmagan'}"
+            )
         data = body.get("data", {})
         items = data.get(items_key, [])
         meta = data.get("_meta", {})
