@@ -61,6 +61,10 @@ export default function TestSessionDetailPage() {
   const [cancellingLoad, setCancellingLoad] = useState(false);
   // Xato bo'lmagan info xabar (masalan, "yuklash bekor qilindi")
   const [stateNotice, setStateNotice] = useState("");
+  // Yuklashda o'tkazib yuborilgan studentlar (PINFL + sabab)
+  const [skippedStudents, setSkippedStudents] = useState<
+    { imei: string; reason: string }[]
+  >([]);
 
   // Edit modal
   const [showEdit, setShowEdit] = useState(false);
@@ -248,6 +252,7 @@ export default function TestSessionDetailPage() {
         if (p.status === "completed") {
           clearInterval(poll);
           setCancellingLoad(false);
+          setSkippedStudents(p.skipped_items || []);
           setLoadProgress(100);
           const finalParts = [`Tayyor: ${p.current.toLocaleString("uz-UZ")} ta talaba yuklandi`];
           if (p.total > 0 && p.total !== p.current) {
@@ -272,6 +277,7 @@ export default function TestSessionDetailPage() {
           setLoadProgress(0);
           setProgressLabel("");
           setCancellingLoad(false);
+          setSkippedStudents(p.skipped_items || []);
           setStateError(p.message || "Talabalarni yuklashda xatolik yuz berdi");
           // Sessiya state'i backend tomonida rollback qilingan — qayta yuklash
           try {
@@ -469,6 +475,7 @@ export default function TestSessionDetailPage() {
     setTargetStateId(nextState.id);
     setStateError("");
     setStateNotice("");
+    setSkippedStudents([]);
     setLoadProgress(0);
     setProgressLabel("");
 
@@ -1072,6 +1079,40 @@ export default function TestSessionDetailPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
+          </div>
+        )}
+
+        {/* Yuklashda o'tkazib yuborilgan studentlar (PINFL + sabab) */}
+        {skippedStudents.length > 0 && (
+          <div className="mb-4 p-4 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800/40 rounded-xl">
+            <div className="flex items-start justify-between gap-3 mb-2">
+              <div className="text-sm font-semibold text-orange-700 dark:text-orange-300">
+                Yuklanmagan talabgorlar: {skippedStudents.length} ta
+                {skippedStudents.length >= 500 && " (faqat birinchi 500 tasi ko'rsatilgan)"}
+              </div>
+              <button
+                type="button"
+                onClick={() => setSkippedStudents([])}
+                className="flex-shrink-0 text-orange-400 hover:text-orange-600 dark:hover:text-orange-300"
+                aria-label="Yopish"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="max-h-56 overflow-y-auto rounded-lg border border-orange-200/60 dark:border-orange-800/30 divide-y divide-orange-100 dark:divide-orange-900/30 bg-white/60 dark:bg-slate-900/30">
+              {skippedStudents.map((s, i) => (
+                <div key={i} className="flex items-center gap-3 px-3 py-1.5 text-xs">
+                  <span className="font-mono font-semibold text-gray-700 dark:text-slate-200 whitespace-nowrap">
+                    {s.imei}
+                  </span>
+                  <span className="text-gray-500 dark:text-slate-400 truncate" title={s.reason}>
+                    {s.reason}
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
