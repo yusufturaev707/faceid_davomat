@@ -334,10 +334,20 @@ export async function getStudentLoadProgressApi(sessionId: number): Promise<{
   pages_total: number;
   skipped: number;
   percent: number;
-  status: "idle" | "processing" | "completed" | "error";
+  status: "idle" | "processing" | "completed" | "error" | "cancelled";
   message: string;
 }> {
   const res = await apiClient.get(`/test-sessions/${sessionId}/student-load-progress`);
+  return res.data;
+}
+
+/**
+ * Davom etayotgan student yuklashni bekor qilish. Backend Redis'ga cancel
+ * flag yozadi — loader keyingi sahifada to'xtab, state'ni qaytaradi va
+ * progress "cancelled" bo'ladi (polling orqali ko'rinadi).
+ */
+export async function cancelStudentLoadApi(sessionId: number): Promise<{ detail: string }> {
+  const res = await apiClient.post(`/test-sessions/${sessionId}/cancel-student-load`);
   return res.data;
 }
 

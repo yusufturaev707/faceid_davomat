@@ -14,8 +14,10 @@ from app.celery_app import celery_app
 from app.db.session import SessionLocal
 from app.models.test_session import TestSession
 from app.services.student_loader import (
+    StudentLoadCancelled,
     StudentLoadError,
     load_students_for_session,
+    mark_progress_cancelled,
     mark_progress_error,
 )
 
@@ -55,6 +57,29 @@ def load_students_task(
 
         try:
             count = load_students_for_session(db, session)
+        except StudentLoadCancelled:
+            logger.info(
+                "Session #%d: yuklash bekor qilindi. State qaytarilmoqda → %d",
+                session_id, previous_state_id,
+            )
+            _rollback_state(db, session_id, previous_state_id)
+            # Yarim yuklangan studentlarni tozalash — sessiya toza holatga qaytadi
+            try:
+                from app.crud.test_session import _delete_students_by_session
+
+                _delete_students_by_session(db, session_id)
+                db.commit()
+            except Exception:
+                db.rollback()
+                logger.exception(
+                    "Session #%d: bekor qilishda studentlarni tozalash xatosi",
+                    session_id,
+                )
+            mark_progress_cancelled(
+                session_id,
+                "Yuklash bekor qilindi — sessiya avvalgi holatiga qaytarildi",
+            )
+            return {"loaded": 0, "status": "cancelled", "message": "Bekor qilindi"}
         except StudentLoadError as e:
             logger.error(
                 "Session #%d: yuklash xatosi — %s. State qaytarilmoqda → %d",

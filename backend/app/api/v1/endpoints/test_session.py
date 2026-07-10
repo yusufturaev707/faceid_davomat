@@ -75,6 +75,7 @@ from app.models.region import Region
 from app.services.student_loader import (
     get_student_load_progress,
     mark_progress_queued,
+    request_student_load_cancel,
 )
 from app.tasks.excel_loader_task import excel_load_and_enrich_task
 from app.tasks.student_loader_task import load_students_task
@@ -844,6 +845,7 @@ def student_load_progress(
     - processing — yuklanmoqda
     - completed — muvaffaqiyatli tugadi
     - error     — xatolik bo'ldi (sessiya state'i avvalgisiga qaytarildi)
+    - cancelled — foydalanuvchi bekor qildi (state qaytarildi, studentlar tozalandi)
     """
     progress = get_student_load_progress(session_id)
     if not progress:
@@ -854,6 +856,40 @@ def student_load_progress(
             "status": "idle", "message": "",
         }
     return progress
+
+
+@router.post("/{session_id}/cancel-student-load")
+def cancel_student_load(
+    session_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(PermissionChecker(P.TEST_SESSION_UPDATE.code)),
+):
+    """Davom etayotgan student yuklashni bekor qilish.
+
+    Redis'ga cancel flag yoziladi — loader keyingi sahifa chegarasida uni
+    ko'rib toza to'xtaydi: sessiya state'i avvalgisiga qaytariladi, yarim
+    yuklangan studentlar o'chiriladi, progress "cancelled" bo'ladi. Natijani
+    frontend odatdagi progress polling orqali ko'radi.
+    """
+    session = db.get(TestSession, session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Sessiya topilmadi")
+
+    progress = get_student_load_progress(session_id)
+    if not progress or progress.get("status") != "processing":
+        raise HTTPException(
+            status_code=409,
+            detail="Bekor qilinadigan faol yuklash jarayoni topilmadi",
+        )
+
+    if not request_student_load_cancel(session_id):
+        raise HTTPException(
+            status_code=503,
+            detail="Redis mavjud emas — bekor qilish so'rovi yuborilmadi",
+        )
+
+    logger.info("Session #%d: student yuklashni bekor qilish so'raldi", session_id)
+    return {"detail": "Bekor qilish so'rovi yuborildi"}
 
 
 @router.get(

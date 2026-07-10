@@ -49,11 +49,19 @@ HTTP_TIMEOUT = 120.0
 _PROGRESS_KEY = "student_load_progress:{session_id}"
 _PROGRESS_TTL = 3600
 
+# Bekor qilish flagi — endpoint yozadi, loader har sahifada tekshiradi.
+_CANCEL_KEY = "student_load_cancel:{session_id}"
+_CANCEL_TTL = 3600
+
 
 class StudentLoadError(Exception):
     def __init__(self, message: str):
         self.message = message
         super().__init__(message)
+
+
+class StudentLoadCancelled(StudentLoadError):
+    """Foydalanuvchi yuklashni bekor qildi — xato emas, boshqariladigan to'xtash."""
 
 
 # ─── Redis progress ──────────────────────────────────────────────────
@@ -156,6 +164,59 @@ def mark_progress_error(session_id: int, message: str) -> None:
     )
 
 
+# ─── Bekor qilish (cancel) ──────────────────────────────────────────
+
+
+def request_student_load_cancel(session_id: int) -> bool:
+    """Yuklashni bekor qilish so'rovini Redis'ga yozish.
+
+    Endpoint chaqiradi. Loader har sahifa chegarasida flag'ni tekshirib,
+    o'zi toza to'xtaydi (state rollback + yarim yuklanganlarni tozalash
+    task handler'da bajariladi).
+
+    Returns:
+        True — flag yozildi; False — Redis mavjud emas.
+    """
+    r = _get_redis()
+    if r is None:
+        return False
+    try:
+        r.set(_CANCEL_KEY.format(session_id=session_id), "1", ex=_CANCEL_TTL)
+        return True
+    except redis.ConnectionError:
+        return False
+
+
+def _clear_cancel_flag(r: redis.Redis | None, session_id: int) -> None:
+    """Eski (stale) cancel flag'ni o'chirish — har yuklash boshida chaqiriladi."""
+    if r is None:
+        return
+    try:
+        r.delete(_CANCEL_KEY.format(session_id=session_id))
+    except redis.ConnectionError:
+        pass
+
+
+def _check_cancelled(r: redis.Redis | None, session_id: int) -> None:
+    """Cancel flag qo'yilgan bo'lsa StudentLoadCancelled ko'taradi."""
+    if r is None:
+        return
+    try:
+        if r.get(_CANCEL_KEY.format(session_id=session_id)):
+            raise StudentLoadCancelled("Yuklash foydalanuvchi tomonidan bekor qilindi")
+    except redis.ConnectionError:
+        pass
+
+
+def mark_progress_cancelled(session_id: int, message: str) -> None:
+    """Bekor qilish yakunini Redis'ga "cancelled" sifatida yozish (task chaqiradi)."""
+    _set_progress(
+        _get_redis(), session_id,
+        current=0, total=0, pages_done=0, pages_total=0,
+        skipped=0, status="cancelled", message=message,
+    )
+
+
 # ─── Yordamchi parserlar ────────────────────────────────────────────
 
 
@@ -209,19 +270,28 @@ def _build_region_zone_map(db: Session) -> dict[int, int]:
     return zone_map
 
 
-def _build_building_zone_map(db: Session) -> dict[int, int]:
-    """Zone.building_id → Zone.id mapping.
+def _build_building_zone_map(db: Session) -> dict[tuple[int, int], int]:
+    """(Region.number, Zone.building_id) → Zone.id mapping.
 
-    Tashqi API'dagi student `zone_id` = `Zone.building_id`. Shu map orqali
-    studentni AYNAN o'z binosiga (Zone.id) bog'laymiz — region ichidagi
-    "birinchi zona" fallback'iga tayanmasdan. `building_id` unikal bo'lgani
-    uchun har bir tashqi bino bitta zonaga to'g'ri keladi. Faol/nofaol
-    ajratilmaydi — tashqi tizim ko'rsatgan bino manba hisoblanadi.
+    Tashqi API'dagi student ikki maydon bilan bog'lanadi: `region_number` =
+    `Region.number` va `zone_id` = `Zone.building_id`. Bino faqat O'Z REGIONI
+    ichida qidiriladi — bazada bir xil `building_id`ga ega eski/dublikat
+    zonalar (boshqa regionlarda) mavjud bo'lganda ularga adashib ulanish
+    oldini oladi. Bir region ichida ham dublikat bo'lsa: aktiv zona ustuvor,
+    keyin eng kichik id — tanlov deterministik.
     """
     rows = db.execute(
-        select(Zone.building_id, Zone.id).where(Zone.building_id.isnot(None))
+        select(Region.number, Zone.building_id, Zone.id)
+        .join(Region, Region.id == Zone.region_id)
+        .where(Zone.building_id.isnot(None))
+        .order_by(Zone.is_active.desc(), Zone.id)
     ).all()
-    return {int(building_id): int(zone_id) for building_id, zone_id in rows}
+    result: dict[tuple[int, int], int] = {}
+    for region_number, building_id, zone_id in rows:
+        key = (int(region_number), int(building_id))
+        if key not in result:
+            result[key] = int(zone_id)
+    return result
 
 
 def _build_smena_map(db: Session, session_id: int) -> dict[tuple[int, str], int]:
@@ -246,7 +316,7 @@ def _build_smena_map(db: Session, session_id: int) -> dict[tuple[int, str], int]
 
 
 def _parse_cefr(
-    item: dict, zone_map: dict[int, int], building_map: dict[int, int]
+    item: dict, zone_map: dict[int, int], building_map: dict[tuple[int, int], int]
 ) -> tuple[dict, dict] | None:
     region_number = item.get("dtm_id", 0)
     zone_id = zone_map.get(region_number)
@@ -286,7 +356,7 @@ def _parse_cefr(
 
 
 def _parse_ms(
-    item: dict, zone_map: dict[int, int], building_map: dict[int, int]
+    item: dict, zone_map: dict[int, int], building_map: dict[tuple[int, int], int]
 ) -> tuple[dict, dict] | None:
     region_number = item.get("test_region_id", 0)
     zone_id = zone_map.get(region_number)
@@ -326,7 +396,7 @@ def _parse_ms(
 
 
 def _parse_iiv(
-    item: dict, zone_map: dict[int, int], building_map: dict[int, int]
+    item: dict, zone_map: dict[int, int], building_map: dict[tuple[int, int], int]
 ) -> tuple[dict, dict] | None:
     region_number = item.get("dtm_id", 0)
     zone_id = zone_map.get(region_number)
@@ -366,7 +436,7 @@ def _parse_iiv(
 
 
 def _parse_otm_dtm(
-    item: dict, zone_map: dict[int, int], building_map: dict[int, int]
+    item: dict, zone_map: dict[int, int], building_map: dict[tuple[int, int], int]
 ) -> tuple[dict, dict] | None:
     """OTM-DTM tashqi API item'ini Student/StudentPsData dict'lariga aylantiradi.
 
@@ -375,22 +445,29 @@ def _parse_otm_dtm(
         {id, ps_ser, ps_num, imei, last_name, first_name, middle_name, e_date,
          smen, region_number, zone_id, gr_n, sp_n, phone, gender, ps_img}
 
-    Bino (zona) aniqlash:
-    - Tashqi `zone_id` = `Zone.building_id`. Shu bo'yicha studentning AYNAN
-      binosi (Zone.id) topiladi — asosiy va aniq usul.
-    - `zone_id` kelmagan yoki tizimda mos bino topilmagan holatda `region_number`
-      -> Region.number orqali region ichidagi birinchi aktiv zonaga fallback
-      qilinadi (ma'lumot yo'qolib ketmasligi uchun).
+    Bino (zona) aniqlash — ikki bosqichli moslik:
+    - Avval `region_number` = Region.number bo'yicha region aniqlanadi, keyin
+      `zone_id` = Zone.building_id SHU REGION ichida qidiriladi. Region
+      chegarasi majburiy — boshqa regiondagi bir xil building_id'li (eski/
+      dublikat) zonaga ulanish mumkin emas.
+    - Region ichida mos bino topilmasa `region_number` orqali region ichidagi
+      birinchi aktiv zonaga fallback qilinadi (ma'lumot yo'qolib ketmasligi
+      uchun).
     - `gender` (1=erkak, 2=ayol) to'g'ridan-to'g'ri ishlatiladi; bo'lmasa
       IMEI 1-raqamiga qarab aniqlanadi (processing bosqichida).
     """
-    # 1) Aniq bino: tashqi `zone_id` (== Zone.building_id) bo'yicha.
-    building_ext_id = _safe_int(item.get("zone_id"))
-    zone_id = building_map.get(building_ext_id) if building_ext_id else None
+    region_number = _safe_int(item.get("region_number")) or 0
 
-    # 2) Fallback: region_number -> region ichidagi birinchi aktiv zona.
+    # 1) Aniq bino: (region_number, zone_id == Zone.building_id) juftligi.
+    building_ext_id = _safe_int(item.get("zone_id"))
+    zone_id = (
+        building_map.get((region_number, building_ext_id))
+        if building_ext_id
+        else None
+    )
+
+    # 2) Fallback: region ichidagi birinchi aktiv zona.
     if not zone_id:
-        region_number = _safe_int(item.get("region_number")) or 0
         zone_id = zone_map.get(region_number)
 
     if not zone_id:
@@ -607,6 +684,8 @@ def load_students_for_session(db: Session, session: TestSession) -> int:
     }
 
     r = _get_redis()
+    # Oldingi bekor qilishdan qolgan stale flag yangi yuklashni o'ldirmasligi uchun
+    _clear_cancel_flag(r, session.id)
     _set_progress(
         r, session.id,
         current=0, total=0, pages_done=0, pages_total=0,
@@ -629,6 +708,7 @@ def load_students_for_session(db: Session, session: TestSession) -> int:
     try:
         with httpx.Client(timeout=HTTP_TIMEOUT, verify=False) as client:
             for day_str in sorted_days:
+                _check_cancelled(r, session.id)
                 try:
                     items, total_pages, total_count = _fetch_page(
                         client, url_template, day_str, 1, headers, **fetch_kwargs
@@ -645,6 +725,9 @@ def load_students_for_session(db: Session, session: TestSession) -> int:
                     "Discovery %s: total_count=%d, pages=%d",
                     day_str, total_count, total_pages,
                 )
+    except StudentLoadCancelled:
+        # Bekor qilish — xato emas; yakuniy "cancelled" statusni task yozadi.
+        raise
     except StudentLoadError:
         _set_progress(
             r, session.id,
@@ -680,6 +763,26 @@ def load_students_for_session(db: Session, session: TestSession) -> int:
     total_skipped = 0
     pages_done = 0
 
+    # Dublikat himoyasi — tashqi API sahifalari orasida takrorlangan yozuvlar
+    # (paginatsiya tartibi siljishi, manbadagi takrorlar) ikkinchi marta
+    # yozilmaydi. Kalit: pasport, bo'lmasa IMEI, bo'lmasa s_code — har biri
+    # kun+smena kesimida.
+    seen_students: set[tuple] = set()
+
+    def _dedup_key(
+        student_data: dict, ps_data: dict, item_day: str, smena_number: int
+    ) -> tuple | None:
+        if ps_data.get("ps_num"):
+            return (
+                "ps", ps_data.get("ps_ser"), ps_data["ps_num"],
+                item_day, smena_number,
+            )
+        if student_data.get("imei"):
+            return ("imei", student_data["imei"], item_day, smena_number)
+        if student_data.get("s_code"):
+            return ("code", student_data["s_code"], item_day, smena_number)
+        return None  # identifikatorsiz yozuv — dedup qilinmaydi
+
     def _process_page_items(
         raw_items: list[dict],
         day_str: str,
@@ -708,6 +811,14 @@ def load_students_for_session(db: Session, session: TestSession) -> int:
             if not session_smena_id:
                 total_skipped += 1
                 continue
+
+            # Takror yozuv — o'tkazib yuboriladi (progress'da skipped sifatida)
+            dkey = _dedup_key(student_data, ps_data, item_day, smena_number)
+            if dkey is not None:
+                if dkey in seen_students:
+                    total_skipped += 1
+                    continue
+                seen_students.add(dkey)
 
             student_data["session_smena_id"] = session_smena_id
             student_data["is_image"] = bool(ps_data.get("ps_img"))
@@ -765,6 +876,7 @@ def load_students_for_session(db: Session, session: TestSession) -> int:
                 # Pages 2..N — fresh fetch
                 try:
                     for page in range(2, day_pages + 1):
+                        _check_cancelled(r, session.id)
                         try:
                             items, _, _ = _fetch_page(
                                 client, url_template, day_str, page, headers,
@@ -814,6 +926,19 @@ def load_students_for_session(db: Session, session: TestSession) -> int:
         )
         return total_loaded
 
+    except StudentLoadCancelled:
+        # Frontend polling'ni ushlab turish uchun "processing" qoladi —
+        # yakuniy "cancelled" statusni task rollback/tozalashdan KEYIN yozadi.
+        _set_progress(
+            r, session.id,
+            current=total_loaded,
+            total=grand_total_count or total_loaded,
+            pages_done=pages_done,
+            pages_total=grand_total_pages,
+            skipped=total_skipped, status="processing",
+            message="Bekor qilinmoqda — ma'lumotlar tozalanmoqda...",
+        )
+        raise
     except StudentLoadError as e:
         _set_progress(
             r, session.id,

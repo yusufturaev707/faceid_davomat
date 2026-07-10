@@ -11,6 +11,7 @@ import type {
 } from "../interfaces";
 import {
   addSmenaToSessionApi,
+  cancelStudentLoadApi,
   changeSessionStateApi,
   deleteTestSessionApi,
   getEmbeddingProgressApi,
@@ -56,6 +57,10 @@ export default function TestSessionDetailPage() {
   const [targetStateId, setTargetStateId] = useState<number | null>(null);
   const [loadProgress, setLoadProgress] = useState(0);
   const [progressLabel, setProgressLabel] = useState("");
+  // Student yuklashni bekor qilish
+  const [cancellingLoad, setCancellingLoad] = useState(false);
+  // Xato bo'lmagan info xabar (masalan, "yuklash bekor qilindi")
+  const [stateNotice, setStateNotice] = useState("");
 
   // Edit modal
   const [showEdit, setShowEdit] = useState(false);
@@ -242,6 +247,7 @@ export default function TestSessionDetailPage() {
 
         if (p.status === "completed") {
           clearInterval(poll);
+          setCancellingLoad(false);
           setLoadProgress(100);
           const finalParts = [`Tayyor: ${p.current.toLocaleString("uz-UZ")} ta talaba yuklandi`];
           if (p.total > 0 && p.total !== p.current) {
@@ -265,8 +271,23 @@ export default function TestSessionDetailPage() {
           clearInterval(poll);
           setLoadProgress(0);
           setProgressLabel("");
+          setCancellingLoad(false);
           setStateError(p.message || "Talabalarni yuklashda xatolik yuz berdi");
           // Sessiya state'i backend tomonida rollback qilingan — qayta yuklash
+          try {
+            const refreshed = await getTestSessionApi(sessionId);
+            setSession(refreshed);
+          } catch { /* ignore */ }
+          setChangingState(false);
+          setTargetStateId(null);
+        } else if (p.status === "cancelled") {
+          // Foydalanuvchi bekor qildi — backend state'ni qaytarib, yarim
+          // yuklangan studentlarni tozalab bo'ldi. Bu xato emas — info banner.
+          clearInterval(poll);
+          setLoadProgress(0);
+          setProgressLabel("");
+          setCancellingLoad(false);
+          setStateNotice(p.message || "Yuklash bekor qilindi");
           try {
             const refreshed = await getTestSessionApi(sessionId);
             setSession(refreshed);
@@ -425,6 +446,20 @@ export default function TestSessionDetailPage() {
     (s) => s.id === session?.test_state_id
   );
 
+  // Student yuklashni bekor qilish — backend flag qo'yadi, natija ("cancelled")
+  // odatdagi progress polling orqali keladi (state rollback + tozalash tugagach).
+  const handleCancelLoad = async () => {
+    if (!session || cancellingLoad) return;
+    setCancellingLoad(true);
+    try {
+      await cancelStudentLoadApi(session.id);
+      setProgressLabel("Bekor qilish so'raldi — jarayon to'xtatilmoqda...");
+    } catch (err) {
+      setCancellingLoad(false);
+      setStateError(extractErrorMessage(err));
+    }
+  };
+
   const handleNextStep = async () => {
     if (!session || currentStepIndex < 0) return;
     const nextState = sortedStates[currentStepIndex + 1];
@@ -433,6 +468,7 @@ export default function TestSessionDetailPage() {
     setChangingState(true);
     setTargetStateId(nextState.id);
     setStateError("");
+    setStateNotice("");
     setLoadProgress(0);
     setProgressLabel("");
 
@@ -991,9 +1027,22 @@ export default function TestSessionDetailPage() {
               <span className="text-xs font-medium text-gray-600 dark:text-slate-400">
                 {progressLabel || "Jarayon davom etmoqda..."}
               </span>
-              <span className="text-xs font-bold text-primary-600 dark:text-primary-400">
-                {Math.round(loadProgress)}%
-              </span>
+              <div className="flex items-center gap-3">
+                <span className="text-xs font-bold text-primary-600 dark:text-primary-400">
+                  {Math.round(loadProgress)}%
+                </span>
+                {/* Bekor qilish — faqat student yuklash (state key=2) jarayonida */}
+                {states.find((s) => s.id === targetStateId)?.key === 2 && (
+                  <button
+                    type="button"
+                    onClick={handleCancelLoad}
+                    disabled={cancellingLoad}
+                    className="text-xs font-medium px-2.5 py-1 rounded-lg border border-red-200 dark:border-red-800/40 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {cancellingLoad ? "Bekor qilinmoqda..." : "Bekor qilish"}
+                  </button>
+                )}
+              </div>
             </div>
             <div className="w-full h-2.5 bg-gray-200 dark:bg-slate-700 rounded-full overflow-hidden">
               <div
@@ -1001,6 +1050,28 @@ export default function TestSessionDetailPage() {
                 style={{ width: `${loadProgress}%` }}
               />
             </div>
+          </div>
+        )}
+
+        {/* Info notice (masalan, yuklash bekor qilindi) */}
+        {stateNotice && (
+          <div className="mb-4 p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/40 rounded-xl flex items-start gap-3">
+            <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center mt-0.5">
+              <svg className="w-4 h-4 text-amber-600 dark:text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <div className="flex-1 text-sm text-amber-700 dark:text-amber-300">{stateNotice}</div>
+            <button
+              type="button"
+              onClick={() => setStateNotice("")}
+              className="flex-shrink-0 text-amber-400 hover:text-amber-600 dark:hover:text-amber-300"
+              aria-label="Yopish"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
           </div>
         )}
 
