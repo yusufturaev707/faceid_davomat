@@ -176,6 +176,7 @@ def _student_filter_conditions(
     test_id: int | None = None,
     region_id: int | None = None,
     smena_id: int | None = None,
+    gender_id: int | None = None,
     gr_n: int | None = None,
     e_date_from: str | None = None,
     e_date_to: str | None = None,
@@ -204,6 +205,9 @@ def _student_filter_conditions(
         conditions.append(Region.id == region_id)
     if smena_id is not None:
         conditions.append(Smena.id == smena_id)
+    if gender_id is not None:
+        # StudentPsData join talab qiladi (gender ps_data'da saqlanadi)
+        conditions.append(StudentPsData.gender_id == gender_id)
     if gr_n is not None:
         conditions.append(Student.gr_n == gr_n)
     if e_date_from is not None:
@@ -242,6 +246,7 @@ def get_filtered_student_ids(
     test_id: int | None = None,
     region_id: int | None = None,
     smena_id: int | None = None,
+    gender_id: int | None = None,
     gr_n: int | None = None,
     e_date_from: str | None = None,
     e_date_to: str | None = None,
@@ -264,6 +269,7 @@ def get_filtered_student_ids(
         test_id=test_id,
         region_id=region_id,
         smena_id=smena_id,
+        gender_id=gender_id,
         gr_n=gr_n,
         e_date_from=e_date_from,
         e_date_to=e_date_to,
@@ -278,6 +284,7 @@ def get_filtered_student_ids(
     )
     stmt = (
         select(Student.id)
+        .outerjoin(StudentPsData, Student.id == StudentPsData.student_id)
         .outerjoin(Zone, Student.zone_id == Zone.id)
         .outerjoin(Region, Zone.region_id == Region.id)
         .outerjoin(
@@ -301,6 +308,7 @@ def get_filtered_students(
     test_id: int | None = None,
     region_id: int | None = None,
     smena_id: int | None = None,
+    gender_id: int | None = None,
     gr_n: int | None = None,
     e_date_from: str | None = None,
     e_date_to: str | None = None,
@@ -326,6 +334,7 @@ def get_filtered_students(
         test_id=test_id,
         region_id=region_id,
         smena_id=smena_id,
+        gender_id=gender_id,
         gr_n=gr_n,
         e_date_from=e_date_from,
         e_date_to=e_date_to,
@@ -376,6 +385,7 @@ def get_students_paginated(
     test_id: int | None = None,
     region_id: int | None = None,
     smena_id: int | None = None,
+    gender_id: int | None = None,
     gr_n: int | None = None,
     e_date_from: str | None = None,
     e_date_to: str | None = None,
@@ -391,11 +401,14 @@ def get_students_paginated(
     stmt = _build_student_query().order_by(Student.id.desc())
     count_stmt = select(func.count(Student.id))
 
-    # For count query that needs joins for test_id / region_id / smena_id
-    count_needs_join = any(v is not None for v in [test_id, region_id, smena_id])
+    # For count query that needs joins for test_id / region_id / smena_id / gender_id
+    count_needs_join = any(
+        v is not None for v in [test_id, region_id, smena_id, gender_id]
+    )
     if count_needs_join:
         count_stmt = (
             select(func.count(Student.id))
+            .outerjoin(StudentPsData, Student.id == StudentPsData.student_id)
             .outerjoin(Zone, Student.zone_id == Zone.id)
             .outerjoin(Region, Zone.region_id == Region.id)
             .outerjoin(
@@ -412,6 +425,7 @@ def get_students_paginated(
         test_id=test_id,
         region_id=region_id,
         smena_id=smena_id,
+        gender_id=gender_id,
         gr_n=gr_n,
         e_date_from=e_date_from,
         e_date_to=e_date_to,
@@ -616,6 +630,7 @@ def get_student_logs_paginated(
     region_id: int | None = None,
     zone_id: int | None = None,
     smena_id: int | None = None,
+    gender_id: int | None = None,
     gr_n: int | None = None,
     e_date_from: str | None = None,
     e_date_to: str | None = None,
@@ -708,6 +723,15 @@ def get_student_logs_paginated(
         _apply(Student.zone_id == zone_id)
     if smena_id is not None:
         _apply(Smena.id == smena_id)
+    if gender_id is not None:
+        # Gender StudentPsData'da — join o'rniga subquery (joinlar o'zgarmaydi)
+        _apply(
+            Student.id.in_(
+                select(StudentPsData.student_id).where(
+                    StudentPsData.gender_id == gender_id
+                )
+            )
+        )
     if gr_n is not None:
         _apply(Student.gr_n == gr_n)
     if e_date_from:

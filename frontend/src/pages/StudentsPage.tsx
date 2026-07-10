@@ -8,6 +8,7 @@ import type {
   TestSessionResponse,
   LookupRegionResponse,
   LookupZoneResponse,
+  LookupGenderResponse,
   SmenaResponse,
 } from "../interfaces";
 import {
@@ -23,6 +24,8 @@ import {
   getTestSessionsApi,
   getRegionsListApi,
   getZonesByRegionApi,
+  getZonesListApi,
+  getGendersListApi,
   getSmenasLookupApi,
 } from "../api";
 import PageLoader from "../components/PageLoader";
@@ -60,6 +63,8 @@ export default function StudentsPage() {
   // Filters
   const [filterTestId, setFilterTestId] = useState<string>("");
   const [filterRegionId, setFilterRegionId] = useState<string>("");
+  const [filterZoneId, setFilterZoneId] = useState<string>("");
+  const [filterGenderId, setFilterGenderId] = useState<string>("");
   const [filterSmenaId, setFilterSmenaId] = useState<string>("");
   const [filterGrN, setFilterGrN] = useState<string>("");
   const [filterDateFrom, setFilterDateFrom] = useState<string>("");
@@ -77,6 +82,8 @@ export default function StudentsPage() {
   const [tests, setTests] = useState<TestResponse[]>([]);
   const [regions, setRegions] = useState<LookupRegionResponse[]>([]);
   const [smenas, setSmenas] = useState<SmenaResponse[]>([]);
+  const [zones, setZones] = useState<LookupZoneResponse[]>([]);
+  const [genders, setGenders] = useState<LookupGenderResponse[]>([]);
 
   // Detail panel
   const [selected, setSelected] = useState<StudentResponse | null>(null);
@@ -122,6 +129,12 @@ export default function StudentsPage() {
     getSmenasLookupApi()
       .then(setSmenas)
       .catch(() => {});
+    getZonesListApi()
+      .then(setZones)
+      .catch(() => {});
+    getGendersListApi()
+      .then(setGenders)
+      .catch(() => {});
     getTestSessionsApi({ per_page: 100 })
       .then((r) => setTestSessions(r.items))
       .catch(() => {});
@@ -147,6 +160,8 @@ export default function StudentsPage() {
     if (search) params.search = search;
     if (filterTestId) params.test_id = Number(filterTestId);
     if (filterRegionId) params.region_id = Number(filterRegionId);
+    if (filterZoneId) params.zone_id = Number(filterZoneId);
+    if (filterGenderId) params.gender_id = Number(filterGenderId);
     if (filterSmenaId) params.smena_id = Number(filterSmenaId);
     if (filterGrN) params.gr_n = Number(filterGrN);
     if (filterDateFrom) params.e_date_from = filterDateFrom;
@@ -170,6 +185,8 @@ export default function StudentsPage() {
     search,
     filterTestId,
     filterRegionId,
+    filterZoneId,
+    filterGenderId,
     filterSmenaId,
     filterGrN,
     filterDateFrom,
@@ -267,6 +284,8 @@ export default function StudentsPage() {
     setFilterGrN("");
     setFilterDateFrom("");
     setFilterDateTo("");
+    setFilterZoneId("");
+    setFilterGenderId("");
     setFilterEntered("");
     setFilterCheating("");
     setFilterBlacklist("");
@@ -281,6 +300,8 @@ export default function StudentsPage() {
     search ||
     filterTestId ||
     filterRegionId ||
+    filterZoneId ||
+    filterGenderId ||
     filterSmenaId ||
     filterGrN ||
     filterDateFrom ||
@@ -296,6 +317,8 @@ export default function StudentsPage() {
   const activeFilterCount = [
     filterTestId,
     filterRegionId,
+    filterZoneId,
+    filterGenderId,
     filterSmenaId,
     filterGrN,
     filterDateFrom,
@@ -755,11 +778,28 @@ export default function StudentsPage() {
                   value={filterRegionId}
                   onChange={(v) => {
                     setFilterRegionId(v);
+                    // Viloyat o'zgardi — eski bino tanlovi unga tegishli bo'lmasligi mumkin
+                    setFilterZoneId("");
                     setPage(1);
                   }}
                   options={regions.map((r) => ({
                     value: String(r.id),
                     label: r.name,
+                  }))}
+                />
+                <FilterSelect
+                  label="Bino"
+                  value={filterZoneId}
+                  onChange={(v) => {
+                    setFilterZoneId(v);
+                    setPage(1);
+                  }}
+                  options={(filterRegionId
+                    ? zones.filter((z) => z.region_id === Number(filterRegionId))
+                    : zones
+                  ).map((z) => ({
+                    value: String(z.id),
+                    label: z.name,
                   }))}
                 />
                 <FilterSelect
@@ -773,6 +813,20 @@ export default function StudentsPage() {
                     value: String(s.id),
                     label: s.name,
                   }))}
+                />
+                <FilterSelect
+                  label="Jinsi"
+                  value={filterGenderId}
+                  onChange={(v) => {
+                    setFilterGenderId(v);
+                    setPage(1);
+                  }}
+                  options={genders
+                    .filter((g) => g.is_active)
+                    .map((g) => ({
+                      value: String(g.id),
+                      label: g.name,
+                    }))}
                 />
                 <div>
                   <label className="block text-[10px] uppercase tracking-wider text-gray-500 dark:text-slate-400 mb-1 font-semibold">
