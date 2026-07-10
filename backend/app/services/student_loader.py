@@ -45,10 +45,6 @@ INSERT_BATCH_SIZE = 500
 # Bitta sahifa uchun HTTP timeout — 100k og'ir rasmli sahifalar uchun 30s kam.
 HTTP_TIMEOUT = 120.0
 
-# UI'da ko'rsatish uchun saqlanadigan "o'tkazib yuborilgan student" (PINFL +
-# sabab) yozuvlarining maksimal soni — Redis payload cheksiz o'smasligi uchun.
-_SKIPPED_DETAILS_MAX = 500
-
 # Redis progress kalit
 _PROGRESS_KEY = "student_load_progress:{session_id}"
 _PROGRESS_TTL = 3600
@@ -90,7 +86,6 @@ def _set_progress(
     skipped: int,
     status: str,
     message: str = "",
-    skipped_items: list[dict] | None = None,
 ) -> None:
     """Progressni Redis'ga yozish.
 
@@ -120,9 +115,6 @@ def _set_progress(
             "message": message,
             "percent": percent,
         }
-        if skipped_items is not None:
-            # O'tkazib yuborilgan studentlar (PINFL + sabab) — UI'da ko'rsatiladi.
-            data["skipped_items"] = skipped_items
         r.set(key, json.dumps(data), ex=_PROGRESS_TTL)
     except redis.ConnectionError:
         pass
@@ -242,20 +234,6 @@ def _b64_to_bytes(val) -> bytes | None:
         return base64.b64decode(val)
     except Exception:
         return None
-
-
-def _item_pinfl(raw: dict) -> str:
-    """Xom API item'idan JSHSHIR/PINFLni topish.
-
-    Turli tashqi API'larda kalit turlicha: `imie` (OTM-DTM, CEFR), `pinfl`
-    (IIV), `imei`. UI'da o'tkazib yuborilgan studentni identifikatsiya
-    qilish uchun ishlatiladi.
-    """
-    for key in ("imie", "pinfl", "imei"):
-        val = raw.get(key)
-        if val:
-            return str(val)[:14]
-    return ""
 
 
 def _safe_int(val) -> int | None:
@@ -791,14 +769,6 @@ def load_students_for_session(db: Session, session: TestSession) -> int:
     # kun+smena kesimida.
     seen_students: set[tuple] = set()
 
-    # O'tkazib yuborilganlar tafsiloti (PINFL + sabab) — progress orqali UI'da
-    # ko'rsatiladi. Hajm chegaralangan (_SKIPPED_DETAILS_MAX).
-    skipped_details: list[dict] = []
-
-    def _note_skip(pinfl: str, reason: str) -> None:
-        if len(skipped_details) < _SKIPPED_DETAILS_MAX:
-            skipped_details.append({"imei": pinfl or "-", "reason": reason})
-
     def _dedup_key(
         student_data: dict, ps_data: dict, item_day: str, smena_number: int
     ) -> tuple | None:
@@ -829,7 +799,6 @@ def load_students_for_session(db: Session, session: TestSession) -> int:
             parsed = parser(raw, zone_map, building_map)
             if not parsed:
                 total_skipped += 1
-                _note_skip(_item_pinfl(raw), "bino/hudud aniqlanmadi")
                 continue
 
             student_data, ps_data = parsed
@@ -841,10 +810,6 @@ def load_students_for_session(db: Session, session: TestSession) -> int:
             session_smena_id = smena_map.get((smena_number, item_day))
             if not session_smena_id:
                 total_skipped += 1
-                _note_skip(
-                    student_data.get("imei") or _item_pinfl(raw),
-                    f"smena mos kelmadi ({item_day}, smena {smena_number})",
-                )
                 continue
 
             # Takror yozuv — o'tkazib yuboriladi (progress'da skipped sifatida)
@@ -852,10 +817,6 @@ def load_students_for_session(db: Session, session: TestSession) -> int:
             if dkey is not None:
                 if dkey in seen_students:
                     total_skipped += 1
-                    _note_skip(
-                        student_data.get("imei") or _item_pinfl(raw),
-                        "dublikat (takror yozuv)",
-                    )
                     continue
                 seen_students.add(dkey)
 
@@ -882,13 +843,9 @@ def load_students_for_session(db: Session, session: TestSession) -> int:
             ps_buffer.append(ps_data)
 
             if len(student_buffer) >= INSERT_BATCH_SIZE:
-                failed = _flush_batch(db, student_buffer, ps_buffer)
-                ok_count = len(student_buffer) - len(failed)
-                committed_now += ok_count
-                total_loaded += ok_count
-                total_skipped += len(failed)
-                for f in failed:
-                    _note_skip(f["imei"], f["reason"])
+                _flush_batch(db, student_buffer, ps_buffer)
+                committed_now += len(student_buffer)
+                total_loaded += len(student_buffer)
                 student_buffer.clear()
                 ps_buffer.clear()
         return committed_now
@@ -914,7 +871,6 @@ def load_students_for_session(db: Session, session: TestSession) -> int:
                     pages_total=grand_total_pages,
                     skipped=total_skipped, status="processing",
                     message=f"{day_str}: sahifa 1/{day_pages}",
-                    skipped_items=skipped_details,
                 )
 
                 # Pages 2..N — fresh fetch
@@ -941,16 +897,12 @@ def load_students_for_session(db: Session, session: TestSession) -> int:
                             pages_total=grand_total_pages,
                             skipped=total_skipped, status="processing",
                             message=f"{day_str}: sahifa {page}/{day_pages}",
-                            skipped_items=skipped_details,
                         )
                 finally:
                     # Kun yakuni yoki xatolik — qolgan buferni yozib qo'yish
                     if student_buffer:
-                        failed = _flush_batch(db, student_buffer, ps_buffer)
-                        total_loaded += len(student_buffer) - len(failed)
-                        total_skipped += len(failed)
-                        for f in failed:
-                            _note_skip(f["imei"], f["reason"])
+                        _flush_batch(db, student_buffer, ps_buffer)
+                        total_loaded += len(student_buffer)
                         student_buffer.clear()
                         ps_buffer.clear()
 
@@ -966,7 +918,6 @@ def load_students_for_session(db: Session, session: TestSession) -> int:
             pages_total=grand_total_pages,
             skipped=total_skipped, status="completed",
             message=f"{total_loaded} ta talaba yuklandi",
-            skipped_items=skipped_details,
         )
 
         logger.info(
@@ -997,7 +948,6 @@ def load_students_for_session(db: Session, session: TestSession) -> int:
             pages_total=grand_total_pages,
             skipped=total_skipped, status="error",
             message=e.message,
-            skipped_items=skipped_details,
         )
         raise
     except Exception as e:
@@ -1009,7 +959,6 @@ def load_students_for_session(db: Session, session: TestSession) -> int:
             pages_total=grand_total_pages,
             skipped=total_skipped, status="error",
             message=f"Kutilmagan xatolik: {e}",
-            skipped_items=skipped_details,
         )
         raise
 
@@ -1018,63 +967,26 @@ def _flush_batch(
     db: Session,
     student_rows: list[dict],
     ps_rows: list[dict],
-) -> list[dict]:
+) -> None:
     """Buferdagi qatorlarni bulk INSERT bilan DB'ga yozish.
 
     Student'lar avval kiritiladi va id'lar olinadi (RETURNING),
     keyin StudentPsData'lar shu id'lar bilan yoziladi.
-
-    Batch xatosi butun yuklashni yiqitmaydi: bulk INSERT muvaffaqiyatsiz
-    bo'lsa, qatorma-qator qayta uriniladi — faqat aybdor yozuvlar tashlab
-    ketiladi va ular ro'yxat sifatida qaytariladi.
-
-    Returns:
-        DB'ga yozilmagan studentlar: [{"imei": ..., "reason": ...}, ...]
     """
     if not student_rows:
-        return []
+        return
 
-    try:
-        # bulk_insert_mappings — eng tez yo'l, ammo ID'larni qaytarmaydi.
-        # Shuning uchun add+flush kombinatsiyasi ishlatamiz: ORM obyektlarini
-        # add qilamiz, flush bilan barcha ID'lar bir vaqtda olinadi (executemany).
-        students = [Student(**row) for row in student_rows]
-        db.add_all(students)
-        db.flush()  # ID'larni olish uchun — 1 ta executemany INSERT
+    # bulk_insert_mappings — eng tez yo'l, ammo ID'larni qaytarmaydi.
+    # Shuning uchun add+flush kombinatsiyasi ishlatamiz: ORM obyektlarini
+    # add qilamiz, flush bilan barcha ID'lar bir vaqtda olinadi (executemany).
+    students = [Student(**row) for row in student_rows]
+    db.add_all(students)
+    db.flush()  # ID'larni olish uchun — 1 ta executemany INSERT
 
-        ps_objects = []
-        for student, ps_row in zip(students, ps_rows):
-            ps_row["student_id"] = student.id
-            ps_objects.append(StudentPsData(**ps_row))
+    ps_objects = []
+    for student, ps_row in zip(students, ps_rows):
+        ps_row["student_id"] = student.id
+        ps_objects.append(StudentPsData(**ps_row))
 
-        db.add_all(ps_objects)
-        db.commit()
-        return []
-    except Exception:
-        db.rollback()
-        logger.exception(
-            "Batch INSERT xatosi (%d qator) — qatorma-qator qayta urinamiz",
-            len(student_rows),
-        )
-
-    # Batch yiqildi — aybdor qator(lar)ni aniqlash uchun bittalab yozamiz.
-    failed: list[dict] = []
-    for row, ps_row in zip(student_rows, ps_rows):
-        try:
-            student = Student(**row)
-            db.add(student)
-            db.flush()
-            ps_row["student_id"] = student.id
-            db.add(StudentPsData(**ps_row))
-            db.commit()
-        except Exception as e:
-            db.rollback()
-            reason = str(getattr(e, "orig", None) or e).split("\n")[0][:120]
-            failed.append({
-                "imei": str(row.get("imei") or ""),
-                "reason": f"DB yozish xatosi: {reason}",
-            })
-            logger.warning(
-                "Student insert xatosi (imei=%s): %s", row.get("imei"), e
-            )
-    return failed
+    db.add_all(ps_objects)
+    db.commit()
