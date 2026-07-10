@@ -78,6 +78,7 @@ export default function Md3Select({
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label={ariaLabel}
+        title={selected?.label}
         onClick={() => setOpen((o) => !o)}
         className={`h-9 w-full pl-3 pr-2.5 flex items-center gap-2 rounded-xl border bg-surface dark:bg-slate-800 text-left text-[13px] transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed ${
           open
@@ -149,6 +150,7 @@ export default function Md3Select({
                   role="option"
                   aria-selected={isActive}
                   disabled={o.disabled}
+                  title={o.label}
                   onClick={() => !o.disabled && pick(o.value)}
                   className={`w-full text-left px-3 py-2 rounded-xl flex items-center gap-2 text-[13px] transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
                     isActive

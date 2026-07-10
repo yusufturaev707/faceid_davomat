@@ -782,10 +782,12 @@ export default function StudentsPage() {
                     setFilterZoneId("");
                     setPage(1);
                   }}
-                  options={regions.map((r) => ({
-                    value: String(r.id),
-                    label: r.name,
-                  }))}
+                  options={regions
+                    .filter((r) => r.is_active)
+                    .map((r) => ({
+                      value: String(r.id),
+                      label: r.name,
+                    }))}
                 />
                 <FilterSelect
                   label="Bino"
@@ -794,13 +796,17 @@ export default function StudentsPage() {
                     setFilterZoneId(v);
                     setPage(1);
                   }}
-                  options={(filterRegionId
-                    ? zones.filter((z) => z.region_id === Number(filterRegionId))
-                    : zones
-                  ).map((z) => ({
-                    value: String(z.id),
-                    label: z.name,
-                  }))}
+                  options={zones
+                    .filter(
+                      (z) =>
+                        z.is_active &&
+                        (!filterRegionId ||
+                          z.region_id === Number(filterRegionId)),
+                    )
+                    .map((z) => ({
+                      value: String(z.id),
+                      label: z.name,
+                    }))}
                 />
                 <FilterSelect
                   label="Smena"
