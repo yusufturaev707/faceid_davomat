@@ -61,6 +61,14 @@ export default function TestSessionDetailPage() {
   const [cancellingLoad, setCancellingLoad] = useState(false);
   // Xato bo'lmagan info xabar (masalan, "yuklash bekor qilindi")
   const [stateNotice, setStateNotice] = useState("");
+  // DB'ga insert bo'lmagan studentlar (imie + sabab) — yuklash yakunida ko'rsatiladi
+  const [failedInserts, setFailedInserts] = useState<
+    { imie: string; reason: string }[]
+  >([]);
+  // O'tkazib yuborilgan (parsing/smena/dublikat) studentlar — yuklash yakunida
+  const [skippedStudents, setSkippedStudents] = useState<
+    { imie: string; reason: string }[]
+  >([]);
 
   // Edit modal
   const [showEdit, setShowEdit] = useState(false);
@@ -248,6 +256,8 @@ export default function TestSessionDetailPage() {
         if (p.status === "completed") {
           clearInterval(poll);
           setCancellingLoad(false);
+          setFailedInserts(p.failed_items || []);
+          setSkippedStudents(p.skipped_items || []);
           setLoadProgress(100);
           const finalParts = [`Tayyor: ${p.current.toLocaleString("uz-UZ")} ta talaba yuklandi`];
           if (p.total > 0 && p.total !== p.current) {
@@ -272,6 +282,8 @@ export default function TestSessionDetailPage() {
           setLoadProgress(0);
           setProgressLabel("");
           setCancellingLoad(false);
+          setFailedInserts(p.failed_items || []);
+          setSkippedStudents(p.skipped_items || []);
           setStateError(p.message || "Talabalarni yuklashda xatolik yuz berdi");
           // Sessiya state'i backend tomonida rollback qilingan — qayta yuklash
           try {
@@ -469,6 +481,8 @@ export default function TestSessionDetailPage() {
     setTargetStateId(nextState.id);
     setStateError("");
     setStateNotice("");
+    setFailedInserts([]);
+    setSkippedStudents([]);
     setLoadProgress(0);
     setProgressLabel("");
 
@@ -1100,6 +1114,82 @@ export default function TestSessionDetailPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
+          </div>
+        )}
+
+        {/* DB'ga insert bo'lmagan talabgorlar (imie + xato sababi) — alert */}
+        {failedInserts.length > 0 && (
+          <div className="mb-4 p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/40 rounded-xl">
+            <div className="flex items-start justify-between gap-3 mb-2">
+              <div className="flex items-center gap-2">
+                <svg className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                </svg>
+                <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
+                  Bazaga yozilmagan talabgorlar: {failedInserts.length} ta
+                  {failedInserts.length >= 500 && " (birinchi 500 tasi)"}
+                </p>
+              </div>
+              <button
+                onClick={() => setFailedInserts([])}
+                className="flex-shrink-0 text-amber-400 hover:text-amber-600 dark:text-amber-500 dark:hover:text-amber-300 transition-colors"
+                aria-label="Yopish"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="max-h-60 overflow-y-auto rounded-lg border border-amber-200/60 dark:border-amber-800/30 divide-y divide-amber-100 dark:divide-amber-900/30 bg-white/70 dark:bg-slate-900/40">
+              {failedInserts.map((f, i) => (
+                <div key={i} className="flex items-start gap-3 px-3 py-1.5 text-xs">
+                  <span className="font-mono font-semibold text-gray-700 dark:text-slate-200 whitespace-nowrap shrink-0">
+                    {f.imie}
+                  </span>
+                  <span className="text-amber-700/90 dark:text-amber-300/80 break-words" title={f.reason}>
+                    {f.reason}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* O'tkazib yuborilgan talabgorlar (parsing/smena/dublikat) — imie + sabab */}
+        {skippedStudents.length > 0 && (
+          <div className="mb-4 p-4 bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 rounded-xl">
+            <div className="flex items-start justify-between gap-3 mb-2">
+              <div className="flex items-center gap-2">
+                <svg className="w-5 h-5 text-slate-500 dark:text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                  O'tkazib yuborilgan talabgorlar: {skippedStudents.length} ta
+                  {skippedStudents.length >= 500 && " (birinchi 500 tasi)"}
+                </p>
+              </div>
+              <button
+                onClick={() => setSkippedStudents([])}
+                className="flex-shrink-0 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+                aria-label="Yopish"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="max-h-60 overflow-y-auto rounded-lg border border-slate-200/70 dark:border-slate-700/50 divide-y divide-slate-100 dark:divide-slate-700/40 bg-white/70 dark:bg-slate-900/40">
+              {skippedStudents.map((s, i) => (
+                <div key={i} className="flex items-start gap-3 px-3 py-1.5 text-xs">
+                  <span className="font-mono font-semibold text-gray-700 dark:text-slate-200 whitespace-nowrap shrink-0">
+                    {s.imie}
+                  </span>
+                  <span className="text-slate-600 dark:text-slate-400 break-words" title={s.reason}>
+                    {s.reason}
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 

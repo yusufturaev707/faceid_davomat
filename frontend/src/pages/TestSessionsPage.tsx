@@ -20,6 +20,26 @@ import PermissionGate from "../components/PermissionGate";
 import { PERM } from "../permissions";
 import { extractErrorMessage } from "../utils/errorMessage";
 
+/** "YYYY-MM-DD" start..finish oralig'idagi barcha kunlar ro'yxati (inklyuziv). */
+function buildDateRange(start: string, finish: string): string[] {
+  const days: string[] = [];
+  const s = new Date(`${start}T00:00:00`);
+  const f = new Date(`${finish}T00:00:00`);
+  if (isNaN(s.getTime()) || isNaN(f.getTime()) || f < s) return days;
+  const cur = new Date(s);
+  let guard = 0;
+  // 366 — bir yildan ko'p oraliqda ehtiyot chegara (cheksiz sikldan himoya).
+  while (cur <= f && guard < 366) {
+    const y = cur.getFullYear();
+    const m = String(cur.getMonth() + 1).padStart(2, "0");
+    const d = String(cur.getDate()).padStart(2, "0");
+    days.push(`${y}-${m}-${d}`);
+    cur.setDate(cur.getDate() + 1);
+    guard++;
+  }
+  return days;
+}
+
 export default function TestSessionsPage() {
   const navigate = useNavigate();
   const [data, setData] = useState<TestSessionListResponse | null>(null);
@@ -113,26 +133,37 @@ export default function TestSessionsPage() {
     setShowModal(true);
   };
 
-  const addSmenaRow = () => {
-    setFormSmenas([
-      ...formSmenas,
-      { test_smena_id: smenas[0]?.id || 0, day: formStartDate },
-    ]);
-  };
+  // Boshlanish/tugash sanasi va "kuniga smena soni"dan smenalarni AVTOMATIK
+  // shakllantirish: har kun uchun (start..finish) birinchi N aktiv smena
+  // (number bo'yicha tartiblangan) qo'yiladi. Qo'lda har kunni tanlash shart emas.
+  useEffect(() => {
+    if (
+      !formStartDate ||
+      !formFinishDate ||
+      formSmPerDay < 1 ||
+      formFinishDate < formStartDate ||
+      smenas.length === 0
+    ) {
+      setFormSmenas([]);
+      return;
+    }
+    const days = buildDateRange(formStartDate, formFinishDate);
+    const chosen = [...smenas]
+      .filter((s) => s.is_active)
+      .sort((a, b) => a.number - b.number)
+      .slice(0, formSmPerDay);
+    const rows: { test_smena_id: number; day: string }[] = [];
+    for (const day of days) {
+      for (const sm of chosen) {
+        rows.push({ test_smena_id: sm.id, day });
+      }
+    }
+    setFormSmenas(rows);
+  }, [formStartDate, formFinishDate, formSmPerDay, smenas]);
 
+  // Bitta avtomatik shakllangan smenani ro'yxatdan olib tashlash (ixtiyoriy tuzatish).
   const removeSmenaRow = (idx: number) => {
     setFormSmenas(formSmenas.filter((_, i) => i !== idx));
-  };
-
-  const updateSmenaRow = (
-    idx: number,
-    field: "test_smena_id" | "day",
-    value: string | number,
-  ) => {
-    const copy = [...formSmenas];
-    if (field === "test_smena_id") copy[idx].test_smena_id = Number(value);
-    else copy[idx].day = String(value);
-    setFormSmenas(copy);
   };
 
   const handleCreate = async () => {
@@ -464,69 +495,78 @@ export default function TestSessionsPage() {
                 />
               </div>
 
-              {/* Smena rows */}
+              {/* Avtomatik shakllangan smenalar — kun bo'yicha guruhlangan preview */}
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <label className="text-sm font-medium text-gray-700 dark:text-slate-300">
-                    Smenalar
+                    Smenalar jadvali
                   </label>
-                  <button
-                    type="button"
-                    onClick={addSmenaRow}
-                    className="text-xs text-primary-600 dark:text-primary-400 hover:underline font-medium"
-                  >
-                    + Smena qo'shish
-                  </button>
+                  {formSmenas.length > 0 && (
+                    <span className="text-xs text-gray-400 dark:text-slate-500">
+                      {buildDateRange(formStartDate, formFinishDate).length} kun ·{" "}
+                      {formSmenas.length} smena
+                    </span>
+                  )}
                 </div>
-                {formSmenas.length === 0 && (
+
+                {formSmPerDay >
+                  smenas.filter((s) => s.is_active).length &&
+                  smenas.length > 0 && (
+                    <p className="text-xs text-amber-600 dark:text-amber-400 mb-2">
+                      Faqat {smenas.filter((s) => s.is_active).length} ta aktiv
+                      smena mavjud — har kunga shuncha qo'yildi.
+                    </p>
+                  )}
+
+                {formSmenas.length === 0 ? (
                   <p className="text-xs text-gray-400 dark:text-slate-500">
-                    Smena qo'shilmagan
+                    Sana oralig'i va "kuniga smenalar soni"ni kiriting — smenalar
+                    avtomatik shakllanadi.
                   </p>
+                ) : (
+                  <div className="max-h-60 overflow-y-auto rounded-lg border border-gray-200 dark:border-slate-700 divide-y divide-gray-100 dark:divide-slate-700/60">
+                    {Array.from(
+                      formSmenas.reduce((map, row) => {
+                        const arr = map.get(row.day) || [];
+                        arr.push(row);
+                        map.set(row.day, arr);
+                        return map;
+                      }, new Map<string, { test_smena_id: number; day: string }[]>()),
+                    ).map(([day, rows]) => (
+                      <div key={day} className="flex items-start gap-3 px-3 py-2">
+                        <span className="text-xs font-semibold text-gray-600 dark:text-slate-300 whitespace-nowrap mt-1 w-24 shrink-0">
+                          {day}
+                        </span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {rows.map((row) => {
+                            const idx = formSmenas.indexOf(row);
+                            const sm = smenas.find(
+                              (s) => s.id === row.test_smena_id,
+                            );
+                            return (
+                              <span
+                                key={idx}
+                                className="inline-flex items-center gap-1 pl-2 pr-1 py-0.5 rounded-md bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 text-xs font-medium"
+                              >
+                                {sm?.name || `#${row.test_smena_id}`}
+                                <button
+                                  type="button"
+                                  onClick={() => removeSmenaRow(idx)}
+                                  className="text-primary-400 hover:text-red-500 transition-colors"
+                                  aria-label="Olib tashlash"
+                                >
+                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                                  </svg>
+                                </button>
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 )}
-                <div className="space-y-2">
-                  {formSmenas.map((row, idx) => (
-                    <div key={idx} className="flex items-center gap-2">
-                      <Md3Select
-                        value={row.test_smena_id ? String(row.test_smena_id) : ""}
-                        onChange={(v) =>
-                          updateSmenaRow(idx, "test_smena_id", v)
-                        }
-                        options={smenas.map((sm) => ({
-                          value: String(sm.id),
-                          label: sm.name,
-                        }))}
-                        className="flex-1"
-                      />
-                      <input
-                        type="date"
-                        value={row.day}
-                        onChange={(e) =>
-                          updateSmenaRow(idx, "day", e.target.value)
-                        }
-                        className="input-field !py-1.5 text-sm flex-1"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => removeSmenaRow(idx)}
-                        className="text-red-400 hover:text-red-600 p-1"
-                      >
-                        <svg
-                          className="w-4 h-4"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M6 18L18 6M6 6l12 12"
-                          />
-                        </svg>
-                      </button>
-                    </div>
-                  ))}
-                </div>
               </div>
             </div>
 

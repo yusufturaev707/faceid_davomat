@@ -53,6 +53,13 @@ _PROGRESS_TTL = 3600
 _CANCEL_KEY = "student_load_cancel:{session_id}"
 _CANCEL_TTL = 3600
 
+# UI'da (alert) ko'rsatiladigan insert bo'lmagan studentlar ro'yxatining
+# maksimal hajmi — Redis payload cheksiz o'smasligi uchun cheklov.
+_FAILED_ITEMS_MAX = 500
+
+# UI'da ko'rsatiladigan o'tkazib yuborilgan (skip) studentlar ro'yxati cheklovi.
+_SKIPPED_ITEMS_MAX = 500
+
 
 class StudentLoadError(Exception):
     def __init__(self, message: str):
@@ -86,6 +93,8 @@ def _set_progress(
     skipped: int,
     status: str,
     message: str = "",
+    failed_items: list[dict] | None = None,
+    skipped_items: list[dict] | None = None,
 ) -> None:
     """Progressni Redis'ga yozish.
 
@@ -93,6 +102,10 @@ def _set_progress(
     yo bog'langan, yo skip qilingan bo'lganligi uchun bu eng aniq foiz.
     Total noma'lum bo'lsa pages_done/pages_total fallback. Hech qanday
     holatda 100%'dan oshmaydi (cumulative counterlar bois sakramaydi ham).
+
+    `failed_items` — DB'ga insert bo'lmagan studentlar (imie + sabab).
+    `skipped_items` — parsing/smena/dublikat bois o'tkazib yuborilganlar
+    (imie + sabab). UI ikkalasini alohida panellar sifatida ko'rsatadi.
     """
     if r is None:
         return
@@ -115,6 +128,10 @@ def _set_progress(
             "message": message,
             "percent": percent,
         }
+        if failed_items is not None:
+            data["failed_items"] = failed_items
+        if skipped_items is not None:
+            data["skipped_items"] = skipped_items
         r.set(key, json.dumps(data), ex=_PROGRESS_TTL)
     except redis.ConnectionError:
         pass
@@ -251,15 +268,32 @@ def _safe_int(val) -> int | None:
     return None
 
 
+def _raw_pinfl(raw: dict) -> str:
+    """Xom API item'idan JSHSHIR/PINFLni topish (turli API'lar uchun universal).
+
+    Kalitlar API'ga qarab: `imie` (OTM-DTM/CEFR), `pinfl` (IIV), `imei`.
+    Skip qilingan studentni log'da identifikatsiya qilish uchun ishlatiladi.
+    """
+    for key in ("imie", "pinfl", "imei"):
+        val = raw.get(key)
+        if val:
+            return str(val)[:14]
+    return "-"
+
+
 def _build_region_zone_map(db: Session) -> dict[int, int]:
     """Region.number → Region ichidagi birinchi aktiv Zone.id mapping.
+
+    Faqat AKTIV region va AKTIV zonalar. Nofaol (`Region.is_active=False`)
+    regionlar bu xaritaga tushmaydi — natijada ularning studentlari yuklashda
+    hech bir zonaga bog'lanmaydi va o'tkazib yuboriladi.
 
     Bitta query — N+1'ni oldini oladi.
     """
     rows = db.execute(
         select(Region.number, Zone.id, Zone.region_id)
         .join(Zone, Zone.region_id == Region.id)
-        .where(Zone.is_active.is_(True))
+        .where(Zone.is_active.is_(True), Region.is_active.is_(True))
         .order_by(Region.number, Zone.id)
     ).all()
     zone_map: dict[int, int] = {}
@@ -279,11 +313,16 @@ def _build_building_zone_map(db: Session) -> dict[tuple[int, int], int]:
     zonalar (boshqa regionlarda) mavjud bo'lganda ularga adashib ulanish
     oldini oladi. Bir region ichida ham dublikat bo'lsa: aktiv zona ustuvor,
     keyin eng kichik id — tanlov deterministik.
+
+    Faqat AKTIV regionlar hisobga olinadi — nofaol (`Region.is_active=False`)
+    region binolari xaritaga tushmaydi, natijada ularning studentlari
+    yuklanmaydi (fallback ham ishlamaydi, chunki region_zone_map ham nofaol
+    regionni chiqarib tashlagan).
     """
     rows = db.execute(
         select(Region.number, Zone.building_id, Zone.id)
         .join(Region, Region.id == Zone.region_id)
-        .where(Zone.building_id.isnot(None))
+        .where(Zone.building_id.isnot(None), Region.is_active.is_(True))
         .order_by(Zone.is_active.desc(), Zone.id)
     ).all()
     result: dict[tuple[int, int], int] = {}
@@ -627,6 +666,16 @@ def load_students_for_session(db: Session, session: TestSession) -> int:
     if not url_template:
         raise StudentLoadError(f"API_{test_key.upper()} .env da sozlanmagan")
 
+    # OTM-DTM API paginatsiyasi BARQAROR emas — `sort` parametrisiz har so'rovda
+    # studentlarni tasodifiy tartibda qaytaradi. Natijada bir student bir necha
+    # sahifada takrorlanadi (dublikat skip), boshqalari esa umuman tushmaydi
+    # (kam yuklanadi). `sort=id` barqaror tartib beradi. .env da unutilgan
+    # bo'lsa ham shu yerda majburiy qo'shamiz (himoya to'ri).
+    if test_key == "otm-dtm" and "sort=" not in url_template:
+        sep = "&" if "?" in url_template else "?"
+        url_template = f"{url_template}{sep}sort=id"
+        logger.info("OTM-DTM URL'ga sort=id qo'shildi (barqaror paginatsiya)")
+
     headers: dict[str, str] = {}
     if test_key == "iiv" and settings.API_IIV_TOKEN:
         headers["Authorization"] = settings.API_IIV_TOKEN
@@ -761,7 +810,32 @@ def load_students_for_session(db: Session, session: TestSession) -> int:
     # ─── FAZA 2: Processing — fixed grand_total'ga nisbatan monoton progress ───
     total_loaded = 0
     total_skipped = 0
+    total_failed = 0
     pages_done = 0
+
+    # Skip sabablari bo'yicha hisoblagich — yuklash oxirida log'ga jamlanadi.
+    from collections import defaultdict
+    skip_reasons: dict[str, int] = defaultdict(int)
+
+    # O'tkazib yuborilgan studentlar tafsiloti (imie + sabab) — UI panel uchun.
+    # Hajm _SKIPPED_ITEMS_MAX bilan cheklanadi.
+    skipped_details: list[dict] = []
+
+    def _note_skip(pinfl: str, category: str, detail: str | None = None) -> None:
+        # category — jamlanma hisobi uchun (coarse); detail — UI'da ko'rsatiladigan
+        # to'liq sabab (kun/smena kabi aniqliklar bilan).
+        skip_reasons[category] += 1
+        if len(skipped_details) < _SKIPPED_ITEMS_MAX:
+            skipped_details.append({"imie": pinfl or "-", "reason": detail or category})
+
+    # DB'ga insert bo'lmagan studentlar (imie + xato sababi) — UI alert uchun.
+    # Hajm _FAILED_ITEMS_MAX bilan cheklanadi.
+    failed_inserts: list[dict] = []
+
+    def _record_failed(items: list[dict]) -> None:
+        for it in items:
+            if len(failed_inserts) < _FAILED_ITEMS_MAX:
+                failed_inserts.append(it)
 
     # Dublikat himoyasi — tashqi API sahifalari orasida takrorlangan yozuvlar
     # (paginatsiya tartibi siljishi, manbadagi takrorlar) ikkinchi marta
@@ -793,12 +867,19 @@ def load_students_for_session(db: Session, session: TestSession) -> int:
 
         Returns: shu chaqiruvda buffer'ga commit qilingan studentlar soni.
         """
-        nonlocal total_loaded, total_skipped
+        nonlocal total_loaded, total_skipped, total_failed
         committed_now = 0
         for raw in raw_items:
             parsed = parser(raw, zone_map, building_map)
             if not parsed:
                 total_skipped += 1
+                pinfl = _raw_pinfl(raw)
+                _note_skip(pinfl, "zona/hudud topilmadi")
+                logger.info(
+                    "SKIP student pinfl=%s sabab='zona/hudud topilmadi' "
+                    "(region_number=%s, zone_id=%s)",
+                    pinfl, raw.get("region_number"), raw.get("zone_id"),
+                )
                 continue
 
             student_data, ps_data = parsed
@@ -810,6 +891,16 @@ def load_students_for_session(db: Session, session: TestSession) -> int:
             session_smena_id = smena_map.get((smena_number, item_day))
             if not session_smena_id:
                 total_skipped += 1
+                pinfl = student_data.get("imei") or _raw_pinfl(raw)
+                _note_skip(
+                    pinfl, "smena mos kelmadi",
+                    f"smena mos kelmadi (kun={item_day}, smena={smena_number})",
+                )
+                logger.info(
+                    "SKIP student pinfl=%s sabab='smena mos kelmadi' "
+                    "(kun=%s, smena=%s)",
+                    pinfl, item_day, smena_number,
+                )
                 continue
 
             # Takror yozuv — o'tkazib yuboriladi (progress'da skipped sifatida)
@@ -817,6 +908,12 @@ def load_students_for_session(db: Session, session: TestSession) -> int:
             if dkey is not None:
                 if dkey in seen_students:
                     total_skipped += 1
+                    pinfl = student_data.get("imei") or _raw_pinfl(raw)
+                    _note_skip(pinfl, "dublikat (takror yozuv)")
+                    logger.info(
+                        "SKIP student pinfl=%s sabab='dublikat' (kun=%s, smena=%s)",
+                        pinfl, item_day, smena_number,
+                    )
                     continue
                 seen_students.add(dkey)
 
@@ -843,9 +940,12 @@ def load_students_for_session(db: Session, session: TestSession) -> int:
             ps_buffer.append(ps_data)
 
             if len(student_buffer) >= INSERT_BATCH_SIZE:
-                _flush_batch(db, student_buffer, ps_buffer)
-                committed_now += len(student_buffer)
-                total_loaded += len(student_buffer)
+                failed = _flush_batch(db, student_buffer, ps_buffer)
+                ok = len(student_buffer) - len(failed)
+                committed_now += ok
+                total_loaded += ok
+                total_failed += len(failed)
+                _record_failed(failed)
                 student_buffer.clear()
                 ps_buffer.clear()
         return committed_now
@@ -901,8 +1001,10 @@ def load_students_for_session(db: Session, session: TestSession) -> int:
                 finally:
                     # Kun yakuni yoki xatolik — qolgan buferni yozib qo'yish
                     if student_buffer:
-                        _flush_batch(db, student_buffer, ps_buffer)
-                        total_loaded += len(student_buffer)
+                        failed = _flush_batch(db, student_buffer, ps_buffer)
+                        total_loaded += len(student_buffer) - len(failed)
+                        total_failed += len(failed)
+                        _record_failed(failed)
                         student_buffer.clear()
                         ps_buffer.clear()
 
@@ -910,6 +1012,9 @@ def load_students_for_session(db: Session, session: TestSession) -> int:
         session.count_total_student = total_loaded
         db.commit()
 
+        done_msg = f"{total_loaded} ta talaba yuklandi"
+        if total_failed:
+            done_msg += f" · {total_failed} ta insert bo'lmadi"
         _set_progress(
             r, session.id,
             current=total_loaded,
@@ -917,13 +1022,23 @@ def load_students_for_session(db: Session, session: TestSession) -> int:
             pages_done=pages_done,
             pages_total=grand_total_pages,
             skipped=total_skipped, status="completed",
-            message=f"{total_loaded} ta talaba yuklandi",
+            message=done_msg,
+            failed_items=failed_inserts,
+            skipped_items=skipped_details,
         )
 
         logger.info(
-            "Loaded %d students for session #%d (%s, skipped=%d)",
-            total_loaded, session.id, test_key, total_skipped,
+            "Loaded %d students for session #%d (%s, skipped=%d, failed=%d)",
+            total_loaded, session.id, test_key, total_skipped, total_failed,
         )
+        if skip_reasons:
+            summary = ", ".join(
+                f"{reason}: {cnt}" for reason, cnt in sorted(skip_reasons.items())
+            )
+            logger.info(
+                "Session #%d skip sabablari bo'yicha jami — %s",
+                session.id, summary,
+            )
         return total_loaded
 
     except StudentLoadCancelled:
@@ -948,6 +1063,8 @@ def load_students_for_session(db: Session, session: TestSession) -> int:
             pages_total=grand_total_pages,
             skipped=total_skipped, status="error",
             message=e.message,
+            failed_items=failed_inserts,
+            skipped_items=skipped_details,
         )
         raise
     except Exception as e:
@@ -959,6 +1076,8 @@ def load_students_for_session(db: Session, session: TestSession) -> int:
             pages_total=grand_total_pages,
             skipped=total_skipped, status="error",
             message=f"Kutilmagan xatolik: {e}",
+            failed_items=failed_inserts,
+            skipped_items=skipped_details,
         )
         raise
 
@@ -967,26 +1086,64 @@ def _flush_batch(
     db: Session,
     student_rows: list[dict],
     ps_rows: list[dict],
-) -> None:
+) -> list[dict]:
     """Buferdagi qatorlarni bulk INSERT bilan DB'ga yozish.
 
     Student'lar avval kiritiladi va id'lar olinadi (RETURNING),
     keyin StudentPsData'lar shu id'lar bilan yoziladi.
+
+    Chidamlilik: bulk INSERT bitta buzuq yozuv bois yiqilsa, butun yuklash
+    to'xtamaydi — batch rollback qilinib, qatorma-qator qayta uriniladi.
+    Faqat haqiqatan xato bergan yozuvlar tashlab ketiladi.
+
+    Returns:
+        DB'ga yozilmagan studentlar ro'yxati: [{"imie": str, "reason": str}, ...]
     """
     if not student_rows:
-        return
+        return []
 
-    # bulk_insert_mappings — eng tez yo'l, ammo ID'larni qaytarmaydi.
-    # Shuning uchun add+flush kombinatsiyasi ishlatamiz: ORM obyektlarini
-    # add qilamiz, flush bilan barcha ID'lar bir vaqtda olinadi (executemany).
-    students = [Student(**row) for row in student_rows]
-    db.add_all(students)
-    db.flush()  # ID'larni olish uchun — 1 ta executemany INSERT
+    try:
+        # bulk_insert_mappings — eng tez yo'l, ammo ID'larni qaytarmaydi.
+        # Shuning uchun add+flush kombinatsiyasi ishlatamiz: ORM obyektlarini
+        # add qilamiz, flush bilan barcha ID'lar bir vaqtda olinadi (executemany).
+        students = [Student(**row) for row in student_rows]
+        db.add_all(students)
+        db.flush()  # ID'larni olish uchun — 1 ta executemany INSERT
 
-    ps_objects = []
-    for student, ps_row in zip(students, ps_rows):
-        ps_row["student_id"] = student.id
-        ps_objects.append(StudentPsData(**ps_row))
+        ps_objects = []
+        for student, ps_row in zip(students, ps_rows):
+            ps_row["student_id"] = student.id
+            ps_objects.append(StudentPsData(**ps_row))
 
-    db.add_all(ps_objects)
-    db.commit()
+        db.add_all(ps_objects)
+        db.commit()
+        return []
+    except Exception:
+        db.rollback()
+        logger.exception(
+            "Batch INSERT yiqildi (%d qator) — qatorma-qator qayta urinilmoqda",
+            len(student_rows),
+        )
+
+    # Batch buzildi — aybdor(lar)ni topish uchun bittalab yozamiz.
+    failed: list[dict] = []
+    for row, ps_row in zip(student_rows, ps_rows):
+        try:
+            student = Student(**row)
+            db.add(student)
+            db.flush()
+            ps_row["student_id"] = student.id
+            db.add(StudentPsData(**ps_row))
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            # DB xatosining asosiy sababini qisqartirib olamiz (birinchi qator).
+            reason = str(getattr(e, "orig", None) or e).split("\n")[0][:150]
+            failed.append({
+                "imie": str(row.get("imei") or "") or "-",
+                "reason": reason,
+            })
+            logger.warning(
+                "Student INSERT xatosi (imie=%s): %s", row.get("imei"), reason
+            )
+    return failed

@@ -336,6 +336,10 @@ export async function getStudentLoadProgressApi(sessionId: number): Promise<{
   percent: number;
   status: "idle" | "processing" | "completed" | "error" | "cancelled";
   message: string;
+  // DB'ga insert bo'lmagan studentlar (imie + xato sababi). Maksimal 500 ta.
+  failed_items?: { imie: string; reason: string }[];
+  // Parsing/smena/dublikat bois o'tkazib yuborilgan studentlar. Maksimal 500 ta.
+  skipped_items?: { imie: string; reason: string }[];
 }> {
   const res = await apiClient.get(`/test-sessions/${sessionId}/student-load-progress`);
   return res.data;
