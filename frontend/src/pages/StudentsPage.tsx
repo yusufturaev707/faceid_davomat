@@ -19,6 +19,7 @@ import {
   deleteStudentApi,
   fetchGtspImageApi,
   fetchGtspBulkApi,
+  reassignZoneBulkApi,
   exportStudentsApi,
   getTestsLookupApi,
   getTestSessionsApi,
@@ -95,6 +96,15 @@ export default function StudentsPage() {
   const [exporting, setExporting] = useState<"xlsx" | "pdf" | null>(null);
   const [bulkMsg, setBulkMsg] = useState("");
 
+  // Bulk bino o'zgartirish (filtrlangan studentlarni boshqa binoga biriktirish)
+  const [showReassignModal, setShowReassignModal] = useState(false);
+  const [reassignRegionId, setReassignRegionId] = useState<string>("");
+  const [reassignZones, setReassignZones] = useState<LookupZoneResponse[]>([]);
+  const [reassignZonesLoading, setReassignZonesLoading] = useState(false);
+  const [reassignZoneId, setReassignZoneId] = useState<string>("");
+  const [reassigning, setReassigning] = useState(false);
+  const [reassignError, setReassignError] = useState("");
+
   // Modal
   const [showModal, setShowModal] = useState(false);
   const [editId, setEditId] = useState<number | null>(null);
@@ -152,6 +162,19 @@ export default function StudentsPage() {
       .catch(() => setModalZones([]))
       .finally(() => setModalZonesLoading(false));
   }, [modalRegionId]);
+
+  // Bino o'zgartirish modalidagi viloyat o'zgarganda binolarni yuklash
+  useEffect(() => {
+    if (!reassignRegionId) {
+      setReassignZones([]);
+      return;
+    }
+    setReassignZonesLoading(true);
+    getZonesByRegionApi(Number(reassignRegionId))
+      .then(setReassignZones)
+      .catch(() => setReassignZones([]))
+      .finally(() => setReassignZonesLoading(false));
+  }, [reassignRegionId]);
 
   // Joriy qidiruv + filtrlardan so'rov parametrlarini yig'adi (sahifalashsiz).
   // Ham ro'yxat (getStudentsApi), ham GTSP bulk uchun ishlatiladi.
@@ -258,6 +281,51 @@ export default function StudentsPage() {
       setError(extractErrorMessage(err));
     } finally {
       setBulkGtspLoading(false);
+    }
+  };
+
+  // Bino o'zgartirish modalini ochish (holatni tozalab)
+  const openReassign = () => {
+    if (!hasFilters) return;
+    setReassignRegionId("");
+    setReassignZones([]);
+    setReassignZoneId("");
+    setReassignError("");
+    setShowReassignModal(true);
+  };
+
+  // Filtrlangan barcha talabalarni tanlangan binoga biriktirish
+  const handleReassignZone = async () => {
+    if (!reassignZoneId) {
+      setReassignError("Yangi binoni tanlang");
+      return;
+    }
+    setReassigning(true);
+    setReassignError("");
+    try {
+      const res = await reassignZoneBulkApi(
+        buildFilterParams(),
+        Number(reassignZoneId),
+      );
+      setShowReassignModal(false);
+      setBulkMsg(
+        `${res.updated} ta talabgor "${res.zone_name}" binosiga biriktirildi ` +
+          `(jami ${res.total}).`,
+      );
+      setError("");
+      await fetchData();
+      // Ochiq detail panelni ham yangilash
+      if (selected) {
+        try {
+          setSelected(await getStudentApi(selected.id));
+        } catch {
+          /* ignore */
+        }
+      }
+    } catch (err) {
+      setReassignError(extractErrorMessage(err));
+    } finally {
+      setReassigning(false);
     }
   };
 
@@ -710,6 +778,33 @@ export default function StudentsPage() {
                 {bulkGtspLoading
                   ? "Yuklanmoqda..."
                   : `Rasm tortish${data ? ` (${data.total})` : ""}`}
+              </button>
+            </PermissionGate>
+            <PermissionGate permission={PERM.STUDENT_UPDATE}>
+              <button
+                onClick={openReassign}
+                disabled={!hasFilters || !data || data.total === 0}
+                title={
+                  hasFilters
+                    ? "Filtrlangan barcha talabgorlarni boshqa binoga biriktirish"
+                    : "Avval qidiruv yoki filtr qo'llang"
+                }
+                className="inline-flex items-center gap-2 px-4 !py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 rounded-full shadow-md hover:shadow-lg active:shadow active:scale-[0.98] transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-indigo-300 dark:focus:ring-indigo-700 focus:ring-offset-1 disabled:opacity-50 disabled:shadow-none disabled:pointer-events-none"
+              >
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0H5m14 0h2m-2 0h-4m-6 0H3m2 0h4M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
+                  />
+                </svg>
+                {`Binoni o'zgartirish${data ? ` (${data.total})` : ""}`}
               </button>
             </PermissionGate>
             <PermissionGate permission={PERM.STUDENT_READ}>
@@ -1504,6 +1599,115 @@ export default function StudentsPage() {
         </div>
       )}
 
+      {/* ===== Bino o'zgartirish (bulk reassign) Modal ===== */}
+      {showReassignModal && (
+        <div className="fixed inset-0 bg-black/40 dark:bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="px-6 py-5 border-b border-gray-200 dark:border-slate-700 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                Binoni o'zgartirish
+              </h3>
+              <button
+                onClick={() => setShowReassignModal(false)}
+                disabled={reassigning}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-slate-300 disabled:opacity-50"
+              >
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            </div>
+            <div className="px-6 py-5">
+              <p className="text-sm text-gray-500 dark:text-slate-400 mb-4">
+                Filtrlangan{" "}
+                <span className="font-semibold text-gray-700 dark:text-slate-300">
+                  {data?.total ?? 0}
+                </span>{" "}
+                ta talabgor tanlangan binoga biriktiriladi.
+              </p>
+
+              {reassignError && (
+                <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-xl text-sm">
+                  {reassignError}
+                </div>
+              )}
+
+              <div className="space-y-4">
+                <ModalField label="Viloyat (Region)">
+                  <Md3Select
+                    value={reassignRegionId}
+                    onChange={(v) => {
+                      setReassignRegionId(v);
+                      setReassignZoneId("");
+                    }}
+                    options={regions
+                      .filter((r) => r.is_active)
+                      .map((r) => ({
+                        value: String(r.id),
+                        label: r.name,
+                      }))}
+                    placeholder="Tanlang..."
+                    ariaLabel="Viloyat (Region)"
+                  />
+                </ModalField>
+                <ModalField label="Yangi bino (Zone) *">
+                  <Md3Select
+                    value={reassignZoneId}
+                    onChange={setReassignZoneId}
+                    options={reassignZones
+                      .filter((z) => z.is_active)
+                      .map((z) => ({
+                        value: String(z.id),
+                        label: z.name,
+                      }))}
+                    placeholder={
+                      reassignZonesLoading
+                        ? "Yuklanmoqda..."
+                        : reassignRegionId
+                          ? "Tanlang..."
+                          : "Avval viloyatni tanlang"
+                    }
+                    disabled={!reassignRegionId || reassignZonesLoading}
+                    ariaLabel="Yangi bino (Zone)"
+                  />
+                </ModalField>
+              </div>
+
+              <p className="text-xs text-amber-600 dark:text-amber-400 mt-4">
+                Diqqat: bu amal filtrlangan barcha talabgorlarning binosini
+                o'zgartiradi.
+              </p>
+            </div>
+            <div className="px-6 py-4 bg-gray-50 dark:bg-slate-700/50 flex justify-end gap-3">
+              <button
+                onClick={() => setShowReassignModal(false)}
+                disabled={reassigning}
+                className="px-4 py-2 text-sm font-medium text-gray-600 dark:text-slate-400 hover:text-gray-800 dark:hover:text-white transition-colors disabled:opacity-50"
+              >
+                Bekor qilish
+              </button>
+              <button
+                onClick={handleReassignZone}
+                disabled={reassigning || !reassignZoneId}
+                className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors disabled:opacity-50"
+              >
+                {reassigning ? "Biriktirilmoqda..." : "Biriktirish"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ===== Create/Edit Modal ===== */}
       {showModal && (
         <div className="fixed inset-0 bg-black/40 dark:bg-black/60 flex items-center justify-center z-50 p-4">
@@ -1933,6 +2137,7 @@ function FilterSelect({
         onChange={onChange}
         options={options}
         placeholder="Barchasi"
+        clearable={!!value}
         ariaLabel={label}
       />
     </div>

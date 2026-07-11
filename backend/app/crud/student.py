@@ -300,6 +300,29 @@ def get_filtered_student_ids(
     return [int(sid) for sid in db.execute(stmt).scalars().all()]
 
 
+def bulk_reassign_zone(
+    db: Session, student_ids: list[int], target_zone_id: int
+) -> int:
+    """Berilgan student id'lar `zone_id` sini `target_zone_id` ga o'zgartiradi.
+
+    Yangilangan qatorlar sonini qaytaradi. Katta ro'yxatlar uchun UPDATE
+    bo'laklarga bo'linadi (Postgres bind-parametr chegarasidan oshmaslik uchun).
+    """
+    if not student_ids:
+        return 0
+    CHUNK = 5000
+    updated = 0
+    for i in range(0, len(student_ids), CHUNK):
+        chunk = student_ids[i : i + CHUNK]
+        updated += (
+            db.query(Student)
+            .filter(Student.id.in_(chunk))
+            .update({Student.zone_id: target_zone_id}, synchronize_session=False)
+        )
+    db.commit()
+    return int(updated)
+
+
 def get_filtered_students(
     db: Session,
     *,

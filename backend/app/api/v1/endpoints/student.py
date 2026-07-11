@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 from app.core.permissions import P
 from app.crud.student import (
     bulk_create_student_logs,
+    bulk_reassign_zone,
     create_cheating_log,
     create_student,
     create_student_log,
@@ -1210,6 +1211,123 @@ def fetch_gtsp_bulk(
     )
     return BulkGtspResponse(
         total=total, succeeded=succeeded, failed=failed, skipped=skipped
+    )
+
+
+# ===================== Bulk zone reassignment =====================
+
+
+class ReassignZoneResponse(BaseModel):
+    """Filtrlangan studentlarni boshqa binoga (zone) biriktirish natijasi."""
+
+    total: int  # filtr/qidiruvga mos jami studentlar
+    updated: int  # zone_id yangilangan studentlar
+    zone_id: int  # yangi bino id
+    zone_name: str  # yangi bino nomi
+
+
+@router.post("/reassign-zone-bulk", response_model=ReassignZoneResponse)
+def reassign_zone_bulk(
+    target_zone_id: int = Query(
+        ..., description="Talabalar biriktiriladigan yangi bino (zone) id."
+    ),
+    session_smena_id: int | None = None,
+    zone_id: int | None = None,
+    test_id: int | None = None,
+    region_id: int | None = None,
+    smena_id: int | None = None,
+    gender_id: int | None = None,
+    gr_n: int | None = None,
+    e_date_from: str | None = None,
+    e_date_to: str | None = None,
+    is_entered: bool | None = None,
+    is_cheating: bool | None = None,
+    is_blacklist: bool | None = None,
+    is_face: bool | None = None,
+    is_image: bool | None = None,
+    is_ready: bool | None = None,
+    is_applied: bool | None = None,
+    search: str | None = None,
+    db: Session = Depends(get_db),
+    _: User = Depends(PermissionChecker(P.STUDENT_UPDATE.code)),
+):
+    """Filtr/qidiruvga mos BARCHA studentlarni tanlangan binoga (zone) biriktirish.
+
+    `list_students` bilan bir xil filtr parametrlarini qabul qiladi va shu
+    filtrga mos har bir studentning `zone_id` sini `target_zone_id` ga
+    o'zgartiradi. Xavfsizlik uchun kamida bitta filtr/qidiruv shart —
+    filtr berilmasa (barcha studentlarni tasodifan ko'chirib yubormaslik
+    uchun) so'rov rad etiladi.
+    """
+    from app.crud.student import get_filtered_student_ids
+    from app.models.zone import Zone
+
+    target_zone = db.get(Zone, target_zone_id)
+    if not target_zone:
+        raise HTTPException(status_code=404, detail="Bino topilmadi")
+
+    # Kamida bitta filtr/qidiruv bo'lishi shart — bo'sh filtr barcha
+    # talabalarni ko'chirib yuborishi mumkin, buni bloklaymiz.
+    has_filter = any(
+        v is not None
+        for v in (
+            session_smena_id,
+            zone_id,
+            test_id,
+            region_id,
+            smena_id,
+            gender_id,
+            gr_n,
+            e_date_from,
+            e_date_to,
+            is_entered,
+            is_cheating,
+            is_blacklist,
+            is_face,
+            is_image,
+            is_ready,
+            is_applied,
+        )
+    ) or bool(search)
+    if not has_filter:
+        raise HTTPException(
+            status_code=400,
+            detail="Kamida bitta filtr yoki qidiruv shart",
+        )
+
+    student_ids = get_filtered_student_ids(
+        db,
+        session_smena_id=session_smena_id,
+        zone_id=zone_id,
+        test_id=test_id,
+        region_id=region_id,
+        smena_id=smena_id,
+        gender_id=gender_id,
+        gr_n=gr_n,
+        e_date_from=e_date_from,
+        e_date_to=e_date_to,
+        is_entered=is_entered,
+        is_cheating=is_cheating,
+        is_blacklist=is_blacklist,
+        is_face=is_face,
+        is_image=is_image,
+        is_ready=is_ready,
+        is_applied=is_applied,
+        search=search,
+    )
+    total = len(student_ids)
+    updated = bulk_reassign_zone(db, student_ids, target_zone_id)
+    logger.info(
+        "Bulk zone reassign: total=%d, updated=%d, target_zone_id=%d",
+        total,
+        updated,
+        target_zone_id,
+    )
+    return ReassignZoneResponse(
+        total=total,
+        updated=updated,
+        zone_id=target_zone_id,
+        zone_name=target_zone.name,
     )
 
 

@@ -896,6 +896,20 @@ export async function fetchGtspBulkApi(
 }
 
 /**
+ * Filtrlangan barcha talabalarni tanlangan binoga (zone) biriktirish.
+ * Filtr parametrlari getStudentsApi bilan bir xil (sahifalashsiz).
+ */
+export async function reassignZoneBulkApi(
+  params: Record<string, unknown>,
+  targetZoneId: number,
+): Promise<import("./interfaces").ReassignZoneResult> {
+  const res = await apiClient.post("/students/reassign-zone-bulk", null, {
+    params: { ...params, target_zone_id: targetZoneId },
+  });
+  return res.data;
+}
+
+/**
  * Filtrlangan talabalar ro'yxatini Excel (.xlsx) yoki PDF qilib yuklab olish.
  * Parametrlar getStudentsApi bilan bir xil (sahifalashsiz). Brauzer faylni saqlaydi.
  */

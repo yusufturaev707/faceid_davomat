@@ -883,6 +883,13 @@ export interface GtspBulkResult {
   skipped: number;
 }
 
+export interface ReassignZoneResult {
+  total: number;
+  updated: number;
+  zone_id: number;
+  zone_name: string;
+}
+
 // === StudentLog ===
 export interface StudentLogCreate {
   student_id: number;
