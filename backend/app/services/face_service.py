@@ -42,15 +42,49 @@ def init_face_app() -> None:
     if _face_app is not None:
         return
     logger.info("InsightFace model yuklanmoqda...")
-    _face_app = FaceAnalysis(
-        name="buffalo_l",
-        providers=["CPUExecutionProvider"],
-    )
-    det_sz = settings.FACE_DET_SIZE
-    det_thresh = settings.FACE_DET_THRESH
-    _face_app.prepare(ctx_id=0, det_thresh=det_thresh, det_size=(det_sz, det_sz))
+
+    # ONNX intra-op thread sonini sozlash. insightface 0.7.x `get_model` faqat
+    # providers/provider_options ni uzatadi — `sess_options` ni EMAS. Shuning
+    # uchun sessiya yaratiladigan `PickableInferenceSession` ni vaqtincha
+    # monkeypatch qilib, intra_op_num_threads ni kiritamiz. intra_op=1 → har
+    # inference 1 yadro, bu embedding'ni ko'p thread bilan parallel qilishga imkon
+    # beradi (aks holda bitta inference barcha yadroni egallab, parallel foydasiz).
+    intra = settings.FACE_ONNX_INTRA_THREADS
+    _orig_pis_init = None
+    if intra and intra > 0:
+        import onnxruntime as ort
+        from insightface.model_zoo import model_zoo as _mz
+
+        _orig_pis_init = _mz.PickableInferenceSession.__init__
+
+        def _patched_pis_init(self, model_path, **kwargs):
+            if not kwargs.get("sess_options"):
+                so = ort.SessionOptions()
+                so.intra_op_num_threads = intra
+                so.inter_op_num_threads = 1
+                kwargs["sess_options"] = so
+            _orig_pis_init(self, model_path, **kwargs)
+
+        _mz.PickableInferenceSession.__init__ = _patched_pis_init
+
+    try:
+        _face_app = FaceAnalysis(
+            name="buffalo_l",
+            providers=["CPUExecutionProvider"],
+        )
+        det_sz = settings.FACE_DET_SIZE
+        det_thresh = settings.FACE_DET_THRESH
+        _face_app.prepare(ctx_id=0, det_thresh=det_thresh, det_size=(det_sz, det_sz))
+    finally:
+        if _orig_pis_init is not None:
+            from insightface.model_zoo import model_zoo as _mz
+            _mz.PickableInferenceSession.__init__ = _orig_pis_init
+
     _face_app_ready.set()
-    logger.info("InsightFace model tayyor!")
+    logger.info(
+        "InsightFace model tayyor! (intra_op_threads=%s)",
+        intra if intra and intra > 0 else "default",
+    )
 
 
 _FACE_APP_WAIT_TIMEOUT = 300

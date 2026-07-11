@@ -8,6 +8,7 @@ ps_img blob'lari kichik chunk'larda DB dan o'qiladi (streaming).
 
 import json
 import logging
+from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 import redis
@@ -103,12 +104,35 @@ def _get_smena_ids(db: Session, session_id: int) -> list[int]:
     ]
 
 
+def _infer_one(img_bytes: bytes) -> tuple[bytes | None, str]:
+    """Rasm bayt'laridan yuz embedding'ini chiqaradi. SOF funksiya — DB/ORM'ga
+    tegmaydi, shuning uchun thread'dan xavfsiz chaqiriladi.
+
+    decode + detect_faces CPU-bound; ONNX inference GIL'ni bo'shatgani uchun bir
+    nechta thread haqiqiy parallel ishlaydi (har inference intra_op=1 → 1 yadro).
+
+    Returns:
+        (embedding_bytes | None, status) — status: "success" | "no_face" | "error"
+    """
+    try:
+        img_bgr, _ = decode_image_bytes(img_bytes)
+        faces = detect_faces(img_bgr)
+        if faces:
+            emb = np.asarray(faces[0].embedding, dtype=np.float32).tobytes()
+            return emb, "success"
+        return None, "no_face"
+    except Exception:
+        return None, "error"
+
+
 def _process_chunk(
-    db: Session, students: list[Student]
+    db: Session, students: list[Student], executor: ThreadPoolExecutor | None
 ) -> tuple[int, int, int, int]:
     """Berilgan student chunk uchun embedding chiqarish.
 
-    ps_img faqat shu chunk uchun yuklanadi — RAM ni tejash uchun.
+    ps_img faqat shu chunk uchun yuklanadi — RAM ni tejash uchun. Inference
+    (`_infer_one`) `executor` orqali PARALLEL bajariladi; ORM yozuvlari esa
+    faqat shu (asosiy) thread'da qilinadi — SQLAlchemy Session thread-safe emas.
 
     Returns:
         (success, no_image, no_face, errors)
@@ -129,37 +153,41 @@ def _process_chunk(
     no_face = 0
     errors = 0
 
+    # 1-bosqich (asosiy thread): rasmi bor studentlarni ajratamiz. ps_img yo'q
+    # bo'lganlarni shu yerda belgilaymiz — inference'ga yubormaymiz.
+    to_infer: list[tuple[Student, StudentPsData, bytes]] = []
     for student in students:
         ps_data = ps_data_map.get(student.id)
-
         if not ps_data or not ps_data.ps_img:
             student.is_image = False
             student.is_face = False
             student.is_ready = False
             no_image += 1
             continue
-
         student.is_image = True
-        try:
-            img_bgr, _ = decode_image_bytes(ps_data.ps_img)
-            faces = detect_faces(img_bgr)
+        to_infer.append((student, ps_data, ps_data.ps_img))
 
-            if faces:
-                ps_data.embedding = np.asarray(
-                    faces[0].embedding, dtype=np.float32
-                ).tobytes()
+    # 2-bosqich: inference'ni parallel bajaramiz (DB'ga tegmaydi)
+    if to_infer:
+        img_list = [item[2] for item in to_infer]
+        mapper = executor.map if executor is not None else map
+        results = list(mapper(_infer_one, img_list))
+
+        # 3-bosqich (asosiy thread): natijalarni ORM'ga yozamiz
+        for (student, ps_data, _), (emb, status) in zip(to_infer, results):
+            if status == "success":
+                ps_data.embedding = emb
                 student.is_face = True
                 student.is_ready = True
                 success += 1
-            else:
+            elif status == "no_face":
                 student.is_face = False
                 student.is_ready = False
                 no_face += 1
-        except Exception:
-            student.is_face = False
-            student.is_ready = False
-            errors += 1
-            logger.debug("Student #%d: embedding xatosi", student.id, exc_info=True)
+            else:  # "error"
+                student.is_face = False
+                student.is_ready = False
+                errors += 1
 
     # Chunk ichidagi ps_img referencesini bo'shatish — keyingi chunk gacha xotirada turmasligi uchun
     ps_data_map.clear()
@@ -183,6 +211,26 @@ def _run_embedding_job(
     from app.models.test_session import TestSession
 
     db: Session = SessionLocal()
+
+    # OpenCV'ning ichki thread-pool'ini o'chiramiz: parallellik bizning thread
+    # pool'imizda (har rasm alohida thread), decode esa har thread'da 1 ipda —
+    # aks holda workers × cv2-threads yadrolarni ortiqcha bosadi.
+    try:
+        import cv2
+        cv2.setNumThreads(1)
+    except Exception:
+        pass
+
+    workers = settings.EMBEDDING_WORKERS
+    executor: ThreadPoolExecutor | None = (
+        ThreadPoolExecutor(max_workers=workers, thread_name_prefix="emb")
+        if workers and workers > 1
+        else None
+    )
+    logger.info(
+        "Session #%d: embedding parallel workers=%s",
+        session_id, workers if executor is not None else 1,
+    )
 
     # Redis progress holatini boshlash — exception bo'lsa ham frontend bilsin
     try:
@@ -255,7 +303,7 @@ def _run_embedding_job(
             # Chunk ichida BATCH_SIZE bo'lakda commit + progress yangilash
             for batch_start in range(0, len(chunk), BATCH_SIZE):
                 batch = chunk[batch_start: batch_start + BATCH_SIZE]
-                s, ni, nf, er = _process_chunk(db, batch)
+                s, ni, nf, er = _process_chunk(db, batch, executor)
                 success_count += s
                 no_image_count += ni
                 no_face_count += nf
@@ -327,6 +375,8 @@ def _run_embedding_job(
             pass
         raise
     finally:
+        if executor is not None:
+            executor.shutdown(wait=True)
         db.close()
 
 

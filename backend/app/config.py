@@ -97,6 +97,15 @@ class Settings(BaseSettings):
     INFERENCE_TIMEOUT_SECONDS: float
     FACE_DET_SIZE: int = 320
     FACE_DET_THRESH: float = 0.3
+    # ONNX intra-op thread soni (har bir inference nechta yadro ishlatadi).
+    # 1 = har inference 1 yadro → ko'p rasmni PARALLEL qayta ishlashda (embedding)
+    # yadrolarni to'la ishlatish mumkin. 0 = ONNX default (barcha yadro — bitta
+    # inference ko'p yadroga yoyiladi, parallel throughput uchun yomon).
+    FACE_ONNX_INTRA_THREADS: int = 1
+    # Embedding chiqarishda parallel inference (thread pool) ishchilar soni.
+    # 24 yadroli serverda ~16-20 optimal (qolgani OS/DB/decode uchun). Imtihon
+    # paytida pasaytirish mumkin. 1 = ketma-ket (parallellik o'chirilgan).
+    EMBEDDING_WORKERS: int = 16
 
     # Celery / Redis
     REDIS_URL: str
