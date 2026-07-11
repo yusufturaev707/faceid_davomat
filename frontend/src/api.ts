@@ -356,6 +356,15 @@ export async function cancelStudentLoadApi(sessionId: number): Promise<{ detail:
 }
 
 /**
+ * Studentlarni QAYTA yuklash (resumable) — faqat tugamagan/xato bergan kunlar.
+ * Muvaffaqiyatli yuklangan kunlar o'tkazib yuboriladi.
+ */
+export async function reloadStudentLoadApi(sessionId: number): Promise<{ detail: string }> {
+  const res = await apiClient.post(`/test-sessions/${sessionId}/reload-student-load`);
+  return res.data;
+}
+
+/**
  * Tanlangan ko'lam (scope) uchun dashboard statistikasini olish:
  *  - scope="smena"   — `sessionSmenaId` majburiy (bitta kun + smena)
  *  - scope="day"     — `day` (YYYY-MM-DD) majburiy (bitta kunning barcha smenalari)

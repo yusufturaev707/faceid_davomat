@@ -319,6 +319,26 @@ def _delete_students_by_session(db: Session, session_id: int) -> None:
     _delete_students_by_smena_ids(db, smena_ids)
 
 
+def _delete_students_by_session_day(
+    db: Session, session_id: int, day_str: str
+) -> None:
+    """Sessiyaning FAQAT bitta kunidagi (day) studentlarini o'chirish.
+
+    Kun bo'yicha mustaqil (resumable) yuklashda ishlatiladi — bir kunni qayta
+    yuklashda boshqa kunlarga tegmaydi.
+    """
+    smena_ids = [
+        row[0]
+        for row in db.execute(
+            select(TestSessionSmena.id).where(
+                TestSessionSmena.test_session_id == session_id,
+                TestSessionSmena.day == day_str,
+            )
+        )
+    ]
+    _delete_students_by_smena_ids(db, smena_ids)
+
+
 def delete_test_session(db: Session, session_id: int) -> bool:
     session = db.get(TestSession, session_id)
     if not session:

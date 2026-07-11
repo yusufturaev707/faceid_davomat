@@ -109,6 +109,12 @@ class Settings(BaseSettings):
     # Celery tuning
     TASK_TIME_LIMIT: int = 30
     WORKER_MAX_TASKS_PER_CHILD: int = 500
+    # Redis broker visibility_timeout (sekund). Eng uzoq task (student loader
+    # time_limit) dan KATTA bo'lishi shart — aks holda uzoq task qayta yuborilib,
+    # bir sessiya uchun bir nechta loader parallel ishlaydi. Default 9 soat.
+    BROKER_VISIBILITY_TIMEOUT: int = 32400
+    # Student loader (700k+) uchun task time_limit (sekund). Default 8 soat.
+    STUDENT_LOAD_TIME_LIMIT: int = 28800
 
     # Image decoder
     MAX_IMAGE_DIMENSION: int = 4096

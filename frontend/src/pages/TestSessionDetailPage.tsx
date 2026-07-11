@@ -19,6 +19,7 @@ import {
   getSessionStudentStatsApi,
   getSmenasLookupApi,
   getStudentLoadProgressApi,
+  reloadStudentLoadApi,
   getStudentsApi,
   getTestSessionApi,
   getTestsLookupApi,
@@ -468,6 +469,26 @@ export default function TestSessionDetailPage() {
       setProgressLabel("Bekor qilish so'raldi — jarayon to'xtatilmoqda...");
     } catch (err) {
       setCancellingLoad(false);
+      setStateError(extractErrorMessage(err));
+    }
+  };
+
+  // Resumable qayta yuklash — faqat tugamagan/xato bergan kunlarni qayta yuklaydi.
+  const handleReloadLoad = async () => {
+    if (!session) return;
+    setStateError("");
+    setFailedInserts([]);
+    setSkippedStudents([]);
+    setChangingState(true);
+    setTargetStateId(session.test_state_id);
+    setLoadProgress(0.5);
+    setProgressLabel("Qolgan kunlar qayta yuklanmoqda...");
+    try {
+      await reloadStudentLoadApi(session.id);
+      startStudentLoadPolling(session.id);
+    } catch (err) {
+      setChangingState(false);
+      setTargetStateId(null);
       setStateError(extractErrorMessage(err));
     }
   };
@@ -1105,6 +1126,18 @@ export default function TestSessionDetailPage() {
               <p className="text-xs text-red-500/70 dark:text-red-400/60 mt-2">
                 Sessiya oldingi holatida qoldi. Qayta urinib ko'ring yoki administratorga murojaat qiling.
               </p>
+              {/* Resumable qayta yuklash — faqat 'talabalar yuklash' bosqichida (key=2) */}
+              {currentStateKey === 2 && !changingState && (
+                <button
+                  onClick={handleReloadLoad}
+                  className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white transition-colors"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  Qolgan kunlarni qayta yuklash
+                </button>
+              )}
             </div>
             <button
               onClick={() => setStateError("")}

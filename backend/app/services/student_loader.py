@@ -11,6 +11,7 @@ Asosiy printsiplar:
 import base64
 import json
 import logging
+from dataclasses import dataclass
 from datetime import date, datetime
 import httpx
 import redis
@@ -45,13 +46,21 @@ INSERT_BATCH_SIZE = 500
 # Bitta sahifa uchun HTTP timeout — 100k og'ir rasmli sahifalar uchun 30s kam.
 HTTP_TIMEOUT = 120.0
 
-# Redis progress kalit
+# Redis progress kalit. Sessiya-daraja: "...:{id}". Kun-daraja: "...:{id}:{day}".
+# Kun bo'yicha parallel yuklashda har kun o'z kalitiga yozadi; UI uchun
+# sessiya progressi shu kun-kalitlaridan jamlanadi (get_student_load_progress).
 _PROGRESS_KEY = "student_load_progress:{session_id}"
-_PROGRESS_TTL = 3600
+_DAY_PROGRESS_KEY = "student_load_progress:{session_id}:{day}"
+_PROGRESS_TTL = 21600  # 6 soat — uzoq (700k) yuklash davomida TTL tugamasin
+
+# Kun muvaffaqiyatli yuklanganini belgilovchi marker (resumable qayta yuklash
+# shu kunlarni o'tkazib yuboradi).
+_DAY_DONE_KEY = "student_load_done:{session_id}:{day}"
+_DAY_DONE_TTL = 21600
 
 # Bekor qilish flagi — endpoint yozadi, loader har sahifada tekshiradi.
 _CANCEL_KEY = "student_load_cancel:{session_id}"
-_CANCEL_TTL = 3600
+_CANCEL_TTL = 21600
 
 # UI'da (alert) ko'rsatiladigan insert bo'lmagan studentlar ro'yxatining
 # maksimal hajmi — Redis payload cheksiz o'smasligi uchun cheklov.
@@ -95,8 +104,12 @@ def _set_progress(
     message: str = "",
     failed_items: list[dict] | None = None,
     skipped_items: list[dict] | None = None,
+    day: str | None = None,
 ) -> None:
     """Progressni Redis'ga yozish.
+
+    `day` berilsa — kun-daraja kalitiga (`...:{id}:{day}`) yoziladi, aks holda
+    sessiya-daraja kalitiga. UI kun-kalitlarini jamlab ko'rsatadi.
 
     Percent = (current+skipped)/total — har bir API-record tomondan-tomonga
     yo bog'langan, yo skip qilingan bo'lganligi uchun bu eng aniq foiz.
@@ -110,7 +123,11 @@ def _set_progress(
     if r is None:
         return
     try:
-        key = _PROGRESS_KEY.format(session_id=session_id)
+        key = (
+            _DAY_PROGRESS_KEY.format(session_id=session_id, day=day)
+            if day
+            else _PROGRESS_KEY.format(session_id=session_id)
+        )
         if total > 0:
             percent = round((current + skipped) / total * 100, 1)
         elif pages_total > 0:
@@ -138,10 +155,16 @@ def _set_progress(
 
 
 def get_student_load_progress(session_id: int) -> dict | None:
+    """Sessiya progressi. Kun-daraja kalitlari bo'lsa — ularni jamlab qaytaradi
+    (kun bo'yicha parallel yuklash); aks holda sessiya-daraja kalitini."""
     r = _get_redis()
     if r is None:
         return None
     try:
+        day_pattern = f"student_load_progress:{session_id}:*"
+        day_keys = r.keys(day_pattern)
+        if day_keys:
+            return _aggregate_day_progress(r, day_keys)
         key = _PROGRESS_KEY.format(session_id=session_id)
         data = r.get(key)
         if data:
@@ -149,6 +172,129 @@ def get_student_load_progress(session_id: int) -> dict | None:
     except redis.ConnectionError:
         logger.warning("Redis ulanish xatosi — progress olinmadi")
     return None
+
+
+def _aggregate_day_progress(r: redis.Redis, day_keys: list) -> dict:
+    """Kun-daraja progress kalitlarini bitta sessiya ko'rinishiga jamlaydi.
+
+    Status birlashtirish: birorta "processing" bo'lsa — processing; birorta
+    "error" — error (qisman); hammasi "completed" — completed; "cancelled" bor
+    bo'lsa — cancelled. Percent = (current+skipped)/total.
+    """
+    days = []
+    for k in day_keys:
+        raw = r.get(k)
+        if raw:
+            try:
+                days.append(json.loads(raw))
+            except ValueError:
+                pass
+    if not days:
+        return {
+            "current": 0, "total": 0, "pages_done": 0, "pages_total": 0,
+            "skipped": 0, "percent": 0, "status": "idle", "message": "",
+        }
+
+    agg = {k: 0 for k in ("current", "total", "pages_done", "pages_total", "skipped")}
+    failed_items: list[dict] = []
+    skipped_items: list[dict] = []
+    statuses = []
+    done_days = 0
+    for d in days:
+        for k in agg:
+            agg[k] += int(d.get(k, 0) or 0)
+        statuses.append(d.get("status", ""))
+        if d.get("status") == "completed":
+            done_days += 1
+        failed_items.extend(d.get("failed_items", []) or [])
+        skipped_items.extend(d.get("skipped_items", []) or [])
+
+    # Ustuvorlik: birorta kun hali ishlayotgan bo'lsa — "processing" (cancel/error
+    # bo'lsa ham polling to'xtamasin, barcha kunlar tugaguncha kutamiz).
+    if "processing" in statuses or "queued" in statuses:
+        status = "processing"
+    elif "cancelled" in statuses:
+        status = "cancelled"
+    elif "error" in statuses:
+        status = "error"
+    elif all(s == "completed" for s in statuses):
+        status = "completed"
+    else:
+        status = "processing"
+
+    total = agg["total"]
+    if total > 0:
+        percent = min(round((agg["current"] + agg["skipped"]) / total * 100, 1), 100.0)
+    elif agg["pages_total"] > 0:
+        percent = min(round(agg["pages_done"] / agg["pages_total"] * 100, 1), 100.0)
+    else:
+        percent = 0
+
+    msg = f"{done_days}/{len(days)} kun · {agg['current']} talaba yuklandi"
+    if agg["skipped"]:
+        msg += f" · {agg['skipped']} o'tkazildi"
+
+    return {
+        "current": agg["current"],
+        "total": total,
+        "pages_done": agg["pages_done"],
+        "pages_total": agg["pages_total"],
+        "skipped": agg["skipped"],
+        "status": status,
+        "message": msg,
+        "percent": percent,
+        "failed_items": failed_items[:_FAILED_ITEMS_MAX],
+        "skipped_items": skipped_items[:_FAILED_ITEMS_MAX],
+    }
+
+
+def _day_done_key(session_id: int, day: str) -> str:
+    return _DAY_DONE_KEY.format(session_id=session_id, day=day)
+
+
+def mark_day_done(session_id: int, day: str) -> None:
+    """Kun muvaffaqiyatli yuklanganini belgilash (resumable qayta yuklash uchun)."""
+    r = _get_redis()
+    if r is None:
+        return
+    try:
+        r.set(_day_done_key(session_id, day), "1", ex=_DAY_DONE_TTL)
+    except redis.ConnectionError:
+        pass
+
+
+def is_day_done(session_id: int, day: str) -> bool:
+    r = _get_redis()
+    if r is None:
+        return False
+    try:
+        return bool(r.get(_day_done_key(session_id, day)))
+    except redis.ConnectionError:
+        return False
+
+
+def clear_session_load_keys(session_id: int) -> None:
+    """Sessiya bo'yicha barcha yuklash kalitlarini (progress/done/cancel) tozalash.
+    Yangi to'liq yuklash boshlashdan oldin chaqiriladi."""
+    r = _get_redis()
+    if r is None:
+        return
+    try:
+        patterns = [
+            f"student_load_progress:{session_id}",
+            f"student_load_progress:{session_id}:*",
+            f"student_load_done:{session_id}:*",
+        ]
+        to_del = []
+        for p in patterns:
+            if p.endswith("*"):
+                to_del.extend(r.keys(p))
+            else:
+                to_del.append(p)
+        if to_del:
+            r.delete(*to_del)
+    except redis.ConnectionError:
+        pass
 
 
 def mark_progress_queued(
@@ -642,19 +788,26 @@ def _fetch_page(
 # ─── Asosiy yuklash funktsiyasi ──────────────────────────────────────
 
 
-def load_students_for_session(db: Session, session: TestSession) -> int:
-    """Tashqi API'dan sessiya uchun studentlarni stream qilib yuklaydi.
+@dataclass
+class _LoadContext:
+    """Yuklash uchun umumiy kontekst — bir marta quriladi, barcha kunlar ishlatadi."""
+    test_key: str
+    url_template: str
+    headers: dict
+    zone_map: dict
+    building_map: dict
+    smena_map: dict
+    parser: object
+    fetch_kwargs: dict
+    gender_default_id: int | None
+    gender_male_id: int | None
+    gender_female_id: int | None
+    blacklist_imeis: set
+    smena_days: list  # sorted
 
-    Args:
-        db: SQLAlchemy session.
-        session: Yuklash kerak bo'lgan TestSession.
 
-    Returns:
-        Yuklangan studentlar soni.
-
-    Raises:
-        StudentLoadError: API yoki konfiguratsiya xatosi.
-    """
+def _build_load_context(db: Session, session: TestSession) -> _LoadContext:
+    """Sessiya uchun yuklash kontekstini (maps, parser, gender, blacklist) quradi."""
     test_key = session.test.key.lower() if session.test else ""
     if test_key not in _SUPPORTED_KEYS:
         raise StudentLoadError(
@@ -667,10 +820,7 @@ def load_students_for_session(db: Session, session: TestSession) -> int:
         raise StudentLoadError(f"API_{test_key.upper()} .env da sozlanmagan")
 
     # OTM-DTM API paginatsiyasi BARQAROR emas — `sort` parametrisiz har so'rovda
-    # studentlarni tasodifiy tartibda qaytaradi. Natijada bir student bir necha
-    # sahifada takrorlanadi (dublikat skip), boshqalari esa umuman tushmaydi
-    # (kam yuklanadi). `sort=id` barqaror tartib beradi. .env da unutilgan
-    # bo'lsa ham shu yerda majburiy qo'shamiz (himoya to'ri).
+    # studentlarni tasodifiy tartibda qaytaradi. `sort=id` barqaror tartib beradi.
     if test_key == "otm-dtm" and "sort=" not in url_template:
         sep = "&" if "?" in url_template else "?"
         url_template = f"{url_template}{sep}sort=id"
@@ -685,9 +835,6 @@ def load_students_for_session(db: Session, session: TestSession) -> int:
     zone_map = _build_region_zone_map(db)
     if not zone_map:
         raise StudentLoadError("Hududlar yoki zonalar topilmadi")
-
-    # Tashqi student `zone_id` (== Zone.building_id) -> Zone.id. OTM-DTM
-    # loader'i studentni aynan o'z binosiga bog'lash uchun ishlatadi.
     building_map = _build_building_zone_map(db)
 
     smena_map = _build_smena_map(db, session.id)
@@ -696,34 +843,18 @@ def load_students_for_session(db: Session, session: TestSession) -> int:
             "Sessiyada smenalar topilmadi. Avval smenalarni qo'shing"
         )
 
-    smena_days: set[str] = {str(sm.day) for sm in session.smenas}
+    smena_days = sorted({str(sm.day) for sm in session.smenas})
     if not smena_days:
         raise StudentLoadError("Sessiyada smenalar sanasi topilmadi")
 
-    parser = _PARSERS[test_key]
-
     if test_key == "iiv":
-        fetch_kwargs = dict(
-            items_key="results",
-            data_wrapper=False,
-            total_pages_key="total_pages",
-        )
+        fetch_kwargs = dict(items_key="results", data_wrapper=False, total_pages_key="total_pages")
     else:
-        fetch_kwargs = dict(
-            items_key="items",
-            data_wrapper=True,
-            total_pages_key="pageCount",
-        )
+        fetch_kwargs = dict(items_key="items", data_wrapper=True, total_pages_key="pageCount")
 
-    # Gender keyi → id mapping
     gender_key_map: dict[int, int] = {
         g.key: g.id for g in db.execute(select(Gender)).scalars().all()
     }
-    gender_default_id = gender_key_map.get(0)
-    gender_male_id = gender_key_map.get(1)
-    gender_female_id = gender_key_map.get(2)
-
-    # Blacklist IMEI (set — O(1) lookup)
     blacklist_imeis: set[str] = {
         row[0]
         for row in db.execute(
@@ -732,145 +863,78 @@ def load_students_for_session(db: Session, session: TestSession) -> int:
         if row[0]
     }
 
+    return _LoadContext(
+        test_key=test_key,
+        url_template=url_template,
+        headers=headers,
+        zone_map=zone_map,
+        building_map=building_map,
+        smena_map=smena_map,
+        parser=_PARSERS[test_key],
+        fetch_kwargs=fetch_kwargs,
+        gender_default_id=gender_key_map.get(0),
+        gender_male_id=gender_key_map.get(1),
+        gender_female_id=gender_key_map.get(2),
+        blacklist_imeis=blacklist_imeis,
+        smena_days=smena_days,
+    )
+
+
+def load_students_for_day(
+    db: Session, session: TestSession, day_str: str, ctx: _LoadContext | None = None
+) -> dict:
+    """BITTA kun uchun studentlarni yuklaydi — mustaqil, idempotent, resumable.
+
+    Faqat shu kunning studentlarini o'chiradi va qaytadan yuklaydi. Progress
+    kun-daraja kalitiga (`...:{id}:{day}`) yoziladi. Boshqa kunlarga ta'sir
+    qilmaydi — shuning uchun kunlar parallel ishlashi va biri xato bersa
+    boshqalari saqlanib qolishi mumkin.
+
+    Returns:
+        {"day", "loaded", "skipped", "failed", "status", "message"} —
+        status: completed | error | cancelled. Xato/cancel'da EXCEPTION
+        KO'TARMAYDI (Celery chord tugashi uchun natija sifatida qaytaradi).
+    """
+    ctx = ctx or _build_load_context(db, session)
     r = _get_redis()
-    # Oldingi bekor qilishdan qolgan stale flag yangi yuklashni o'ldirmasligi uchun
-    _clear_cancel_flag(r, session.id)
-    _set_progress(
-        r, session.id,
-        current=0, total=0, pages_done=0, pages_total=0,
-        skipped=0, status="processing", message="API meta-ma'lumot olinmoqda...",
-    )
+    session_id = session.id
 
-    sorted_days = sorted(smena_days)
-    # ─── FAZA 1: Discovery — har kun uchun page=1 dan totalCount va pageCount olish ───
-    # Maqsad: progress 0→100% strictly monoton bo'lishi uchun grand_total
-    # processing boshlanishidan AVVAL aniqlanishi kerak. Aks holda har kun
-    # boshida total o'sib, foiz orqaga sakraydi.
-    #
-    # Memory: page=1 items keshlanadi (re-fetch oldini olish uchun), 1 sahifa
-    # × N kun. Tipik holatda <100 MB.
-    day_first_pages: dict[str, list[dict]] = {}
-    day_total_pages: dict[str, int] = {}
-    grand_total_count = 0
-    grand_total_pages = 0
-
-    try:
-        with httpx.Client(timeout=HTTP_TIMEOUT, verify=False) as client:
-            for day_str in sorted_days:
-                _check_cancelled(r, session.id)
-                try:
-                    items, total_pages, total_count = _fetch_page(
-                        client, url_template, day_str, 1, headers, **fetch_kwargs
-                    )
-                except httpx.HTTPError as e:
-                    raise StudentLoadError(
-                        f"Tashqi API meta olishda xato ({day_str}): {e}"
-                    ) from e
-                day_first_pages[day_str] = items
-                day_total_pages[day_str] = total_pages
-                grand_total_count += total_count
-                grand_total_pages += total_pages
-                logger.info(
-                    "Discovery %s: total_count=%d, pages=%d",
-                    day_str, total_count, total_pages,
-                )
-    except StudentLoadCancelled:
-        # Bekor qilish — xato emas; yakuniy "cancelled" statusni task yozadi.
-        raise
-    except StudentLoadError:
-        _set_progress(
-            r, session.id,
-            current=0, total=0, pages_done=0, pages_total=0,
-            skipped=0, status="error",
-            message="Tashqi API meta-ma'lumot olinmadi",
-        )
-        raise
-
-    logger.info(
-        "Discovery done: %d days, grand_total_count=%d, grand_total_pages=%d",
-        len(sorted_days), grand_total_count, grand_total_pages,
-    )
-
-    _set_progress(
-        r, session.id,
-        current=0, total=grand_total_count,
-        pages_done=0, pages_total=grand_total_pages,
-        skipped=0, status="processing",
-        message="Eski ma'lumotlar tozalanmoqda...",
-    )
-
-    # IDEMPOTENT: shu sessiya bo'yicha avval yuklangan studentlarni o'chirish.
-    # Discovery muvaffaqiyatli tugagandan keyin xavfsiz — agar API xato
-    # bersa, eski ma'lumotlar saqlanib qoladi.
-    # Import shu yerda — circular import oldini olish uchun.
-    from app.crud.test_session import _delete_students_by_session
-    _delete_students_by_session(db, session.id)
-    db.commit()
-
-    # ─── FAZA 2: Processing — fixed grand_total'ga nisbatan monoton progress ───
     total_loaded = 0
     total_skipped = 0
     total_failed = 0
     pages_done = 0
+    day_pages = 1
+    day_total = 0
 
-    # Skip sabablari bo'yicha hisoblagich — yuklash oxirida log'ga jamlanadi.
     from collections import defaultdict
     skip_reasons: dict[str, int] = defaultdict(int)
-
-    # O'tkazib yuborilgan studentlar tafsiloti (imie + sabab) — UI panel uchun.
-    # Hajm _SKIPPED_ITEMS_MAX bilan cheklanadi.
     skipped_details: list[dict] = []
+    failed_inserts: list[dict] = []
+    seen_students: set[tuple] = set()
 
     def _note_skip(pinfl: str, category: str, detail: str | None = None) -> None:
-        # category — jamlanma hisobi uchun (coarse); detail — UI'da ko'rsatiladigan
-        # to'liq sabab (kun/smena kabi aniqliklar bilan).
         skip_reasons[category] += 1
         if len(skipped_details) < _SKIPPED_ITEMS_MAX:
             skipped_details.append({"imie": pinfl or "-", "reason": detail or category})
-
-    # DB'ga insert bo'lmagan studentlar (imie + xato sababi) — UI alert uchun.
-    # Hajm _FAILED_ITEMS_MAX bilan cheklanadi.
-    failed_inserts: list[dict] = []
 
     def _record_failed(items: list[dict]) -> None:
         for it in items:
             if len(failed_inserts) < _FAILED_ITEMS_MAX:
                 failed_inserts.append(it)
 
-    # Dublikat himoyasi — tashqi API sahifalari orasida takrorlangan yozuvlar
-    # (paginatsiya tartibi siljishi, manbadagi takrorlar) ikkinchi marta
-    # yozilmaydi. Kalit: pasport, bo'lmasa IMEI, bo'lmasa s_code — har biri
-    # kun+smena kesimida.
-    seen_students: set[tuple] = set()
-
-    def _dedup_key(
-        student_data: dict, ps_data: dict, item_day: str, smena_number: int
-    ) -> tuple | None:
+    def _dedup_key(student_data, ps_data, item_day, smena_number):
         if ps_data.get("ps_num"):
-            return (
-                "ps", ps_data.get("ps_ser"), ps_data["ps_num"],
-                item_day, smena_number,
-            )
+            return ("ps", ps_data.get("ps_ser"), ps_data["ps_num"], item_day, smena_number)
         if student_data.get("imei"):
             return ("imei", student_data["imei"], item_day, smena_number)
         if student_data.get("s_code"):
             return ("code", student_data["s_code"], item_day, smena_number)
-        return None  # identifikatorsiz yozuv — dedup qilinmaydi
+        return None
 
-    def _process_page_items(
-        raw_items: list[dict],
-        day_str: str,
-        student_buffer: list[dict],
-        ps_buffer: list[dict],
-    ) -> int:
-        """Sahifa item'larini parser orqali bufer'ga qo'shish.
-
-        Returns: shu chaqiruvda buffer'ga commit qilingan studentlar soni.
-        """
+    def _process_page_items(raw_items, student_buffer, ps_buffer):
         nonlocal total_loaded, total_skipped, total_failed
-        committed_now = 0
         for raw in raw_items:
-            parsed = parser(raw, zone_map, building_map)
+            parsed = ctx.parser(raw, ctx.zone_map, ctx.building_map)
             if not parsed:
                 total_skipped += 1
                 pinfl = _raw_pinfl(raw)
@@ -883,12 +947,11 @@ def load_students_for_session(db: Session, session: TestSession) -> int:
                 continue
 
             student_data, ps_data = parsed
-
             smena_number = student_data.pop("_smena_number", 1)
             item_day = student_data.pop("_day", day_str)
             gender_key = student_data.pop("_gender_key", None)
 
-            session_smena_id = smena_map.get((smena_number, item_day))
+            session_smena_id = ctx.smena_map.get((smena_number, item_day))
             if not session_smena_id:
                 total_skipped += 1
                 pinfl = student_data.get("imei") or _raw_pinfl(raw)
@@ -897,13 +960,11 @@ def load_students_for_session(db: Session, session: TestSession) -> int:
                     f"smena mos kelmadi (kun={item_day}, smena={smena_number})",
                 )
                 logger.info(
-                    "SKIP student pinfl=%s sabab='smena mos kelmadi' "
-                    "(kun=%s, smena=%s)",
+                    "SKIP student pinfl=%s sabab='smena mos kelmadi' (kun=%s, smena=%s)",
                     pinfl, item_day, smena_number,
                 )
                 continue
 
-            # Takror yozuv — o'tkazib yuboriladi (progress'da skipped sifatida)
             dkey = _dedup_key(student_data, ps_data, item_day, smena_number)
             if dkey is not None:
                 if dkey in seen_students:
@@ -921,165 +982,145 @@ def load_students_for_session(db: Session, session: TestSession) -> int:
             student_data["is_image"] = bool(ps_data.get("ps_img"))
 
             imei_val = student_data.get("imei") or ""
-            if imei_val and imei_val in blacklist_imeis:
+            if imei_val and imei_val in ctx.blacklist_imeis:
                 student_data["is_blacklist"] = True
 
-            # Gender — avval API qiymati (OTM-DTM), bo'lmasa IMEI 1-raqamiga qarab
             if gender_key == 1:
-                ps_data["gender_id"] = gender_male_id
+                ps_data["gender_id"] = ctx.gender_male_id
             elif gender_key == 2:
-                ps_data["gender_id"] = gender_female_id
+                ps_data["gender_id"] = ctx.gender_female_id
             elif imei_val and imei_val[0] in ("3", "5"):
-                ps_data["gender_id"] = gender_male_id
+                ps_data["gender_id"] = ctx.gender_male_id
             elif imei_val and imei_val[0] in ("4", "6"):
-                ps_data["gender_id"] = gender_female_id
+                ps_data["gender_id"] = ctx.gender_female_id
             else:
-                ps_data["gender_id"] = gender_default_id
+                ps_data["gender_id"] = ctx.gender_default_id
 
             student_buffer.append(student_data)
             ps_buffer.append(ps_data)
 
             if len(student_buffer) >= INSERT_BATCH_SIZE:
                 failed = _flush_batch(db, student_buffer, ps_buffer)
-                ok = len(student_buffer) - len(failed)
-                committed_now += ok
-                total_loaded += ok
+                total_loaded += len(student_buffer) - len(failed)
                 total_failed += len(failed)
                 _record_failed(failed)
                 student_buffer.clear()
                 ps_buffer.clear()
-        return committed_now
+
+    def _write(status: str, message: str, *, final: bool = False):
+        _set_progress(
+            r, session_id, day=day_str,
+            current=total_loaded, total=day_total,
+            pages_done=pages_done, pages_total=day_pages,
+            skipped=total_skipped, status=status, message=message,
+            failed_items=failed_inserts if final else None,
+            skipped_items=skipped_details if final else None,
+        )
 
     try:
+        _check_cancelled(r, session_id)
+        _write("processing", f"{day_str}: boshlanmoqda...")
+
         with httpx.Client(timeout=HTTP_TIMEOUT, verify=False) as client:
-            for day_str in sorted_days:
-                logger.info("Processing students: date=%s, key=%s", day_str, test_key)
-                day_pages = day_total_pages[day_str]
-
-                student_buffer: list[dict] = []
-                ps_buffer: list[dict] = []
-
-                # Page 1 — discovery'da keshlangan
-                first_items = day_first_pages.pop(day_str, [])
-                _process_page_items(first_items, day_str, student_buffer, ps_buffer)
-                pages_done += 1
-                _set_progress(
-                    r, session.id,
-                    current=total_loaded,
-                    total=grand_total_count,
-                    pages_done=pages_done,
-                    pages_total=grand_total_pages,
-                    skipped=total_skipped, status="processing",
-                    message=f"{day_str}: sahifa 1/{day_pages}",
+            # Kun uchun discovery — page 1 (keshlanadi) + total
+            try:
+                first_items, day_pages, day_total = _fetch_page(
+                    client, ctx.url_template, day_str, 1, ctx.headers, **ctx.fetch_kwargs
                 )
+            except httpx.HTTPError as e:
+                raise StudentLoadError(f"Tashqi API meta olishda xato ({day_str}): {e}") from e
 
-                # Pages 2..N — fresh fetch
-                try:
-                    for page in range(2, day_pages + 1):
-                        _check_cancelled(r, session.id)
-                        try:
-                            items, _, _ = _fetch_page(
-                                client, url_template, day_str, page, headers,
-                                **fetch_kwargs,
-                            )
-                        except httpx.HTTPError as e:
-                            raise StudentLoadError(
-                                f"Tashqi API xatosi ({day_str} sahifa {page}): {e}"
-                            ) from e
+            logger.info("Day %s discovery: total=%d pages=%d", day_str, day_total, day_pages)
 
-                        _process_page_items(items, day_str, student_buffer, ps_buffer)
-                        pages_done += 1
-                        _set_progress(
-                            r, session.id,
-                            current=total_loaded,
-                            total=grand_total_count,
-                            pages_done=pages_done,
-                            pages_total=grand_total_pages,
-                            skipped=total_skipped, status="processing",
-                            message=f"{day_str}: sahifa {page}/{day_pages}",
+            # IDEMPOTENT: faqat SHU kunning eski studentlarini o'chiramiz
+            from app.crud.test_session import _delete_students_by_session_day
+            _delete_students_by_session_day(db, session_id, day_str)
+            db.commit()
+
+            student_buffer: list[dict] = []
+            ps_buffer: list[dict] = []
+
+            _process_page_items(first_items, student_buffer, ps_buffer)
+            pages_done = 1
+            _write("processing", f"{day_str}: sahifa 1/{day_pages}")
+
+            try:
+                for page in range(2, day_pages + 1):
+                    _check_cancelled(r, session_id)
+                    try:
+                        items, _, _ = _fetch_page(
+                            client, ctx.url_template, day_str, page, ctx.headers,
+                            **ctx.fetch_kwargs,
                         )
-                finally:
-                    # Kun yakuni yoki xatolik — qolgan buferni yozib qo'yish
-                    if student_buffer:
-                        failed = _flush_batch(db, student_buffer, ps_buffer)
-                        total_loaded += len(student_buffer) - len(failed)
-                        total_failed += len(failed)
-                        _record_failed(failed)
-                        student_buffer.clear()
-                        ps_buffer.clear()
+                    except httpx.HTTPError as e:
+                        raise StudentLoadError(
+                            f"Tashqi API xatosi ({day_str} sahifa {page}): {e}"
+                        ) from e
+                    _process_page_items(items, student_buffer, ps_buffer)
+                    pages_done += 1
+                    _write("processing", f"{day_str}: sahifa {page}/{day_pages}")
+            finally:
+                if student_buffer:
+                    failed = _flush_batch(db, student_buffer, ps_buffer)
+                    total_loaded += len(student_buffer) - len(failed)
+                    total_failed += len(failed)
+                    _record_failed(failed)
+                    student_buffer.clear()
+                    ps_buffer.clear()
 
-        # Sessiya total count yangilash
-        session.count_total_student = total_loaded
-        db.commit()
-
-        done_msg = f"{total_loaded} ta talaba yuklandi"
+        done_msg = f"{day_str}: {total_loaded} talaba yuklandi"
         if total_failed:
-            done_msg += f" · {total_failed} ta insert bo'lmadi"
-        _set_progress(
-            r, session.id,
-            current=total_loaded,
-            total=grand_total_count or total_loaded,
-            pages_done=pages_done,
-            pages_total=grand_total_pages,
-            skipped=total_skipped, status="completed",
-            message=done_msg,
-            failed_items=failed_inserts,
-            skipped_items=skipped_details,
-        )
+            done_msg += f" · {total_failed} insert bo'lmadi"
+        _write("completed", done_msg, final=True)
+        mark_day_done(session_id, day_str)
 
         logger.info(
-            "Loaded %d students for session #%d (%s, skipped=%d, failed=%d)",
-            total_loaded, session.id, test_key, total_skipped, total_failed,
+            "Day %s tugadi (session #%d): loaded=%d skipped=%d failed=%d",
+            day_str, session_id, total_loaded, total_skipped, total_failed,
         )
         if skip_reasons:
-            summary = ", ".join(
-                f"{reason}: {cnt}" for reason, cnt in sorted(skip_reasons.items())
-            )
-            logger.info(
-                "Session #%d skip sabablari bo'yicha jami — %s",
-                session.id, summary,
-            )
-        return total_loaded
+            summary = ", ".join(f"{k}: {v}" for k, v in sorted(skip_reasons.items()))
+            logger.info("Day %s skip sabablari — %s", day_str, summary)
+
+        return {
+            "day": day_str, "loaded": total_loaded, "skipped": total_skipped,
+            "failed": total_failed, "status": "completed", "message": done_msg,
+        }
 
     except StudentLoadCancelled:
-        # Frontend polling'ni ushlab turish uchun "processing" qoladi —
-        # yakuniy "cancelled" statusni task rollback/tozalashdan KEYIN yozadi.
-        _set_progress(
-            r, session.id,
-            current=total_loaded,
-            total=grand_total_count or total_loaded,
-            pages_done=pages_done,
-            pages_total=grand_total_pages,
-            skipped=total_skipped, status="processing",
-            message="Bekor qilinmoqda — ma'lumotlar tozalanmoqda...",
-        )
-        raise
+        db.rollback()
+        _write("cancelled", f"{day_str}: bekor qilindi", final=True)
+        return {"day": day_str, "loaded": total_loaded, "status": "cancelled", "message": "bekor qilindi"}
     except StudentLoadError as e:
-        _set_progress(
-            r, session.id,
-            current=total_loaded,
-            total=grand_total_count or total_loaded,
-            pages_done=pages_done,
-            pages_total=grand_total_pages,
-            skipped=total_skipped, status="error",
-            message=e.message,
-            failed_items=failed_inserts,
-            skipped_items=skipped_details,
-        )
-        raise
+        db.rollback()
+        _write("error", f"{day_str}: {e.message}", final=True)
+        return {"day": day_str, "loaded": total_loaded, "status": "error", "message": e.message}
     except Exception as e:
-        _set_progress(
-            r, session.id,
-            current=total_loaded,
-            total=grand_total_count or total_loaded,
-            pages_done=pages_done,
-            pages_total=grand_total_pages,
-            skipped=total_skipped, status="error",
-            message=f"Kutilmagan xatolik: {e}",
-            failed_items=failed_inserts,
-            skipped_items=skipped_details,
-        )
-        raise
+        db.rollback()
+        logger.exception("Day %s kutilmagan xatolik (session #%d)", day_str, session_id)
+        _write("error", f"{day_str}: kutilmagan xatolik: {e}", final=True)
+        return {"day": day_str, "loaded": total_loaded, "status": "error", "message": str(e)}
+
+
+def load_students_for_session(db: Session, session: TestSession) -> int:
+    """Sessiyaning barcha kunlarini KETMA-KET yuklaydi (bitta process fallback).
+
+    Parallel yuklash Celery coordinator + kunlik tasklar orqali amalga oshadi
+    (`app.tasks.student_loader_task`). Bu funksiya bitta process'da to'liq
+    yuklash kerak bo'lganda (masalan test/skript) ishlatiladi.
+    """
+    ctx = _build_load_context(db, session)
+    r = _get_redis()
+    _clear_cancel_flag(r, session.id)
+    total = 0
+    for day_str in ctx.smena_days:
+        res = load_students_for_day(db, session, day_str, ctx=ctx)
+        if res["status"] == "cancelled":
+            raise StudentLoadCancelled("Yuklash bekor qilindi")
+        total += res.get("loaded", 0)
+    session.count_total_student = total
+    db.commit()
+    return total
 
 
 def _flush_batch(

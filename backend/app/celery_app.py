@@ -35,6 +35,12 @@ celery_app.conf.update(
     worker_prefetch_multiplier=1,
     # Task tugagandan keyin acknowledge — crash bo'lsa navbatga qaytadi
     task_acks_late=True,
+    # MUHIM: Redis broker uzoq (>1 soat) ishlaydigan taskni "yo'qolgan" deb
+    # hisoblab, boshqa worker'ga QAYTA YUBORADI (visibility_timeout, default 1h).
+    # Bu bir sessiya uchun bir nechta loader parallel ishga tushishiga va progress
+    # buzilishiga sabab bo'ladi. 700k+ student yuklash bir necha soat davom etadi,
+    # shuning uchun visibility_timeout'ni eng uzoq task time_limit'idan katta qilamiz.
+    broker_transport_options={"visibility_timeout": settings.BROKER_VISIBILITY_TIMEOUT},
     # Worker crash bo'lsa task reject qilinadi (navbatga qaytadi)
     task_reject_on_worker_lost=True,
     # Task uchun vaqt chegarasi

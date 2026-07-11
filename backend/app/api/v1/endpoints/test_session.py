@@ -892,6 +892,46 @@ def cancel_student_load(
     return {"detail": "Bekor qilish so'rovi yuborildi"}
 
 
+@router.post("/{session_id}/reload-student-load")
+def reload_student_load(
+    session_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(PermissionChecker(P.TEST_SESSION_UPDATE.code)),
+):
+    """Studentlarni QAYTA yuklash (resumable) — faqat tugamagan/xato kunlarni.
+
+    Kun bo'yicha mustaqil yuklashda ba'zi kunlar xato bergan bo'lsa, bu endpoint
+    coordinatorni `force=False` bilan ishga tushiradi: allaqachon muvaffaqiyatli
+    yuklangan kunlar o'tkazib yuboriladi, faqat qolgan kunlar qaytadan yuklanadi.
+    """
+    session = db.get(TestSession, session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Sessiya topilmadi")
+
+    # Faqat "yuklash" holatidagi (key=2) sessiyada mantiqiy
+    state = db.get(SessionState, session.test_state_id)
+    if not state or state.key != STATE_KEY_LOADING:
+        raise HTTPException(
+            status_code=409,
+            detail="Qayta yuklash faqat 'talabalar yuklash' bosqichida mumkin",
+        )
+
+    progress = get_student_load_progress(session_id)
+    if progress and progress.get("status") == "processing":
+        raise HTTPException(
+            status_code=409, detail="Yuklash allaqachon davom etmoqda",
+        )
+
+    mark_progress_queued(session_id, "Qolgan kunlar qayta yuklanmoqda...")
+    # previous_state_id — key=1 (yuklashdan oldingi holat); rollback kerak bo'lsa
+    prev = db.execute(
+        sa_select(SessionState.id).where(SessionState.key == 1)
+    ).scalar() or session.test_state_id
+    load_students_task.delay(session_id, prev, False)  # force=False → resumable
+    logger.info("Session #%d: resumable qayta yuklash boshlandi", session_id)
+    return {"detail": "Qayta yuklash boshlandi"}
+
+
 @router.get(
     "/{session_id}/dashboard-stats",
     response_model=DashboardStatsResponse,
