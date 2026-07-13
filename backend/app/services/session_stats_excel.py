@@ -140,18 +140,23 @@ _LATIN_LABELS = _Labels(
 
 # === Ranglar (shablon theme ranglaridan hisoblangan) ===
 _HEADER_FILL = "C5E0B4"   # accent6 (yashil) + tint 0.6 — sarlavha foni
-_DATE_FILL = "FFFF00"     # sariq — sana katakchasi
 _TOTAL_FONT = "1F4E79"    # accent1 (ko'k) + tint -0.5 — "Жами" matni
 _RED = "C00000"           # "Иштирок этмаганлар" sonini ajratish uchun
 _FONT_NAME = "Arial"
 
 # Ustun kengliklari (shablondan)
 _COL_WIDTHS = {
-    "A": 8.9, "B": 48.0, "C": 30.0, "D": 16.0, "E": 10.0,
-    "F": 18.0, "G": 12.0, "H": 20.0, "I": 16.0, "J": 16.0,
+    "A": 13.0, "B": 74.0, "C": 46.0, "D": 25.0, "E": 15.0,
+    "F": 28.0, "G": 18.0, "H": 36.0, "I": 25.0, "J": 25.0,
 }
 
-_NUM_FMT = "#,##0"
+# Mingliklar ajratgichi — probel (masalan 1 292). Excelda oddiy sonning ajratgich
+# belgisi (#,##0 dagi ","), lokal prefiksidan ("[$-...]") qat'i nazar, HAR DOIM
+# Windows mintaqaviy sozlamasidan olinadi — shuning uchun uni majburlab bo'lmaydi.
+# Yechim: magnitude shartlari bilan probelni LITERAL sifatida qo'yamiz — bu har
+# qanday lokalda bir xil ishlaydi (999 999 999 gacha to'g'ri guruhlaydi):
+#   >= 1 000 000 → "1 234 567"; >= 1 000 → "12 345"; qolgani → "292".
+_NUM_FMT = '[>=1000000]#" "###" "##0;[>=1000]#" "##0;0'
 _PCT_FMT = "0.0"
 
 # Viloyat nomlarini krill alifbosiga o'tkazish — DB lotin yozuvida saqlaydi,
@@ -360,7 +365,7 @@ def build_session_stats_excel(
     wb = Workbook()
     ws = wb.active
     ws.title = labels.malumot
-    ws.sheet_view.showGridLines = False
+    ws.sheet_view.showGridLines = True
     ws.page_setup.orientation = "landscape"
     ws.page_setup.fitToWidth = 1
     ws.page_setup.fitToHeight = 0
@@ -382,47 +387,39 @@ def build_session_stats_excel(
     base_title = title if latin else _latin_to_cyrillic(title)
     ws.merge_cells(f"A1:{last_letter}1")
     c = ws["A1"]
-    c.value = f"{base_title} {labels.title_suffix}"
-    c.font = Font(name=_FONT_NAME, size=16, bold=True)
+    # Test nomi / rasmiy izoh / МАЪЛУМОТ — har biri ALT+ENTER (\n) bilan alohida
+    # qatorda, bitta katakda
+    c.value = f"{base_title}\n{labels.title_suffix}\n{labels.malumot}"
+    c.font = Font(name=_FONT_NAME, size=26, bold=True)
     c.alignment = center
-    ws.row_dimensions[1].height = 42
+    ws.row_dimensions[1].height = 120
 
-    # --- 2-qator: МАЪЛУМОТ ---
-    ws.merge_cells(f"A2:{last_letter}2")
-    c = ws["A2"]
-    c.value = labels.malumot
-    c.font = Font(name=_FONT_NAME, size=16, bold=True)
-    c.alignment = center
-    ws.row_dimensions[2].height = 28
-
-    # --- 3-qator: o'ng burchakda sana/vaqt/smena ---
-    ws.merge_cells(f"G3:{last_letter}3")
-    c = ws["G3"]
+    # --- 2-qator: o'ng burchakda sana/vaqt/smena ---
+    ws.merge_cells(f"H2:{last_letter}2")
+    c = ws["H2"]
     c.value = _scope_info_line(stats, now, day_from, day_to, labels)
-    c.font = Font(name=_FONT_NAME, size=12, bold=True)
+    c.font = Font(name=_FONT_NAME, size=16, bold=True)
     c.alignment = right
-    c.fill = PatternFill("solid", fgColor=_DATE_FILL)
-    c.border = _border(bottom=_medium)
-    ws.row_dimensions[3].height = 24
+    ws.row_dimensions[2].height = 24
 
-    # --- 4-6-qator: jadval sarlavhalari ---
+    # --- 3-5-qator: jadval sarlavhalari ---
     header_fill = PatternFill("solid", fgColor=_HEADER_FILL)
-    header_font = Font(name=_FONT_NAME, size=14, bold=True)
+    header_font = Font(name=_FONT_NAME, size=20, bold=True)
 
     merges = {
-        "A4:A6": labels.tr,
-        "B4:B6": labels.hudud,
-        "C4:C6": _c_header_text(stats, day_from, day_to, labels),
-        "D4:E5": labels.participated,
-        "F4:G5": labels.not_participated,
-        "H4:J4": labels.shu_jumladan,
-        "H5:H6": labels.absent,
-        "I5:J5": labels.cheating_total,
+        "A3:A5": labels.tr,
+        "B3:B5": labels.hudud,
+        "C3:C5": _c_header_text(stats, day_from, day_to, labels),
+        "D3:E4": labels.participated,
+        "F3:G4": labels.not_participated,
+        "H3:J3": labels.shu_jumladan,
+        "H4:H5": labels.absent,
+        "I4:J4": labels.cheating_total,
     }
     singles = {
-        "D6": labels.soni, "E6": labels.pct,
-        "F6": labels.soni, "G6": labels.pct,
-        "I6": labels.at_entry, "J6": labels.during_test,
+        "D5": labels.soni, "E5": labels.pct,
+        "F5": labels.soni, "G5": labels.pct,
+        "I5": labels.at_entry, "J5": labels.during_test,
     }
     for rng, text in merges.items():
         ws.merge_cells(rng)
@@ -432,23 +429,23 @@ def build_session_stats_excel(
         ws[coord].value = text
 
     # Sarlavha kataklariga stil (merge ichidagi barcha kataklarga ham border)
-    for row in range(4, 7):
+    for row in range(3, 6):
         for col in range(1, last_col + 1):
             cell = ws.cell(row=row, column=col)
             cell.font = header_font
             cell.alignment = center
             cell.fill = header_fill
             cell.border = _border()
-    ws.row_dimensions[4].height = 28
-    ws.row_dimensions[5].height = 36
-    ws.row_dimensions[6].height = 46
+    ws.row_dimensions[3].height = 40
+    ws.row_dimensions[4].height = 52
+    ws.row_dimensions[5].height = 66
 
-    # --- 7+ : viloyatlar bo'yicha qatorlar ---
-    data_font = Font(name=_FONT_NAME, size=14)
-    red_font = Font(name=_FONT_NAME, size=14, color=_RED)
-    bold_font = Font(name=_FONT_NAME, size=14, bold=True)
+    # --- 6+ : viloyatlar bo'yicha qatorlar ---
+    data_font = Font(name=_FONT_NAME, size=24)
+    red_font = Font(name=_FONT_NAME, size=24, color=_RED)
+    bold_font = Font(name=_FONT_NAME, size=24, bold=True)
 
-    first_data_row = 7
+    first_data_row = 6
     row = first_data_row
     for idx, region in enumerate(stats.regions, start=1):
         st = region.stats
@@ -495,7 +492,7 @@ def build_session_stats_excel(
             ws.cell(row=row, column=col).number_format = _NUM_FMT
         for col in (5, 7):
             ws.cell(row=row, column=col).number_format = _PCT_FMT
-        ws.row_dimensions[row].height = 30
+        ws.row_dimensions[row].height = 44
         row += 1
 
     last_data_row = row - 1
@@ -521,7 +518,7 @@ def build_session_stats_excel(
         ws.cell(row=total_row, column=9, value=_sum("I"))
         ws.cell(row=total_row, column=10, value=_sum("J"))
 
-    total_font = Font(name=_FONT_NAME, size=14, bold=True, color=_TOTAL_FONT)
+    total_font = Font(name=_FONT_NAME, size=26, bold=True, color=_TOTAL_FONT)
     for col in range(1, last_col + 1):
         cell = ws.cell(row=total_row, column=col)
         cell.font = total_font
@@ -533,10 +530,10 @@ def build_session_stats_excel(
         ws.cell(row=total_row, column=col).number_format = _NUM_FMT
     for col in (5, 7):
         ws.cell(row=total_row, column=col).number_format = _PCT_FMT
-    ws.row_dimensions[total_row].height = 34
+    ws.row_dimensions[total_row].height = 46
 
     # Tashqi medium ramka (chap/o'ng) — jadval bo'ylab
-    for r in range(4, total_row + 1):
+    for r in range(3, total_row + 1):
         lc = ws.cell(row=r, column=1)
         rc = ws.cell(row=r, column=last_col)
         lb = lc.border
@@ -545,7 +542,7 @@ def build_session_stats_excel(
         rc.border = Border(left=rb.left, right=_medium, top=rb.top, bottom=rb.bottom)
     # Yuqori medium chiziq (sarlavha tepasi)
     for col in range(1, last_col + 1):
-        cell = ws.cell(row=4, column=col)
+        cell = ws.cell(row=3, column=col)
         b = cell.border
         cell.border = Border(left=b.left, right=b.right, top=_medium, bottom=b.bottom)
 
