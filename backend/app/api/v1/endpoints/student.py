@@ -30,6 +30,7 @@ from app.crud.student import (
     get_student_log_detail,
     get_student_logs_paginated,
     get_students_paginated,
+    remove_student_attendance,
     update_cheating_log,
     update_student,
     update_student_log,
@@ -47,6 +48,9 @@ from app.schemas.student import (
     CheatingLogListResponse,
     CheatingLogResponse,
     CheatingLogUpdate,
+    NotEnteredGroup,
+    NotEnteredGroupStudent,
+    NotEnteredGroupedResponse,
     NotEnteredStudentItem,
     NotEnteredStudentsResponse,
     RejectedStudentItem,
@@ -105,6 +109,8 @@ def list_student_logs(
     first_enter_to: str | None = None,
     last_enter_from: str | None = None,
     last_enter_to: str | None = None,
+    created_at_from: str | None = None,
+    created_at_to: str | None = None,
     search: str | None = None,
     db: Session = Depends(get_db),
     _: User = Depends(PermissionChecker(P.STUDENT_LOG_READ.code)),
@@ -129,6 +135,8 @@ def list_student_logs(
         first_enter_to=first_enter_to,
         last_enter_from=last_enter_from,
         last_enter_to=last_enter_to,
+        created_at_from=created_at_from,
+        created_at_to=created_at_to,
         search=search,
     )
     return StudentLogListResponse(
@@ -514,6 +522,154 @@ def list_not_entered_students(
 
     return NotEnteredStudentsResponse(
         items=items, total=len(items), roster_total=int(roster_total)
+    )
+
+
+@router.get("/not-entered-grouped", response_model=NotEnteredGroupedResponse)
+def list_not_entered_students_grouped(
+    session_smena_id: int = Query(
+        ...,
+        description=(
+            "Joriy test_session_smena.id — shu test/sana/smena kesimida hali "
+            "kelmagan (is_entered=False) talabalar guruh bo'yicha guruhlanadi."
+        ),
+    ),
+    zone_id: int | None = Query(
+        None,
+        description=(
+            "Tanlangan bino (zone). Berilsa — ro'yxat aynan shu binoga "
+            "cheklanadi (bino foydalanuvchi region'iga tegishli bo'lishi shart). "
+            "Berilmasa — foydalanuvchining butun region'i qamraladi."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Tanlangan test_session_smena + bino kesimida hali kelmagan
+    (`is_entered=False`) talabalar, guruh (`gr_n`) bo'yicha guruhlangan holda.
+
+    Guruhlar `gr_n` bo'yicha, har bir guruh ichidagi talabalar familiya bo'yicha
+    tartiblanadi. Har bir talaba uchun familiya, ism, sharif, JShShIR (`imei`)
+    va o'tirish o'rni (`sp_n`) qaytariladi.
+
+    Region/bino aniqlash logikasi `/not-entered` bilan bir xil.
+    """
+    from sqlalchemy import func
+    from sqlalchemy import select as sa_select
+
+    from app.models.student import Student as StudentModel
+    from app.models.test_session_smena import TestSessionSmena
+    from app.models.zone import Zone
+
+    # Region — avval foydalanuvchiga bevosita biriktirilgan `region_id`,
+    # aks holda zaxira sifatida zone orqali aniqlanadi (`/not-entered` bilan bir xil).
+    target_region_id = current_user.region_id
+    if not target_region_id:
+        fallback_zone = zone_id or current_user.zone_id
+        if fallback_zone:
+            zone = db.get(Zone, int(fallback_zone))
+            target_region_id = int(zone.region_id) if zone else None
+    if not target_region_id:
+        raise HTTPException(status_code=400, detail="Region aniqlanmadi")
+
+    target_zone_id: int | None = None
+    if zone_id:
+        zone = db.get(Zone, int(zone_id))
+        if not zone:
+            raise HTTPException(status_code=404, detail="Bino topilmadi")
+        if int(zone.region_id) != int(target_region_id):
+            raise HTTPException(
+                status_code=403,
+                detail="Tanlangan bino foydalanuvchi region'iga tegishli emas",
+            )
+        target_zone_id = int(zone_id)
+
+    if db.get(TestSessionSmena, session_smena_id) is None:
+        raise HTTPException(status_code=404, detail="Test sessiya smena topilmadi")
+
+    list_filters = [
+        StudentModel.session_smena_id == session_smena_id,
+        Zone.region_id == int(target_region_id),
+        StudentModel.is_entered.is_(False),
+    ]
+    if target_zone_id is not None:
+        list_filters.append(StudentModel.zone_id == target_zone_id)
+
+    stmt = (
+        sa_select(
+            StudentModel.gr_n,
+            StudentModel.last_name,
+            StudentModel.first_name,
+            StudentModel.middle_name,
+            StudentModel.imei,
+            StudentModel.sp_n,
+        )
+        .join(Zone, Zone.id == StudentModel.zone_id)
+        .where(*list_filters)
+        # Guruh → familiya → ism bo'yicha tartiblanadi. Guruhlash tartibi
+        # shu order'ga tayanadi (bir gr_n uchun barcha qatorlar ketma-ket keladi).
+        .order_by(
+            StudentModel.gr_n,
+            StudentModel.last_name,
+            StudentModel.first_name,
+        )
+    )
+    rows = db.execute(stmt).all()
+
+    # gr_n bo'yicha guruhlash — rows allaqachon gr_n bo'yicha tartiblangan,
+    # shuning uchun ketma-ket bir xil gr_n larni bitta guruhga yig'amiz.
+    groups: list[NotEnteredGroup] = []
+    current_gr: int | None = None
+    current_students: list[NotEnteredGroupStudent] = []
+    for r in rows:
+        gr = r.gr_n or 0
+        if gr != current_gr:
+            if current_gr is not None:
+                groups.append(
+                    NotEnteredGroup(
+                        gr_n=current_gr,
+                        total=len(current_students),
+                        students=current_students,
+                    )
+                )
+            current_gr = gr
+            current_students = []
+        current_students.append(
+            NotEnteredGroupStudent(
+                last_name=r.last_name,
+                first_name=r.first_name,
+                middle_name=r.middle_name,
+                imei=r.imei,
+                sp_n=r.sp_n or 0,
+            )
+        )
+    if current_gr is not None:
+        groups.append(
+            NotEnteredGroup(
+                gr_n=current_gr,
+                total=len(current_students),
+                students=current_students,
+            )
+        )
+
+    roster_filters = [
+        StudentModel.session_smena_id == session_smena_id,
+        Zone.region_id == int(target_region_id),
+    ]
+    if target_zone_id is not None:
+        roster_filters.append(StudentModel.zone_id == target_zone_id)
+    roster_total = (
+        db.scalar(
+            sa_select(func.count(StudentModel.id))
+            .select_from(StudentModel)
+            .join(Zone, Zone.id == StudentModel.zone_id)
+            .where(*roster_filters)
+        )
+        or 0
+    )
+
+    return NotEnteredGroupedResponse(
+        groups=groups, total=len(rows), roster_total=int(roster_total)
     )
 
 
@@ -970,6 +1126,28 @@ def delete_student_endpoint(
 ):
     if not delete_student(db, student_id):
         raise HTTPException(status_code=404, detail="Talaba topilmadi")
+
+
+@router.post("/{student_id}/remove-attendance")
+def remove_student_attendance_endpoint(
+    student_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(PermissionChecker(P.STUDENT_LOG_CREATE.code)),
+):
+    """Davomatdan olish — talabaning `is_entered` bayrog'ini False qiladi.
+
+    Desktop operatori (STUDENT_LOG_CREATE ruxsati — davomat loglarini
+    yaratuvchi) noto'g'ri qo'shilgan davomatni bekor qilishi uchun. Faqat
+    `is_entered` o'zgaradi. Talaba topilmasa 404."""
+    student = remove_student_attendance(db, student_id)
+    if not student:
+        raise HTTPException(status_code=404, detail="Talaba topilmadi")
+    logger.info(
+        "Davomatdan olindi: student_id=%s user_id=%s",
+        student_id,
+        current_user.id,
+    )
+    return {"status": "ok", "student_id": student_id, "is_entered": False}
 
 
 class UploadImageRequest(BaseModel):

@@ -1,8 +1,11 @@
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import admin, auth, davomat_bot, davomat_bot_admin, embedding, lookup, online_users, pasport_info, permission, photo, statistic_bot, statistic_bot_admin, student, test_session
+from app.api.v1.endpoints import admin, auth, davomat_bot, davomat_bot_admin, embedding, health, lookup, online_users, pasport_info, permission, photo, statistic_bot, statistic_bot_admin, student, test_session
 
 api_router = APIRouter()
+# Health-check — desktop tarmoq nazorati shu prefiks (/api/v1) ostida so'rov
+# yuboradi. Auth talab qilmaydi, eng yuqorida turadi.
+api_router.include_router(health.router, tags=["health"])
 api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
 api_router.include_router(photo.router, prefix="/photo", tags=["photo"])
 api_router.include_router(embedding.router, prefix="/embedding", tags=["embedding"])

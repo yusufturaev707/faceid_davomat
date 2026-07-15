@@ -587,6 +587,21 @@ def update_student(db: Session, student_id: int, data: StudentUpdate) -> Student
     return student
 
 
+def remove_student_attendance(db: Session, student_id: int) -> Student | None:
+    """Davomatdan olish — talabaning `is_entered` bayrog'ini False qiladi.
+
+    Desktop operatori noto'g'ri qo'shilgan davomatni bekor qilganda ishlatiladi.
+    Faqat `is_entered` o'zgaradi; boshqa holatlar (is_cheating, loglar)ga
+    tegilmaydi — atayin minimal va bashorat qilinadigan operatsiya."""
+    student = db.get(Student, student_id)
+    if not student:
+        return None
+    student.is_entered = False
+    db.commit()
+    db.refresh(student)
+    return student
+
+
 def delete_student(db: Session, student_id: int) -> bool:
     student = db.get(Student, student_id)
     if not student:
@@ -663,6 +678,8 @@ def get_student_logs_paginated(
     first_enter_to: str | None = None,
     last_enter_from: str | None = None,
     last_enter_to: str | None = None,
+    created_at_from: str | None = None,
+    created_at_to: str | None = None,
     search: str | None = None,
 ) -> tuple[list[dict], int]:
     """StudentLog list — filter, search va range vaqt bo'yicha.
@@ -773,6 +790,10 @@ def get_student_logs_paginated(
         _apply(StudentLog.last_enter_time >= last_enter_from)
     if last_enter_to:
         _apply(StudentLog.last_enter_time <= last_enter_to)
+    if created_at_from:
+        _apply(StudentLog.created_at >= created_at_from)
+    if created_at_to:
+        _apply(StudentLog.created_at <= created_at_to)
     if search:
         p = f"%{search}%"
         _apply(

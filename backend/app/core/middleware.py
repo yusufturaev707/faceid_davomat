@@ -13,6 +13,12 @@ from app.core.logging import logger, request_id_ctx
 from app.db.session import engine
 
 
+# Access-log'dan chiqariladigan yo'llar. Desktop klientlar (100+ dona) har
+# 5 sekundda health so'rovi yuboradi — bu yozuvlar loglarni ko'mib tashlaydi
+# va real so'rovlarni ko'rinmas qiladi. Metrikaga esa hisoblanaveradi.
+_SKIP_ACCESS_LOG = frozenset({"/health", "/api/v1/health", "/api/v1/healthcheck"})
+
+
 class RequestIdMiddleware(BaseHTTPMiddleware):
     """X-Request-ID header'ni qabul qiladi yoki yangi UUID yaratadi."""
 
@@ -24,13 +30,15 @@ class RequestIdMiddleware(BaseHTTPMiddleware):
             response = await call_next(request)
             elapsed_ms = (time.perf_counter() - start) * 1000
             response.headers["X-Request-ID"] = req_id
-            logger.info(
-                "%s %s -> %d %.1fms",
-                request.method,
-                request.url.path,
-                response.status_code,
-                elapsed_ms,
-            )
+            # Health-check yo'llari access-log'ga yozilmaydi (shovqinni kamaytirish).
+            if request.url.path not in _SKIP_ACCESS_LOG:
+                logger.info(
+                    "%s %s -> %d %.1fms",
+                    request.method,
+                    request.url.path,
+                    response.status_code,
+                    elapsed_ms,
+                )
             _metrics.record(request.method, request.url.path, response.status_code, elapsed_ms)
             return response
         except Exception:

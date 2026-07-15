@@ -203,6 +203,36 @@ class NotEnteredStudentsResponse(BaseModel):
     roster_total: int = 0
 
 
+class NotEnteredGroupStudent(BaseModel):
+    """Guruh ichidagi kelmagan talaba — familiya, ism, sharif, JShShIR va
+    o'tirish o'rni (`sp_n`). Desktop guruhga kirilganda shu jadvalni chizadi."""
+
+    last_name: str
+    first_name: str
+    middle_name: str | None = None
+    imei: str | None = None       # JShShIR (14 xonali)
+    sp_n: int = 0                 # o'tirish o'rni (seat number)
+
+
+class NotEnteredGroup(BaseModel):
+    """Bitta guruh — guruh raqami, kelmaganlar soni va talabalar ro'yxati
+    (familiya bo'yicha tartiblangan)."""
+
+    gr_n: int = 0
+    total: int
+    students: list[NotEnteredGroupStudent]
+
+
+class NotEnteredGroupedResponse(BaseModel):
+    """Tanlangan test/sana/smena + bino kesimida kelmagan talabalar,
+    guruh (gr_n) bo'yicha guruhlangan. Guruhlar gr_n bo'yicha, guruh ichidagi
+    talabalar familiya bo'yicha tartiblangan."""
+
+    groups: list[NotEnteredGroup]
+    total: int              # jami kelmaganlar soni
+    roster_total: int = 0   # shu bino/smena kesimidagi jami talaba soni
+
+
 class RejectedStudentItem(BaseModel):
     """Chetlatilgan (`is_cheating=True`) talaba — ro'yxat formati.
 

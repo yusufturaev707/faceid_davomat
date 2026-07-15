@@ -25,6 +25,31 @@ errorlog = "/var/www/faceid_davomat/backend/logs/error.log"
 loglevel = "info"
 access_log_format = '%(h)s %(l)s %(u)s %(t)s "%(r)s" %(s)s %(b)s "%(f)s" "%(a)s" %(L)s'
 
+# ── Health-check'ni gunicorn access.log'idan chiqarish ──
+# Desktop klientlar har 5 s'da health so'rovi yuboradi; bu yozuvlar
+# access.log'ni ko'mib tashlamasligi uchun filtrlaymiz. Filtr har workerda
+# `gunicorn.access` logger'iga ulanadi (post_worker_init hook orqali).
+import logging as _logging
+
+_SKIP_ACCESS_PATHS = ("/health", "/api/v1/health", "/api/v1/healthcheck")
+
+
+class _HealthAccessLogFilter(_logging.Filter):
+    def filter(self, record: _logging.LogRecord) -> bool:
+        # gunicorn access record: args['r'] == 'GET /api/v1/healthcheck HTTP/1.1'
+        args = record.args
+        if not isinstance(args, dict):
+            return True
+        req_line = args.get("r") or ""
+        parts = req_line.split(" ")
+        path = parts[1].split("?", 1)[0] if len(parts) > 1 else ""
+        return path not in _SKIP_ACCESS_PATHS
+
+
+def post_worker_init(worker):
+    _logging.getLogger("gunicorn.access").addFilter(_HealthAccessLogFilter())
+
+
 # Process naming
 proc_name = "faceid_fastapi"
 

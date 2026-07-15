@@ -49,6 +49,8 @@ export default function StudentLogsPage() {
   const [filterFirstTo, setFilterFirstTo] = useState("");
   const [filterLastFrom, setFilterLastFrom] = useState("");
   const [filterLastTo, setFilterLastTo] = useState("");
+  const [filterCreatedFrom, setFilterCreatedFrom] = useState("");
+  const [filterCreatedTo, setFilterCreatedTo] = useState("");
   const [showFilters, setShowFilters] = useState(false);
 
   // Lookup
@@ -106,6 +108,8 @@ export default function StudentLogsPage() {
       if (filterFirstTo) params.first_enter_to = filterFirstTo;
       if (filterLastFrom) params.last_enter_from = filterLastFrom;
       if (filterLastTo) params.last_enter_to = filterLastTo;
+      if (filterCreatedFrom) params.created_at_from = filterCreatedFrom;
+      if (filterCreatedTo) params.created_at_to = filterCreatedTo;
       const result = await getStudentLogsApi(params);
       setData(result);
     } catch (err) {
@@ -130,6 +134,8 @@ export default function StudentLogsPage() {
     filterFirstTo,
     filterLastFrom,
     filterLastTo,
+    filterCreatedFrom,
+    filterCreatedTo,
   ]);
 
   useEffect(() => {
@@ -157,6 +163,8 @@ export default function StudentLogsPage() {
     setFilterFirstTo("");
     setFilterLastFrom("");
     setFilterLastTo("");
+    setFilterCreatedFrom("");
+    setFilterCreatedTo("");
     setPage(1);
   };
 
@@ -174,6 +182,8 @@ export default function StudentLogsPage() {
     filterFirstTo,
     filterLastFrom,
     filterLastTo,
+    filterCreatedFrom,
+    filterCreatedTo,
   ].filter(Boolean).length;
 
   const hasFilters = !!search || activeFilterCount > 0;
@@ -344,6 +354,15 @@ export default function StudentLogsPage() {
 
         {showFilters && (
           <div className="mt-4 pt-4 border-t border-gray-100 dark:border-slate-700">
+            <CreatedRangeFilter
+              from={filterCreatedFrom}
+              to={filterCreatedTo}
+              onChange={(from, to) => {
+                setFilterCreatedFrom(from);
+                setFilterCreatedTo(to);
+                setPage(1);
+              }}
+            />
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
               <FilterSelect
                 label="Test"
@@ -853,6 +872,182 @@ export default function StudentLogsPage() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/** Date → datetime-local input qiymati ("YYYY-MM-DDTHH:mm"), mahalliy vaqtda. */
+function toLocalInput(d: Date): string {
+  const p = (n: number) => String(n).padStart(2, "0");
+  return (
+    `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}` +
+    `T${p(d.getHours())}:${p(d.getMinutes())}`
+  );
+}
+
+/** Kunning boshi (00:00) va oxiri (23:59) — mahalliy vaqtda. */
+function startOfDay(d: Date): Date {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
+}
+function endOfDay(d: Date): Date {
+  const x = new Date(d);
+  x.setHours(23, 59, 0, 0);
+  return x;
+}
+
+/**
+ * created_at bo'yicha vaqt oralig'ini tanlash — Material Design uslubida.
+ * Tez tanlov chiplari (Bugun, Kecha, 7/30 kun, Shu oy) + "dan/gacha" pickerlari.
+ */
+function CreatedRangeFilter({
+  from,
+  to,
+  onChange,
+}: {
+  from: string;
+  to: string;
+  onChange: (from: string, to: string) => void;
+}) {
+  const applyPreset = (fromDate: Date, toDate: Date) =>
+    onChange(toLocalInput(fromDate), toLocalInput(toDate));
+
+  const presets: { key: string; label: string; run: () => void }[] = [
+    {
+      key: "today",
+      label: "Bugun",
+      run: () => {
+        const now = new Date();
+        applyPreset(startOfDay(now), endOfDay(now));
+      },
+    },
+    {
+      key: "yesterday",
+      label: "Kecha",
+      run: () => {
+        const y = new Date();
+        y.setDate(y.getDate() - 1);
+        applyPreset(startOfDay(y), endOfDay(y));
+      },
+    },
+    {
+      key: "7d",
+      label: "So'nggi 7 kun",
+      run: () => {
+        const now = new Date();
+        const start = new Date();
+        start.setDate(start.getDate() - 6);
+        applyPreset(startOfDay(start), endOfDay(now));
+      },
+    },
+    {
+      key: "30d",
+      label: "So'nggi 30 kun",
+      run: () => {
+        const now = new Date();
+        const start = new Date();
+        start.setDate(start.getDate() - 29);
+        applyPreset(startOfDay(start), endOfDay(now));
+      },
+    },
+    {
+      key: "month",
+      label: "Shu oy",
+      run: () => {
+        const now = new Date();
+        const start = new Date(now.getFullYear(), now.getMonth(), 1);
+        applyPreset(startOfDay(start), endOfDay(now));
+      },
+    },
+  ];
+
+  const hasValue = !!from || !!to;
+
+  return (
+    <div className="mb-4 rounded-2xl border border-primary-100 dark:border-primary-900/40 bg-primary-50/50 dark:bg-primary-900/10 p-4">
+      <div className="flex items-center gap-2 mb-3">
+        <svg
+          className="w-4 h-4 text-primary-500"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+          />
+        </svg>
+        <span className="text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-slate-300">
+          Yaratilgan vaqti (created_at)
+        </span>
+        {hasValue && (
+          <button
+            type="button"
+            onClick={() => onChange("", "")}
+            className="ml-auto inline-flex items-center gap-1 text-[11px] font-medium text-gray-500 hover:text-red-500 dark:text-slate-400 dark:hover:text-red-400 transition-colors"
+          >
+            <svg
+              className="w-3.5 h-3.5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M6 18L18 6M6 6l12 12"
+              />
+            </svg>
+            Tozalash
+          </button>
+        )}
+      </div>
+
+      {/* Tez tanlov chiplari */}
+      <div className="flex flex-wrap gap-2 mb-3">
+        {presets.map((p) => (
+          <button
+            key={p.key}
+            type="button"
+            onClick={p.run}
+            className="px-3 py-1.5 rounded-full text-xs font-medium border border-primary-200 dark:border-primary-800 text-primary-700 dark:text-primary-300 bg-white/70 dark:bg-slate-800/60 hover:bg-primary-500 hover:text-white hover:border-primary-500 dark:hover:bg-primary-500 dark:hover:text-white transition-all duration-150 shadow-sm"
+          >
+            {p.label}
+          </button>
+        ))}
+      </div>
+
+      {/* dan / gacha pickerlari */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div>
+          <label className="block text-[10px] uppercase tracking-wider text-gray-500 dark:text-slate-400 mb-1 font-semibold">
+            Boshlanish (dan)
+          </label>
+          <input
+            type="datetime-local"
+            value={from}
+            max={to || undefined}
+            onChange={(e) => onChange(e.target.value, to)}
+            className="input-field !py-2 !text-sm w-full"
+          />
+        </div>
+        <div>
+          <label className="block text-[10px] uppercase tracking-wider text-gray-500 dark:text-slate-400 mb-1 font-semibold">
+            Tugash (gacha)
+          </label>
+          <input
+            type="datetime-local"
+            value={to}
+            min={from || undefined}
+            onChange={(e) => onChange(from, e.target.value)}
+            className="input-field !py-2 !text-sm w-full"
+          />
+        </div>
+      </div>
     </div>
   );
 }
