@@ -379,6 +379,7 @@ export async function getSessionDashboardStatsApi(
     sessionSmenaId?: number | null;
     day?: string | null;
   },
+  signal?: AbortSignal,
 ): Promise<import("./interfaces").DashboardStatsResponse> {
   const params: Record<string, string | number> = { scope: opts.scope };
   if (opts.scope === "smena" && opts.sessionSmenaId != null) {
@@ -389,7 +390,9 @@ export async function getSessionDashboardStatsApi(
   }
   const res = await apiClient.get(
     `/test-sessions/${sessionId}/dashboard-stats`,
-    { params },
+    // signal — eskirgan/unmount so'rovni bekor qilish; timeout — osilib
+    // qolgan so'rov brauzerda cheksiz kutmasligi uchun.
+    { params, signal, timeout: 20000 },
   );
   return res.data;
 }

@@ -158,6 +158,19 @@ function deriveParticipation(g: StatGroup): {
   return { participated, notParticipated };
 }
 
+/** Axios/fetch bekor qilish (abort) xatosini aniqlaydi — polling eskirgan
+ *  so'rovni bekor qilganda foydalanuvchiga xato ko'rsatmaslik uchun. */
+function isAbortError(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const e = err as { code?: string; name?: string; message?: string };
+  return (
+    e.code === "ERR_CANCELED" ||
+    e.name === "CanceledError" ||
+    e.name === "AbortError" ||
+    e.message === "canceled"
+  );
+}
+
 export default function StatisticsPage() {
   // Selektorlar
   const [states, setStates] = useState<SessionStateResponse[]>([]);
@@ -192,6 +205,12 @@ export default function StatisticsPage() {
   // iiv (s_number)
   const [excelOrder, setExcelOrder] = useState<"dtm" | "vm" | "iiv">("vm");
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Polling qattiqligini oshiruvchi ref'lar:
+  //  - inFlightRef: so'rov navbatда — yangi (silent) poll o'tkazib yuboriladi
+  //    (overlap/pile-up oldini oladi).
+  //  - abortRef: joriy so'rovni bekor qilish (eskirgan/unmount).
+  const inFlightRef = useRef(false);
+  const abortRef = useRef<AbortController | null>(null);
 
   // Viloyat card bosilganda — shu region zonalari modal'da ko'rsatiladi.
   // Polling natijasi bilan birga avtomatik yangilanishi uchun region_id'ni
@@ -308,20 +327,42 @@ export default function StatisticsPage() {
       opts: { sessionSmenaId?: number | null; day?: string | null },
       silent = false,
     ) => {
+      // Overlap guard — avvalgi (fon) poll hali tugamagan bo'lsa, yangi
+      // silent pollni o'tkazib yuboramiz (so'rovlar ustma-ust yig'ilmasin).
+      if (silent && inFlightRef.current) return;
+
+      // Eskirgan so'rovni bekor qilamiz va yangisini boshlaymiz.
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
+      inFlightRef.current = true;
+
       if (!silent) setStatsLoading(true);
       try {
-        const data = await getSessionDashboardStatsApi(sessionId, {
-          scope: fetchScope,
-          sessionSmenaId: opts.sessionSmenaId,
-          day: opts.day,
-        });
+        const data = await getSessionDashboardStatsApi(
+          sessionId,
+          {
+            scope: fetchScope,
+            sessionSmenaId: opts.sessionSmenaId,
+            day: opts.day,
+          },
+          controller.signal,
+        );
         setStats(data);
         setLastUpdated(new Date());
         setError(null);
       } catch (err) {
+        // Bekor qilingan so'rov — jim o'tamiz (xato ko'rsatmaymiz).
+        if (isAbortError(err)) return;
         setError(extractErrorMessage(err));
       } finally {
-        if (!silent) setStatsLoading(false);
+        // Faqat eng oxirgi ("egasi") so'rov holatni tiklaydi — o'rniga
+        // yangisi kelgan bo'lsa (superseded), unga tegmaymiz.
+        if (abortRef.current === controller) {
+          abortRef.current = null;
+          inFlightRef.current = false;
+          if (!silent) setStatsLoading(false);
+        }
       }
     },
     [],
@@ -402,6 +443,9 @@ export default function StatisticsPage() {
     }
 
     if (!selectedSessionId || !scopeReady) {
+      // Joriy so'rovni bekor qilamiz — eskirgan javob tozalangan holatni
+      // qayta yozib qo'ymasin.
+      abortRef.current?.abort();
       setStats(null);
       return;
     }
@@ -420,6 +464,8 @@ export default function StatisticsPage() {
   ]);
 
   // === Real-time polling — faqat session.state.key=4 bo'lsa ===
+  // Tab fon(background)ga o'tganda polling to'xtaydi (ko'p admin sahifani ochiq
+  // qoldiradi — bu backend yukini keskin kamaytiradi), qaytганда tiklanadi.
   useEffect(() => {
     if (pollRef.current) {
       clearInterval(pollRef.current);
@@ -427,20 +473,41 @@ export default function StatisticsPage() {
     }
     if (!stats?.is_realtime || !selectedSessionId || !scopeReady) return;
 
-    pollRef.current = setInterval(() => {
+    const poll = () => {
       fetchStats(
         selectedSessionId,
         scope,
         { sessionSmenaId: selectedSmenaId, day: selectedDay },
         true,
       );
-    }, POLL_INTERVAL_MS);
-
-    return () => {
+    };
+    const startPolling = () => {
+      if (pollRef.current) return;
+      pollRef.current = setInterval(poll, POLL_INTERVAL_MS);
+    };
+    const stopPolling = () => {
       if (pollRef.current) {
         clearInterval(pollRef.current);
         pollRef.current = null;
       }
+    };
+    const onVisibility = () => {
+      if (document.hidden) {
+        stopPolling();
+      } else {
+        // Tab qaytganda darhol bir marta yangilaymiz, so'ng pollingni tiklaymiz.
+        poll();
+        startPolling();
+      }
+    };
+
+    // Tab ko'rinib turgan bo'lsagina pollingni boshlaymiz.
+    if (!document.hidden) startPolling();
+    document.addEventListener("visibilitychange", onVisibility);
+
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      stopPolling();
     };
   }, [
     stats?.is_realtime,
@@ -451,6 +518,13 @@ export default function StatisticsPage() {
     scopeReady,
     fetchStats,
   ]);
+
+  // === Unmount'da joriy so'rovni bekor qilish (osilib qolgan XHR qolmasin) ===
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, []);
 
   // === Tanlangan status uchun rang (dropdownlarga visual accent) ===
   const selectedState = selectedStateId

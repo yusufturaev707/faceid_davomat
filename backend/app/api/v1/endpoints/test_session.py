@@ -64,6 +64,7 @@ from app.schemas.test_session import (
 from app.models.test_session_smena import TestSessionSmena
 from app.schemas.dashboard_stats import DashboardStatsResponse
 from app.services.embedding_extractor import get_embedding_progress
+from app.services.dashboard_stats_cache import get_dashboard_stats_cached
 from app.services.session_dashboard_stats import (
     DashboardStatsError,
     get_dashboard_stats,
@@ -971,7 +972,9 @@ def session_dashboard_stats(
     statistikalarning to'liq nusxasi.
     """
     try:
-        return get_dashboard_stats(
+        # Qisqa-TTL kesh + single-flight — bir vaqtda ko'p admin polling qilganda
+        # bir xil og'ir hisob takrorlanmaydi (backend bo'g'ilishini oldini oladi).
+        return get_dashboard_stats_cached(
             db,
             session_id=session_id,
             scope=scope,
