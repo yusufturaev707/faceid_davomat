@@ -57,6 +57,7 @@ class OnlineUser(BaseModel):
     username: str
     full_name: str | None
     role: str
+    role_key: int
     device_count: int
     online_device_count: int
     last_active: datetime
@@ -176,6 +177,7 @@ def list_online_users(
                 username=u.username,
                 full_name=u.full_name,
                 role=u.role or "",
+                role_key=u.role_key or 0,
                 device_count=len(devices),
                 online_device_count=online_count,
                 last_active=last_active,

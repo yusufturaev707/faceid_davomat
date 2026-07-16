@@ -417,6 +417,7 @@ export interface OnlineUser {
   username: string;
   full_name: string | null;
   role: string;
+  role_key: number;
   device_count: number;
   online_device_count: number;
   last_active: string;

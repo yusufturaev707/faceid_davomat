@@ -54,6 +54,7 @@ import type {
 import {
   exportSessionAbsenteesApi,
   exportSessionDashboardStatsApi,
+  getOnlineUsersApi,
   getSessionDashboardStatsApi,
   getSessionStatesLookupApi,
   getTestSessionApi,
@@ -65,6 +66,10 @@ import { extractErrorMessage } from "../utils/errorMessage";
 
 // Real-time polling kechikishi (session ready / state.key=4)
 const POLL_INTERVAL_MS = 5000;
+
+// "Hududiy vakil" role.key — desktop ilovadan kirib davomat oladigan operatorlar.
+// Statistika kartasidagi "Onlinedagilar"/"Qurilmalar" shu role bo'yicha sanaladi.
+const REP_ROLE_KEY = 4;
 
 /**
  * Sessiya holati (SessionState.key) bo'yicha rang palitrasi.
@@ -368,6 +373,34 @@ export default function StatisticsPage() {
     [],
   );
 
+  // === Online presence — Hududiy vakil (role.key=4) operatorlar va ularning
+  //     faol qurilmalari. `/admin/online-users` (aktiv refresh-token oilalari)
+  //     dan olinadi; ruxsat yo'q/xato bo'lsa kartada "—" ko'rsatiladi. ===
+  const [presence, setPresence] = useState<{
+    onlineReps: number;
+    activeDevices: number;
+  } | null>(null);
+  const presenceInFlightRef = useRef(false);
+
+  const fetchPresence = useCallback(async () => {
+    if (presenceInFlightRef.current) return; // overlap guard
+    presenceInFlightRef.current = true;
+    try {
+      const res = await getOnlineUsersApi();
+      const reps = res.users.filter((u) => u.role_key === REP_ROLE_KEY);
+      const onlineReps = reps.filter((u) => u.is_online).length;
+      const activeDevices = reps.reduce(
+        (sum, u) => sum + u.online_device_count,
+        0,
+      );
+      setPresence({ onlineReps, activeDevices });
+    } catch {
+      setPresence(null);
+    } finally {
+      presenceInFlightRef.current = false;
+    }
+  }, []);
+
   // === Tanlangan statistikani Excel (.xlsx) hisobotiga yuklab olish ===
   const handleExport = useCallback(async () => {
     if (!selectedSessionId || exporting) return;
@@ -454,6 +487,7 @@ export default function StatisticsPage() {
       sessionSmenaId: selectedSmenaId,
       day: selectedDay,
     });
+    fetchPresence();
   }, [
     selectedSessionId,
     scope,
@@ -461,6 +495,7 @@ export default function StatisticsPage() {
     selectedDay,
     scopeReady,
     fetchStats,
+    fetchPresence,
   ]);
 
   // === Real-time polling — faqat session.state.key=4 bo'lsa ===
@@ -480,6 +515,7 @@ export default function StatisticsPage() {
         { sessionSmenaId: selectedSmenaId, day: selectedDay },
         true,
       );
+      fetchPresence();
     };
     const startPolling = () => {
       if (pollRef.current) return;
@@ -517,6 +553,7 @@ export default function StatisticsPage() {
     selectedDay,
     scopeReady,
     fetchStats,
+    fetchPresence,
   ]);
 
   // === Unmount'da joriy so'rovni bekor qilish (osilib qolgan XHR qolmasin) ===
@@ -858,7 +895,7 @@ export default function StatisticsPage() {
           </div>
 
           {/* Umumiy ko'rsatkichlar — davomat darajasi + tahliliy ma'lumotlar */}
-          <OverviewPanel stats={stats} />
+          <OverviewPanel stats={stats} presence={presence} />
 
           {/* Region cardlari */}
           <div className="flex items-center justify-between gap-3 mb-2 sm:mb-3">
@@ -1483,17 +1520,20 @@ function RegionHighlight({
 }
 
 /**
- * Umumiy ko'rsatkichlar paneli — `stats`'dan hosilaviy (derived) tahliliy
- * ma'lumotlar: davomat darajasi (donut), haqiqiy ishtirok, viloyat/bino soni,
- * jins taqsimoti hamda eng faol/past davomatli viloyatlar.
+ * Umumiy ko'rsatkichlar paneli — davomat darajasi (donut), online operatorlar
+ * (Hududiy vakil) va faol qurilmalar soni (`presence`), viloyat/bino soni, jins
+ * taqsimoti hamda eng faol/past davomatli viloyatlar.
  */
-function OverviewPanel({ stats }: { stats: DashboardStatsResponse }) {
+function OverviewPanel({
+  stats,
+  presence,
+}: {
+  stats: DashboardStatsResponse;
+  presence: { onlineReps: number; activeDevices: number } | null;
+}) {
   const t = stats.summary.total.total;
   const attended = stats.summary.attended.total;
   const notAttended = stats.summary.not_attended.total;
-  const cheating = stats.summary.cheating.total;
-  // Haqiqiy testda ishtirok etganlar = Keldi − Chetlatilgan
-  const participated = Math.max(0, attended - cheating);
   const rate = t > 0 ? Math.round((attended / t) * 1000) / 10 : 0;
 
   const buildings = stats.regions.reduce(
@@ -1566,15 +1606,20 @@ function OverviewPanel({ stats }: { stats: DashboardStatsResponse }) {
         {/* Tahliliy plitkalar */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 gap-2.5 sm:gap-3">
           <InsightTile
-            icon={<CheckIcon />}
-            value={participated.toLocaleString("uz-UZ")}
-            label="Ishtirok etganlar"
+            icon={<OnlineIcon />}
+            value={
+              presence ? presence.onlineReps.toLocaleString("uz-UZ") : "—"
+            }
+            label="Onlinedagilar"
             accent="text-emerald-700 dark:text-emerald-300"
           />
           <InsightTile
-            icon={<MapPinIcon className="w-5 h-5" />}
-            value={regionsCount.toLocaleString("uz-UZ")}
-            label="Viloyatlar"
+            icon={<DeviceIcon />}
+            value={
+              presence ? presence.activeDevices.toLocaleString("uz-UZ") : "—"
+            }
+            label="Qurilmalar"
+            accent="text-sky-700 dark:text-sky-300"
           />
           <InsightTile
             icon={<BuildingIcon className="w-5 h-5" />}
@@ -1584,10 +1629,9 @@ function OverviewPanel({ stats }: { stats: DashboardStatsResponse }) {
           <RegionHighlight label="Eng faol viloyat" region={best} up />
           <RegionHighlight label="Eng past davomat" region={worst} up={false} />
           <InsightTile
-            icon={<ShieldIcon />}
-            value={cheating.toLocaleString("uz-UZ")}
-            label="Chetlatilgan"
-            accent="text-red-700 dark:text-red-300"
+            icon={<MapPinIcon className="w-5 h-5" />}
+            value={regionsCount.toLocaleString("uz-UZ")}
+            label="Viloyatlar"
           />
         </div>
       </div>
@@ -3062,6 +3106,45 @@ function MapPinIcon({ className = "w-4 h-4" }: { className?: string }) {
         strokeLinejoin="round"
         strokeWidth={1.8}
         d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+      />
+    </svg>
+  );
+}
+
+/** Online belgisi — signal to'lqinlari (Onlinedagilar plitkasi uchun). */
+function OnlineIcon({ className = "w-5 h-5" }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={1.8}
+        d="M8.111 16.404a5.5 5.5 0 017.778 0M5.05 12.582a9.5 9.5 0 0113.9 0"
+      />
+      <circle cx="12" cy="20" r="1" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+/** Qurilma belgisi — monitor (Qurilmalar plitkasi uchun). */
+function DeviceIcon({ className = "w-5 h-5" }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={1.8}
+        d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
       />
     </svg>
   );
