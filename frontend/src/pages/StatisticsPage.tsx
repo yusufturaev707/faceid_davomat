@@ -128,6 +128,36 @@ function getStateColor(key: number | null | undefined): StateColor {
   return STATE_COLORS[key] ?? FALLBACK_COLOR;
 }
 
+/**
+ * Ishtirok etish (participation) ko'rsatkichlarini hisoblaydi:
+ *  - `participated` ("Ishtirok etganlar")  = Kelganlar − Chetlatilganlar
+ *  - `notParticipated` ("Ishtirok etmaganlar") = Umumiy − Ishtirok etganlar
+ *    (ya'ni kelmaganlar + kirishda va test jarayonida chetlatilganlar).
+ *
+ * Har bir jins bo'yicha alohida hisoblanadi — chetlatilganlarning jins
+ * taqsimoti `cheating.{male,female,unknown}` dan olinadi. Salbiy qiymatdan
+ * himoya uchun 0 ga qisiladi.
+ */
+function deriveParticipation(g: StatGroup): {
+  participated: GenderStat;
+  notParticipated: GenderStat;
+} {
+  const sub = (a: number, b: number) => Math.max(0, a - b);
+  const participated: GenderStat = {
+    total: sub(g.attended.total, g.cheating.total),
+    male: sub(g.attended.male, g.cheating.male),
+    female: sub(g.attended.female, g.cheating.female),
+    unknown: sub(g.attended.unknown, g.cheating.unknown),
+  };
+  const notParticipated: GenderStat = {
+    total: sub(g.total.total, participated.total),
+    male: sub(g.total.male, participated.male),
+    female: sub(g.total.female, participated.female),
+    unknown: sub(g.total.unknown, participated.unknown),
+  };
+  return { participated, notParticipated };
+}
+
 export default function StatisticsPage() {
   // Selektorlar
   const [states, setStates] = useState<SessionStateResponse[]>([]);
@@ -160,7 +190,7 @@ export default function StatisticsPage() {
   );
   // Excel viloyatlar tartibi — dtm (region raqami, default) | vm (k_number) |
   // iiv (s_number)
-  const [excelOrder, setExcelOrder] = useState<"dtm" | "vm" | "iiv">("dtm");
+  const [excelOrder, setExcelOrder] = useState<"dtm" | "vm" | "iiv">("vm");
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Viloyat card bosilganda — shu region zonalari modal'da ko'rsatiladi.
@@ -728,16 +758,27 @@ export default function StatisticsPage() {
               icon={<UsersIcon />}
             />
             <SummaryCard
-              title="Kelganlar"
+              title="Ishtirok etganlar"
               variant="success"
-              breakdown={stats.summary.attended}
+              breakdown={deriveParticipation(stats.summary).participated}
               icon={<CheckIcon />}
             />
             <SummaryCard
-              title="Kelmaganlar"
+              title="Ishtirok etmaganlar"
               variant="warning"
-              breakdown={stats.summary.not_attended}
+              breakdown={deriveParticipation(stats.summary).notParticipated}
               icon={<XIcon />}
+              extra={
+                <span
+                  title="Shundan testga umuman kelmaganlar (chetlatilmagan)"
+                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md font-medium leading-none bg-white/70 dark:bg-slate-800/60 text-gray-600 dark:text-slate-300 ring-1 ring-gray-200/70 dark:ring-slate-700/60"
+                >
+                  <span className="opacity-80">Kelmagan:</span>
+                  <span className="tabular-nums font-bold">
+                    {stats.summary.not_attended.total.toLocaleString("uz-UZ")}
+                  </span>
+                </span>
+              }
             />
             <CheatingCard cheating={stats.summary.cheating} />
           </div>
@@ -1030,8 +1071,8 @@ function OrderToggle({
     label: string;
     title: string;
   }[] = [
-    { key: "dtm", label: "DTM", title: "Viloyat raqami tartibida" },
     { key: "vm", label: "VM", title: "K-raqami (k_number) tartibida" },
+    { key: "dtm", label: "DTM", title: "Viloyat raqami tartibida" },
     { key: "iiv", label: "IIV", title: "S-raqami (s_number) tartibida" },
   ];
   return (
@@ -1109,11 +1150,14 @@ function SummaryCard({
   breakdown,
   icon,
   variant,
+  extra,
 }: {
   title: string;
   breakdown: GenderStat;
   icon: React.ReactNode;
   variant: Variant;
+  /** Ixtiyoriy qo'shimcha ko'rsatkich — jins chiplari yonida chiqadi. */
+  extra?: React.ReactNode;
 }) {
   const s = VARIANT_STYLES[variant];
   return (
@@ -1149,6 +1193,7 @@ function SummaryCard({
         {breakdown.unknown > 0 && (
           <GenderChip gender="unknown" count={breakdown.unknown} />
         )}
+        {extra}
       </div>
     </div>
   );
@@ -1667,6 +1712,7 @@ function RegionCard({
   const attended = item.stats.attended.total;
   const attendancePercent =
     total > 0 ? Math.round((attended / total) * 1000) / 10 : 0;
+  const { participated, notParticipated } = deriveParticipation(item.stats);
 
   // Davomat foiziga qarab progress rang — semantik signal
   const percentTone =
@@ -1761,15 +1807,14 @@ function RegionCard({
           accent="primary"
         />
         <MiniStat
-          label="Kelgan"
-          breakdown={item.stats.attended}
+          label="Ishtirok etgan"
+          breakdown={participated}
           accent="success"
         />
         <MiniStat
-          label="Kelmagan"
-          breakdown={item.stats.not_attended}
-          accent="warning"
-        />
+          label="Ishtirok etmagan"
+          breakdown={notParticipated}
+          accent="warning"        />
         <MiniCheating cheating={item.stats.cheating} />
       </div>
 
@@ -1833,17 +1878,36 @@ const MINI_SIZE: Record<
   },
 };
 
-/** MD3 tonal-surface stat tile (Umumiy / Kelgan / Kelmagan). */
+/** "kelmagan N" — testga umuman kelmaganlar (chetlatilmagan) ixcham ko'rsatkich.
+ *  Ota element font o'lchamini meros oladi (mini-plitka jins qatorida chiqadi). */
+function AbsentTag({ n }: { n: number }) {
+  return (
+    <span
+      title="Shundan testga umuman kelmaganlar (chetlatilmagan)"
+      className="inline-flex items-center gap-0.5 text-amber-700 dark:text-amber-300"
+    >
+      <span className="opacity-80">kelmagan: </span>
+      <span className="tabular-nums font-bold">
+        {n.toLocaleString("uz-UZ")}
+      </span>
+    </span>
+  );
+}
+
+/** MD3 tonal-surface stat tile (Umumiy / Ishtirok etgan / Ishtirok etmagan). */
 function MiniStat({
   label,
   breakdown,
   accent,
   size = "md",
+  extra,
 }: {
   label: string;
   breakdown: GenderStat;
   accent: Variant;
   size?: MiniSize;
+  /** Jins qatori yonida chiqadigan ixtiyoriy qo'shimcha ko'rsatkich. */
+  extra?: React.ReactNode;
 }) {
   const s = VARIANT_STYLES[accent];
   const z = MINI_SIZE[size];
@@ -1852,7 +1916,7 @@ function MiniStat({
       className={`rounded-lg ring-1 ${s.bg} ${s.ring} ${z.box} transition-shadow duration-200 hover:shadow-sm`}
     >
       <p
-        className={`font-semibold text-gray-600 dark:text-slate-300 leading-none ${z.label}`}
+        className={`font-semibold text-gray-600 dark:text-slate-300 leading-tight min-h-[2.4em] ${z.label}`}
       >
         {label}
       </p>
@@ -1862,7 +1926,7 @@ function MiniStat({
         {breakdown.total.toLocaleString("uz-UZ")}
       </p>
       <div
-        className={`flex items-center gap-1.5 mt-0.5 text-gray-600 dark:text-slate-300 leading-none ${z.gender}`}
+        className={`flex flex-wrap items-center gap-x-1.5 gap-y-0.5 mt-0.5 text-gray-600 dark:text-slate-300 leading-none ${z.gender}`}
       >
         <span
           className="inline-flex items-center gap-0.5 text-sky-600 dark:text-sky-400"
@@ -1887,6 +1951,7 @@ function MiniStat({
             <span className="tabular-nums">{breakdown.unknown}</span>
           </span>
         )}
+        {extra}
       </div>
     </div>
   );
@@ -1907,7 +1972,7 @@ function MiniCheating({
       className={`rounded-lg ring-1 ${s.bg} ${s.ring} ${z.box} transition-shadow duration-200 hover:shadow-sm`}
     >
       <p
-        className={`font-semibold text-gray-600 dark:text-slate-300 leading-none ${z.label}`}
+        className={`font-semibold text-gray-600 dark:text-slate-300 leading-tight min-h-[2.4em] ${z.label}`}
       >
         Chetlat.
       </p>
@@ -1966,6 +2031,7 @@ function RegionZonesModal({
   const attended = region.stats.attended.total;
   const attendancePercent =
     total > 0 ? Math.round((attended / total) * 1000) / 10 : 0;
+  const { participated, notParticipated } = deriveParticipation(region.stats);
 
   const percentTone =
     attendancePercent >= 75
@@ -2069,14 +2135,15 @@ function RegionZonesModal({
                     accent="primary"
                   />
                   <MiniStat
-                    label="Kelgan"
-                    breakdown={region.stats.attended}
+                    label="Ishtirok etgan"
+                    breakdown={participated}
                     accent="success"
                   />
                   <MiniStat
-                    label="Kelmagan"
-                    breakdown={region.stats.not_attended}
+                    label="Ishtirok etmagan"
+                    breakdown={notParticipated}
                     accent="warning"
+                    extra={<AbsentTag n={region.stats.not_attended.total} />}
                   />
                   <MiniCheating cheating={region.stats.cheating} />
                 </div>
@@ -2196,6 +2263,7 @@ function AllRegionsModal({
         : "from-red-400 to-red-500";
 
   const totalPct = pct(summary.attended.total, summary.total.total);
+  const summaryPart = deriveParticipation(summary);
   const thCls =
     "px-2.5 py-2.5 text-[11px] font-semibold text-gray-500 dark:text-slate-400 whitespace-nowrap";
   const numCls = "px-2.5 py-2 text-center align-middle";
@@ -2259,8 +2327,8 @@ function AllRegionsModal({
                 <th className={`${thCls} text-center w-12`}>№</th>
                 <th className={`${thCls} text-left`}>Viloyat</th>
                 <th className={`${thCls} text-center`}>Umumiy</th>
-                <th className={`${thCls} text-center`}>Kelgan</th>
-                <th className={`${thCls} text-center`}>Kelmagan</th>
+                <th className={`${thCls} text-center`}>Ishtirok etgan</th>
+                <th className={`${thCls} text-center`}>Ishtirok etmagan</th>
                 <th className={`${thCls} text-center`}>Chetlatilgan</th>
                 <th className={`${thCls} text-center w-40`}>Davomat</th>
               </tr>
@@ -2268,6 +2336,7 @@ function AllRegionsModal({
             <tbody>
               {regions.map((r) => {
                 const p = pct(r.stats.attended.total, r.stats.total.total);
+                const part = deriveParticipation(r.stats);
                 return (
                   <tr
                     key={r.region_id}
@@ -2289,15 +2358,15 @@ function AllRegionsModal({
                     </td>
                     <td className={numCls}>
                       <div className="font-bold tabular-nums text-emerald-700 dark:text-emerald-300 text-[14px]">
-                        {r.stats.attended.total.toLocaleString("uz-UZ")}
+                        {part.participated.total.toLocaleString("uz-UZ")}
                       </div>
-                      <GenderInline g={r.stats.attended} />
+                      <GenderInline g={part.participated} />
                     </td>
                     <td className={numCls}>
                       <div className="font-bold tabular-nums text-amber-700 dark:text-amber-300 text-[14px]">
-                        {r.stats.not_attended.total.toLocaleString("uz-UZ")}
+                        {part.notParticipated.total.toLocaleString("uz-UZ")}
                       </div>
-                      <GenderInline g={r.stats.not_attended} />
+                      <GenderInline g={part.notParticipated} />
                     </td>
                     <td className={numCls}>
                       <div className="font-bold tabular-nums text-red-700 dark:text-red-300 text-[14px]">
@@ -2340,15 +2409,15 @@ function AllRegionsModal({
                 </td>
                 <td className={numCls}>
                   <div className="font-bold tabular-nums text-[14px]">
-                    {summary.attended.total.toLocaleString("uz-UZ")}
+                    {summaryPart.participated.total.toLocaleString("uz-UZ")}
                   </div>
-                  <GenderInline g={summary.attended} />
+                  <GenderInline g={summaryPart.participated} />
                 </td>
                 <td className={numCls}>
                   <div className="font-bold tabular-nums text-[14px]">
-                    {summary.not_attended.total.toLocaleString("uz-UZ")}
+                    {summaryPart.notParticipated.total.toLocaleString("uz-UZ")}
                   </div>
-                  <GenderInline g={summary.not_attended} />
+                  <GenderInline g={summaryPart.notParticipated} />
                 </td>
                 <td className={numCls}>
                   <div className="font-bold tabular-nums text-[14px]">
@@ -2386,6 +2455,7 @@ function ZoneCard({
   const attended = item.stats.attended.total;
   const attendancePercent =
     total > 0 ? Math.round((attended / total) * 1000) / 10 : 0;
+  const { participated, notParticipated } = deriveParticipation(item.stats);
 
   const percentTone =
     attendancePercent >= 75
@@ -2467,17 +2537,16 @@ function ZoneCard({
           size={miniSize}
         />
         <MiniStat
-          label="Kelgan"
-          breakdown={item.stats.attended}
+          label="Ishtirok etgan"
+          breakdown={participated}
           accent="success"
           size={miniSize}
         />
         <MiniStat
-          label="Kelmagan"
-          breakdown={item.stats.not_attended}
+          label="Ishtirok etmagan"
+          breakdown={notParticipated}
           accent="warning"
-          size={miniSize}
-        />
+          size={miniSize}        />
         <MiniCheating cheating={item.stats.cheating} size={miniSize} />
       </div>
     </article>
@@ -2604,6 +2673,7 @@ function AttendanceSummary({
   const total = stats.total.total;
   const attended = stats.attended.total;
   const pct = total > 0 ? Math.round((attended / total) * 1000) / 10 : 0;
+  const { participated, notParticipated } = deriveParticipation(stats);
 
   const percentTone =
     pct >= 75
@@ -2671,16 +2741,17 @@ function AttendanceSummary({
           size={z.mini}
         />
         <MiniStat
-          label="Kelgan"
-          breakdown={stats.attended}
+          label="Ishtirok etgan"
+          breakdown={participated}
           accent="success"
           size={z.mini}
         />
         <MiniStat
-          label="Kelmagan"
-          breakdown={stats.not_attended}
+          label="Ishtirok etmagan"
+          breakdown={notParticipated}
           accent="warning"
           size={z.mini}
+          extra={<AbsentTag n={stats.not_attended.total} />}
         />
         <MiniCheating cheating={stats.cheating} size={z.mini} />
       </div>

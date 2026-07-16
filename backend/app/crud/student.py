@@ -4,7 +4,7 @@ import base64
 import logging
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import func, select
+from sqlalchemy import TIMESTAMP, cast, func, select
 from sqlalchemy.orm import Session
 
 from app.models.cheating_log import CheatingLog
@@ -37,6 +37,28 @@ logger = logging.getLogger(__name__)
 
 # O'zbekiston vaqti (UZT) — UTC+5, yil davomida o'zgarmaydi (DST yo'q).
 UZ_TZ = timezone(timedelta(hours=5))
+
+
+def _created_at_bound(bound: str):
+    """Frontend `datetime-local` chegarasini (naive lokal Toshkent vaqti)
+    `created_at` ustuni saqlanadigan naive fazoga o'giradi.
+
+    `created_at` — `TIMESTAMP WITHOUT TIME ZONE`, u server session TimeZone'ining
+    devor-soatida saqlanadi (prod = UTC, local dev = Asia/Tashkent). Foydalanuvchi
+    esa doim Toshkent lokal vaqtini kiritadi. Shuning uchun konvertatsiyani
+    server TimeZone'iga qarab DB'da bajaramiz — bu ifoda ikkala muhitda ham
+    (UTC va Asia/Tashkent) bir xil to'g'ri ishlaydi, hech qanday qattiq kodlangan
+    taxminsiz:
+
+        timezone(current_setting('TimeZone'),          -- server naive fazosiga
+                 timezone('Asia/Tashkent', bound))      -- chegarani UZT deb talqin
+
+    Chap tomondagi `created_at` ustuniga tegilmaydi — index sargable qoladi.
+    """
+    as_tashkent = func.timezone(
+        "Asia/Tashkent", cast(bound, TIMESTAMP(timezone=False))
+    )
+    return func.timezone(func.current_setting("TimeZone"), as_tashkent)
 
 
 def _enter_time_to_utc(dt: datetime | None) -> datetime | None:
@@ -790,10 +812,14 @@ def get_student_logs_paginated(
         _apply(StudentLog.last_enter_time >= last_enter_from)
     if last_enter_to:
         _apply(StudentLog.last_enter_time <= last_enter_to)
+    # created_at — naive `TIMESTAMP WITHOUT TIME ZONE`, server TimeZone devor-
+    # soatida saqlanadi (prod=UTC, local=Asia/Tashkent). Frontend naive lokal
+    # Toshkent vaqtini yuboradi. `_created_at_bound` chegarani server fazosiga
+    # o'giradi — ikkala muhitda ham to'g'ri filtrlaydi.
     if created_at_from:
-        _apply(StudentLog.created_at >= created_at_from)
+        _apply(StudentLog.created_at >= _created_at_bound(created_at_from))
     if created_at_to:
-        _apply(StudentLog.created_at <= created_at_to)
+        _apply(StudentLog.created_at <= _created_at_bound(created_at_to))
     if search:
         p = f"%{search}%"
         _apply(
