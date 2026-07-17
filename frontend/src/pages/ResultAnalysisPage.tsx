@@ -604,16 +604,33 @@ function PreviewTable({
   onViewImage: (img: string) => void;
 }) {
   const [page, setPage] = useState(1);
-  const total = rows.length;
+  const [query, setQuery] = useState("");
+  const fullTotal = rows.length;
+
+  // imei yoki abitur_id bo'yicha qidiruv (mijoz tomonida).
+  const q = query.trim().toLowerCase();
+  const filtered = useMemo(
+    () =>
+      q
+        ? rows.filter(
+            (r) =>
+              r.imei.toLowerCase().includes(q) ||
+              r.abitur_id.toLowerCase().includes(q),
+          )
+        : rows,
+    [rows, q],
+  );
+
+  const total = filtered.length;
   const pages = Math.max(1, Math.ceil(total / PREVIEW_PAGE_SIZE));
 
-  // Ma'lumot o'zgarsa (paste/tahrir) — birinchi sahifaga qaytamiz.
+  // Ma'lumot yoki qidiruv o'zgarsa — birinchi sahifaga qaytamiz.
   useEffect(() => {
     setPage(1);
-  }, [total]);
+  }, [q, fullTotal]);
 
   const start = (page - 1) * PREVIEW_PAGE_SIZE;
-  const shown = rows.slice(start, start + PREVIEW_PAGE_SIZE);
+  const shown = filtered.slice(start, start + PREVIEW_PAGE_SIZE);
 
   return (
     <div className="surface-tonal p-0 overflow-hidden animate-fade-in">
@@ -621,7 +638,7 @@ function PreviewTable({
         <span className="text-[12.5px] font-semibold text-gray-700 dark:text-slate-200">
           Ustunlar ko'rinishi
         </span>
-        <span className="badge-info">{total.toLocaleString()} qator</span>
+        <span className="badge-info">{fullTotal.toLocaleString()} qator</span>
         <span className="badge-success">
           {hasResultCount.toLocaleString()} natija chiqqan
         </span>
@@ -630,6 +647,57 @@ function PreviewTable({
             {deletedCount.toLocaleString()} o'chirilgan
           </span>
         )}
+        {q && (
+          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-600 dark:bg-slate-700/60 dark:text-slate-300">
+            Qidiruvda: {total.toLocaleString()}
+          </span>
+        )}
+
+        {/* MD3 qidiruv — imei / abitur_id */}
+        <div className="relative ml-auto w-full sm:w-64">
+          <svg
+            className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-slate-500 pointer-events-none"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+            />
+          </svg>
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="imei yoki abitur_id qidirish..."
+            aria-label="imei yoki abitur_id bo'yicha qidirish"
+            className="h-9 w-full pl-9 pr-8 rounded-xl border border-gray-300 dark:border-slate-600 bg-surface dark:bg-slate-800 text-[13px] text-gray-900 dark:text-slate-100 placeholder-gray-400 dark:placeholder-slate-500 focus:border-primary-500 focus:ring-4 focus:ring-primary-500/15 outline-none transition-all"
+          />
+          {query && (
+            <button
+              type="button"
+              onClick={() => setQuery("")}
+              aria-label="Qidiruvni tozalash"
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:text-slate-500 dark:hover:text-slate-300 transition-colors"
+            >
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M6 18L18 6M6 6l12 12"
+                />
+              </svg>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Gorizontal scroll — kenglikka sig'magan ustunlar uchun */}
@@ -649,11 +717,21 @@ function PreviewTable({
             </tr>
           </thead>
           <tbody className="font-mono">
-            {shown.map((r, i) => (
-              <tr
-                key={start + i}
-                className="border-b border-gray-100 dark:border-slate-800/70 last:border-0"
-              >
+            {shown.length === 0 ? (
+              <tr>
+                <td
+                  colSpan={COLUMNS.length + 1}
+                  className="px-4 py-8 text-center text-gray-400 dark:text-slate-500"
+                >
+                  {q ? "Qidiruv bo'yicha topilmadi" : "Ma'lumot yo'q"}
+                </td>
+              </tr>
+            ) : (
+              shown.map((r, i) => (
+                <tr
+                  key={start + i}
+                  className="border-b border-gray-100 dark:border-slate-800/70 last:border-0"
+                >
                 <td className="px-4 py-2 align-top whitespace-nowrap text-gray-400 dark:text-slate-500 tabular-nums">
                   {start + i + 1}
                 </td>
@@ -679,8 +757,9 @@ function PreviewTable({
                     </span>
                   )}
                 </td>
-              </tr>
-            ))}
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>
