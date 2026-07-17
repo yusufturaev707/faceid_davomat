@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   analyzeResultsApi,
+  exportResultAnalysisApi,
   getResultAnalysisSessionsApi,
   getTestsListApi,
   type ResultAnalysisItem,
@@ -130,6 +131,7 @@ export default function ResultAnalysisPage() {
 
   const [result, setResult] = useState<ResultAnalysisResponse | null>(null);
   const [loading, setLoading] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Testlar (faqat aktiv, id bo'yicha o'sish tartibida).
@@ -220,14 +222,26 @@ export default function ResultAnalysisPage() {
     () => parsedRows.reduce((n, r) => n + (r.isDeleted ? 1 : 0), 0),
     [parsedRows],
   );
+  // "natija chiqqan" = o'chirilmagan VA common_ball bo'sh emas.
+  const hasResultCount = useMemo(
+    () =>
+      parsedRows.reduce(
+        (n, r) => n + (!r.isDeleted && r.common_ball.trim() ? 1 : 0),
+        0,
+      ),
+    [parsedRows],
+  );
 
-  // Backend faqat solishtiruvga kerakli maydonlarni oladi (imei, tday, deleted).
+  // Backend solishtiruv + ko'rsatish uchun maydonlarni oladi.
   const analysisRows: ResultAnalysisRow[] = useMemo(
     () =>
       parsedRows.map((r) => ({
         imei: r.imei,
+        abitur_id: r.abitur_id || null,
         tday: r.tday || null,
+        common_ball: r.common_ball || null,
         deleted: r.isDeleted,
+        deleted_raw: r.deleted || null,
       })),
     [parsedRows],
   );
@@ -268,6 +282,24 @@ export default function ResultAnalysisPage() {
   const handleModeChange = (v: string) => {
     setMode(v as ResultAnalysisMode);
     setResult(null);
+  };
+
+  const handleExport = async () => {
+    if (!mode || !scopeReady) return;
+    setExporting(true);
+    setError(null);
+    try {
+      await exportResultAnalysisApi({
+        test_session_id: Number(sessionId),
+        day: daySel === DAY_ALL ? null : daySel,
+        mode,
+        rows: analysisRows,
+      });
+    } catch (err) {
+      setError(extractErrorMessage(err));
+    } finally {
+      setExporting(false);
+    }
   };
 
   const handleReset = () => {
@@ -395,7 +427,11 @@ export default function ResultAnalysisPage() {
 
             {/* Jonli tekislangan ko'rinish (pagination bilan) */}
             {parsedRows.length > 0 && (
-              <PreviewTable rows={parsedRows} deletedCount={deletedCount} />
+              <PreviewTable
+                rows={parsedRows}
+                hasResultCount={hasResultCount}
+                deletedCount={deletedCount}
+              />
             )}
 
             {/* Tahlil turi + tugmalar */}
@@ -481,7 +517,13 @@ export default function ResultAnalysisPage() {
       )}
 
       {/* Natija */}
-      {result && <ResultTable result={result} />}
+      {result && (
+        <ResultTable
+          result={result}
+          onExport={handleExport}
+          exporting={exporting}
+        />
+      )}
     </div>
   );
 }
@@ -520,9 +562,11 @@ function Field({
 
 function PreviewTable({
   rows,
+  hasResultCount,
   deletedCount,
 }: {
   rows: PreviewRow[];
+  hasResultCount: number;
   deletedCount: number;
 }) {
   const [page, setPage] = useState(1);
@@ -545,7 +589,7 @@ function PreviewTable({
         </span>
         <span className="badge-info">{total.toLocaleString()} qator</span>
         <span className="badge-success">
-          {(total - deletedCount).toLocaleString()} natija chiqqan
+          {hasResultCount.toLocaleString()} natija chiqqan
         </span>
         {deletedCount > 0 && (
           <span className="badge-warning">
@@ -641,7 +685,15 @@ function Cell({
 
 /* ──────────────── Natija jadvali ──────────────── */
 
-function ResultTable({ result }: { result: ResultAnalysisResponse }) {
+function ResultTable({
+  result,
+  onExport,
+  exporting,
+}: {
+  result: ResultAnalysisResponse;
+  onExport: () => void;
+  exporting: boolean;
+}) {
   const [page, setPage] = useState(1);
   const total = result.items.length;
   const pages = Math.max(1, Math.ceil(total / RESULT_PAGE_SIZE));
@@ -656,18 +708,48 @@ function ResultTable({ result }: { result: ResultAnalysisResponse }) {
 
   return (
     <div className="space-y-4 animate-fade-in">
-      {/* Diagnostika */}
-      <div className="flex flex-wrap gap-2">
+      {/* Diagnostika + eksport */}
+      <div className="flex flex-wrap items-center gap-2">
         <Stat label="Ko'lamdagi talabalar" value={result.scope_total} />
         <Stat label="Joylangan imei" value={result.pasted_total} />
         <Stat label="Natija chiqqan" value={result.pasted_result_count} />
         <Stat label="Topildi" value={result.count} highlight />
+        <button
+          type="button"
+          onClick={onExport}
+          disabled={exporting || total === 0}
+          className="btn-secondary ml-auto whitespace-nowrap"
+        >
+          {exporting ? (
+            <>
+              <span className="w-4 h-4 spinner" />
+              Yuklanmoqda...
+            </>
+          ) : (
+            <>
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3"
+                />
+              </svg>
+              Excelga yuklab olish
+            </>
+          )}
+        </button>
       </div>
 
       <div className="glass-card p-0 overflow-hidden">
         {/* Gorizontal scroll — kenglikka sig'magan ustunlar uchun */}
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[860px] text-sm">
+          <table className="w-full min-w-[1120px] text-sm">
             <thead>
               <tr className="text-left text-[11px] uppercase tracking-[0.08em] text-gray-500 dark:text-slate-400 border-b border-gray-200 dark:border-slate-700 bg-gray-50/60 dark:bg-slate-800/40">
                 <th className="px-4 py-3 font-semibold whitespace-nowrap">#</th>
@@ -693,13 +775,22 @@ function ResultTable({ result }: { result: ResultAnalysisResponse }) {
                 <th className="px-4 py-3 font-semibold whitespace-nowrap">
                   Smena
                 </th>
+                <th className="px-4 py-3 font-semibold whitespace-nowrap">
+                  abitur_id
+                </th>
+                <th className="px-4 py-3 font-semibold whitespace-nowrap">
+                  tday
+                </th>
+                <th className="px-4 py-3 font-semibold whitespace-nowrap">
+                  deleted
+                </th>
               </tr>
             </thead>
             <tbody>
               {total === 0 ? (
                 <tr>
                   <td
-                    colSpan={9}
+                    colSpan={12}
                     className="px-4 py-12 text-center text-gray-400 dark:text-slate-500"
                   >
                     Nomuvofiqlik topilmadi
@@ -752,6 +843,21 @@ function Row({ idx, it }: { idx: number; it: ResultAnalysisItem }) {
       </td>
       <td className="px-4 py-2.5 text-gray-800 dark:text-slate-200 whitespace-nowrap">
         {it.smena_name || "—"}
+      </td>
+      <td className="px-4 py-2.5 font-mono text-[12.5px] text-gray-700 dark:text-slate-300 whitespace-nowrap">
+        {it.abitur_id || "—"}
+      </td>
+      <td className="px-4 py-2.5 text-gray-800 dark:text-slate-200 tabular-nums whitespace-nowrap">
+        {formatDay(it.tday)}
+      </td>
+      <td className="px-4 py-2.5 whitespace-nowrap">
+        {it.deleted == null || it.deleted === "" ? (
+          <span className="text-gray-300 dark:text-slate-600">—</span>
+        ) : (
+          <span className="font-mono text-[12.5px] text-gray-700 dark:text-slate-300">
+            {it.deleted}
+          </span>
+        )}
       </td>
     </tr>
   );

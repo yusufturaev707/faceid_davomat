@@ -6,7 +6,10 @@ talabalar bilan `imei` bo'yicha solishtirib, nomuvofiqliklarni topadi
 huquqiga ega foydalanuvchilar uchun.
 """
 
+from io import BytesIO
+
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.core.permissions import P
@@ -18,6 +21,7 @@ from app.schemas.result_analysis import (
     ResultAnalysisResponse,
     ScopeSession,
 )
+from app.services.result_analysis_excel import build_result_analysis_excel
 
 router = APIRouter()
 
@@ -46,4 +50,31 @@ def analyze(
         day=body.day,
         mode=body.mode,
         rows=body.rows,
+    )
+
+
+@router.post("/export")
+def export(
+    body: ResultAnalysisRequest,
+    db: Session = Depends(get_db),
+    _: User = Depends(_ANALYZE),
+) -> StreamingResponse:
+    """Tahlil natijasini .xlsx qilib qaytaradi (jadval bilan bir xil ustunlar)."""
+    resp = crud.analyze_results(
+        db,
+        test_session_id=body.test_session_id,
+        day=body.day,
+        mode=body.mode,
+        rows=body.rows,
+    )
+    content = build_result_analysis_excel(resp)
+    return StreamingResponse(
+        BytesIO(content),
+        media_type=(
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        ),
+        headers={
+            "Content-Disposition": 'attachment; filename="natija_tahlil.xlsx"',
+            "Cache-Control": "no-store",
+        },
     )

@@ -70,8 +70,9 @@ def get_scope_sessions(db: Session, *, test_id: int) -> list[dict]:
     ]
 
 
-def _scope_item(row) -> ResultAnalysisItem:
-    """FaceID talaba qatoridan natija jadvali elementini yasaydi."""
+def _scope_item(row, pasted: dict | None) -> ResultAnalysisItem:
+    """FaceID talaba qatori + (imei bo'yicha) tashqi natija ma'lumotidan
+    natija jadvali elementini yasaydi."""
     return ResultAnalysisItem(
         last_name=row.last_name,
         first_name=row.first_name,
@@ -81,6 +82,9 @@ def _scope_item(row) -> ResultAnalysisItem:
         zone_name=row.zone_name,
         test_day=row.test_day.isoformat() if row.test_day else None,
         smena_name=row.smena_name,
+        abitur_id=pasted.get("abitur_id") if pasted else None,
+        tday=pasted.get("tday") if pasted else None,
+        deleted=pasted.get("deleted") if pasted else None,
     )
 
 
@@ -93,18 +97,30 @@ def analyze_results(
     rows: list[ResultRow],
 ) -> ResultAnalysisResponse:
     # 1) Tashqi natija qatorlarini imei bo'yicha indekslaymiz.
-    has_result_imeis: set[str] = set()  # "natija chiqqan" (deleted=False)
+    #    "natija chiqqan" (result produced) = imei mavjud VA `deleted` yolg'on VA
+    #    `common_ball` bo'sh emas. Aks holda "natija chiqmagan".
+    has_result_imeis: set[str] = set()
     all_pasted_imeis: set[str] = set()
-    tday_by_imei: dict[str, str] = {}
+    # imei -> ko'rsatish uchun vakil qator (abitur_id, tday, deleted). Bir imei
+    # bir necha marta uchrasa, natija chiqqan (is_res) qatori ustunroq.
+    pasted_by_imei: dict[str, dict] = {}
     for r in rows:
         imei = _norm(r.imei)
         if not imei:
             continue
         all_pasted_imeis.add(imei)
-        if not r.deleted:
+        has_ball = bool((r.common_ball or "").strip())
+        is_res = not r.deleted and has_ball
+        if is_res:
             has_result_imeis.add(imei)
-            if imei not in tday_by_imei and r.tday:
-                tday_by_imei[imei] = r.tday.strip()
+        prev = pasted_by_imei.get(imei)
+        if prev is None or (is_res and not prev["is_res"]):
+            pasted_by_imei[imei] = {
+                "abitur_id": (r.abitur_id or "").strip() or None,
+                "tday": (r.tday or "").strip() or None,
+                "deleted": (r.deleted_raw or "").strip() or None,
+                "is_res": is_res,
+            }
 
     # 2) Tanlangan ko'lam bo'yicha FaceID talabalari.
     #    Ko'lam = test sessiya (+ ixtiyoriy bitta test kuni; `day=None` bo'lsa
@@ -112,6 +128,7 @@ def analyze_results(
     stmt = (
         select(
             Student.imei,
+            Student.is_entered,
             Student.is_cheating,
             Student.last_name,
             Student.first_name,
@@ -130,27 +147,29 @@ def analyze_results(
     if day is not None:
         stmt = stmt.where(TestSessionSmena.day == day)
     scope_rows = db.execute(stmt).all()
-    scope_imeis: set[str] = {_norm(r.imei) for r in scope_rows if _norm(r.imei)}
 
     items: list[ResultAnalysisItem] = []
 
     if mode == AnalysisMode.IN_FACE_NOT_EXCLUDED_NO_RESULT:
-        # Faceda bor + chetlatilmagan + natija chiqmagan
+        # Kelgan (is_entered=True) + chetlatilmagan (is_cheating=False) +
+        # natija chiqmagan.
         for r in scope_rows:
-            if not r.is_cheating and _norm(r.imei) not in has_result_imeis:
-                items.append(_scope_item(r))
+            imei = _norm(r.imei)
+            if r.is_entered and not r.is_cheating and imei not in has_result_imeis:
+                items.append(_scope_item(r, pasted_by_imei.get(imei)))
     elif mode == AnalysisMode.IN_FACE_EXCLUDED_HAS_RESULT:
-        # Faceda bor + chetlatilgan + natija chiqqan
+        # Kelgan (is_entered=True) + chetlatilgan (is_cheating=True) +
+        # natija chiqqan.
         for r in scope_rows:
-            if r.is_cheating and _norm(r.imei) in has_result_imeis:
-                items.append(_scope_item(r))
+            imei = _norm(r.imei)
+            if r.is_entered and r.is_cheating and imei in has_result_imeis:
+                items.append(_scope_item(r, pasted_by_imei.get(imei)))
     else:  # AnalysisMode.NOT_IN_FACE_HAS_RESULT
-        # Faceda yo'q + natija chiqqan — talaba ko'lamda topilmadi, shuning uchun
-        # faqat imei va natijadagi test kuni (tday) ma'lum.
-        for imei in sorted(has_result_imeis - scope_imeis):
-            items.append(
-                ResultAnalysisItem(imei=imei, test_day=tday_by_imei.get(imei))
-            )
+        # Kelmagan (is_entered=False) + natija chiqqan.
+        for r in scope_rows:
+            imei = _norm(r.imei)
+            if not r.is_entered and imei in has_result_imeis:
+                items.append(_scope_item(r, pasted_by_imei.get(imei)))
 
     return ResultAnalysisResponse(
         mode=mode,

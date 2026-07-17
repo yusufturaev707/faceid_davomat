@@ -40,14 +40,20 @@ class ResultRow(BaseModel):
     """Textarea'ga joylangan bitta natija qatoridan tahlil uchun kerakli maydonlar.
 
     Xom qatorda `imei, abitur_id, img, common_ball, tday, deleted` ustunlari
-    bo'ladi — frontend faqat solishtiruvga kerak bo'lganlarini (imei, tday,
-    deleted) yuboradi. `deleted=True` bo'lsa natija o'chirilgan deb hisoblanadi
-    (ya'ni "natija chiqmagan").
+    bo'ladi — frontend solishtiruvga kerak bo'lganlarini (imei, tday,
+    common_ball, deleted) yuboradi.
+
+    "natija chiqqan" (result produced) — imei mavjud VA `deleted` yolg'on VA
+    `common_ball` bo'sh emas. Aks holda ("imei yo'q" / `deleted=-1` /
+    `common_ball` null) — "natija chiqmagan".
     """
 
     imei: str | None = Field(default=None, max_length=64)
+    abitur_id: str | None = Field(default=None, max_length=64)
     tday: str | None = Field(default=None, max_length=32)
-    deleted: bool = False
+    common_ball: str | None = Field(default=None, max_length=32)
+    deleted: bool = False  # tahlil mantiqi uchun (parsed)
+    deleted_raw: str | None = Field(default=None, max_length=32)  # ko'rsatish uchun
 
 
 class ResultAnalysisRequest(BaseModel):
@@ -67,8 +73,12 @@ class ResultAnalysisItem(BaseModel):
     imei: str | None = None
     region_name: str | None = None
     zone_name: str | None = None
-    test_day: str | None = None
+    test_day: str | None = None  # FaceID bazasidagi test kuni (TestSessionSmena.day)
     smena_name: str | None = None
+    # Tashqi natija tizimidan (imei bo'yicha moslashtirilgan) qo'shimcha ustunlar:
+    abitur_id: str | None = None
+    tday: str | None = None  # natija tizimidagi test kuni
+    deleted: str | None = None  # natija tizimidagi deleted (xom qiymat)
 
 
 class ResultAnalysisResponse(BaseModel):

@@ -1130,8 +1130,11 @@ export type ResultAnalysisMode =
 /** Textarea'dan olingan bitta natija qatori (solishtiruvga kerakli maydonlar). */
 export interface ResultAnalysisRow {
   imei: string | null;
+  abitur_id: string | null;
   tday: string | null;
-  deleted: boolean;
+  common_ball: string | null;
+  deleted: boolean; // tahlil mantiqi uchun (parsed)
+  deleted_raw: string | null; // ko'rsatish uchun (xom qiymat)
 }
 
 export interface ResultAnalysisRequest {
@@ -1150,6 +1153,9 @@ export interface ResultAnalysisItem {
   zone_name: string | null;
   test_day: string | null;
   smena_name: string | null;
+  abitur_id: string | null;
+  tday: string | null;
+  deleted: string | null;
 }
 
 export interface ResultAnalysisResponse {
@@ -1187,4 +1193,39 @@ export async function analyzeResultsApi(
     data,
   );
   return res.data;
+}
+
+/** Tahlil natijasini .xlsx qilib yuklab olish (brauzer faylni saqlaydi). */
+export async function exportResultAnalysisApi(
+  data: ResultAnalysisRequest,
+): Promise<void> {
+  try {
+    const res = await apiClient.post("/result-analysis/export", data, {
+      responseType: "blob",
+    });
+    const cd = (res.headers["content-disposition"] as string | undefined) ?? "";
+    const match = /filename="?([^";]+)"?/.exec(cd);
+    const filename = match ? match[1] : "natija_tahlil.xlsx";
+
+    const url = URL.createObjectURL(res.data);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    // Xato javob blob ko'rinishida keladi — ichidagi {detail} ni o'qiymiz.
+    const data2 = (err as { response?: { data?: unknown } })?.response?.data;
+    if (data2 instanceof Blob) {
+      try {
+        const parsed = JSON.parse(await data2.text());
+        throw new Error(parsed.detail || "Eksport amalga oshmadi");
+      } catch (e) {
+        if (e instanceof Error && e.message) throw e;
+      }
+    }
+    throw err;
+  }
 }
