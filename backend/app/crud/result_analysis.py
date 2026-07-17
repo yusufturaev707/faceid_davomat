@@ -83,6 +83,7 @@ def _scope_item(row, pasted: dict | None) -> ResultAnalysisItem:
         test_day=row.test_day.isoformat() if row.test_day else None,
         smena_name=row.smena_name,
         abitur_id=pasted.get("abitur_id") if pasted else None,
+        img=pasted.get("img") if pasted else None,
         tday=pasted.get("tday") if pasted else None,
         deleted=pasted.get("deleted") if pasted else None,
     )
@@ -117,6 +118,7 @@ def analyze_results(
         if prev is None or (is_res and not prev["is_res"]):
             pasted_by_imei[imei] = {
                 "abitur_id": (r.abitur_id or "").strip() or None,
+                "img": (r.img or "").strip() or None,
                 "tday": (r.tday or "").strip() or None,
                 "deleted": (r.deleted_raw or "").strip() or None,
                 "is_res": is_res,

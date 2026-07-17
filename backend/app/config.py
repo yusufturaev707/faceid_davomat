@@ -92,6 +92,10 @@ class Settings(BaseSettings):
     THUMBNAIL_SIZE: int
     WEBP_QUALITY: int
 
+    # Tashqi natija tizimidagi rasm bazasi URL'i. Natija tahlilida `img` ustuni
+    # qiymati shu bazaga qo'shilib to'liq rasm URL'i hosil qilinadi.
+    BASE_IMG_URL: str = ""
+
     # ML Inference
     MAX_CONCURRENT_INFERENCE: int
     INFERENCE_TIMEOUT_SECONDS: float

@@ -1006,6 +1006,46 @@ export async function deleteCheatingLogApi(id: number): Promise<void> {
   await apiClient.delete(`/students/cheating-logs/${id}`);
 }
 
+/**
+ * Chetlatilganlar ro'yxatini joriy filtrlar bo'yicha Excel (.xlsx) ga eksport
+ * qilib yuklab olish. Parametrlar `getCheatingLogsApi` bilan bir xil (page /
+ * per_page dan tashqari). Brauzer faylni saqlaydi.
+ */
+export async function exportCheatingLogsApi(
+  params: Record<string, string | number>,
+): Promise<void> {
+  try {
+    const res = await apiClient.get("/students/cheating-logs/export", {
+      params,
+      responseType: "blob",
+    });
+    const cd = (res.headers["content-disposition"] as string | undefined) ?? "";
+    const match = /filename="?([^";]+)"?/.exec(cd);
+    const filename = match ? match[1] : "chetlatilganlar.xlsx";
+
+    const url = URL.createObjectURL(res.data);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    // Xato javob blob ko'rinishida keladi — ichidagi {detail} ni o'qiymiz.
+    const data = (err as { response?: { data?: unknown } })?.response?.data;
+    if (data instanceof Blob) {
+      try {
+        const parsed = JSON.parse(await data.text());
+        throw new Error(parsed.detail || "Eksport amalga oshmadi");
+      } catch (e) {
+        if (e instanceof Error && e.message) throw e;
+      }
+    }
+    throw err;
+  }
+}
+
 // === Permissions API ===
 export async function getPermissionsApi(): Promise<import("./interfaces").PermissionResponse[]> {
   const res = await apiClient.get("/permissions");
@@ -1131,6 +1171,7 @@ export type ResultAnalysisMode =
 export interface ResultAnalysisRow {
   imei: string | null;
   abitur_id: string | null;
+  img: string | null;
   tday: string | null;
   common_ball: string | null;
   deleted: boolean; // tahlil mantiqi uchun (parsed)
@@ -1154,6 +1195,7 @@ export interface ResultAnalysisItem {
   test_day: string | null;
   smena_name: string | null;
   abitur_id: string | null;
+  img: string | null;
   tday: string | null;
   deleted: string | null;
 }
@@ -1172,6 +1214,16 @@ export interface ResultAnalysisScopeSession {
   name: string;
   number: number;
   days: string[]; // ISO "YYYY-MM-DD", o'sish tartibida
+}
+
+/** Frontend uchun runtime sozlamalar (rasm bazasi URL'i). */
+export async function getResultAnalysisConfigApi(): Promise<{
+  base_img_url: string;
+}> {
+  const res = await apiClient.get<{ base_img_url: string }>(
+    "/result-analysis/config",
+  );
+  return res.data;
 }
 
 /** Test bo'yicha aktiv sessiyalar + test kunlari (forma ko'lam tanlovi uchun). */

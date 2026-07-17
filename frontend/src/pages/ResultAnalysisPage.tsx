@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   analyzeResultsApi,
   exportResultAnalysisApi,
+  getResultAnalysisConfigApi,
   getResultAnalysisSessionsApi,
   getTestsListApi,
   type ResultAnalysisItem,
@@ -13,6 +15,12 @@ import {
 import Md3Select, { type Md3Option } from "../components/Md3Select";
 import Pagination from "../components/Pagination";
 import { extractErrorMessage } from "../utils/errorMessage";
+
+/** BASE_IMG_URL va img qiymatini bitta URL ga birlashtiradi. */
+function buildImgUrl(base: string, img: string | null | undefined): string {
+  if (!base || !img) return "";
+  return `${base.replace(/\/+$/, "")}/${img.replace(/^\/+/, "")}`;
+}
 
 /**
  * Natija uchun tahlil.
@@ -134,6 +142,13 @@ export default function ResultAnalysisPage() {
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [baseImgUrl, setBaseImgUrl] = useState("");
+  const [modalUrl, setModalUrl] = useState<string | null>(null);
+  const viewImage = (img: string | null | undefined) => {
+    const url = buildImgUrl(baseImgUrl, img);
+    if (url) setModalUrl(url);
+  };
+
   // Testlar (faqat aktiv, id bo'yicha o'sish tartibida).
   useEffect(() => {
     let alive = true;
@@ -149,6 +164,13 @@ export default function ResultAnalysisPage() {
         );
       } catch (err) {
         if (alive) setError(extractErrorMessage(err));
+      }
+      // Rasm bazasi URL'i — bo'lmasa rasm ko'rish o'chadi (jimgina).
+      try {
+        const cfg = await getResultAnalysisConfigApi();
+        if (alive) setBaseImgUrl(cfg.base_img_url || "");
+      } catch {
+        /* e'tiborsiz */
       }
     })();
     return () => {
@@ -238,6 +260,7 @@ export default function ResultAnalysisPage() {
       parsedRows.map((r) => ({
         imei: r.imei,
         abitur_id: r.abitur_id || null,
+        img: r.img || null,
         tday: r.tday || null,
         common_ball: r.common_ball || null,
         deleted: r.isDeleted,
@@ -431,6 +454,8 @@ export default function ResultAnalysisPage() {
                 rows={parsedRows}
                 hasResultCount={hasResultCount}
                 deletedCount={deletedCount}
+                canViewImg={!!baseImgUrl}
+                onViewImage={viewImage}
               />
             )}
 
@@ -522,8 +547,13 @@ export default function ResultAnalysisPage() {
           result={result}
           onExport={handleExport}
           exporting={exporting}
+          canViewImg={!!baseImgUrl}
+          onViewImage={viewImage}
         />
       )}
+
+      {/* Rasm modali */}
+      <ImageModal url={modalUrl} onClose={() => setModalUrl(null)} />
     </div>
   );
 }
@@ -564,10 +594,14 @@ function PreviewTable({
   rows,
   hasResultCount,
   deletedCount,
+  canViewImg,
+  onViewImage,
 }: {
   rows: PreviewRow[];
   hasResultCount: number;
   deletedCount: number;
+  canViewImg: boolean;
+  onViewImage: (img: string) => void;
 }) {
   const [page, setPage] = useState(1);
   const total = rows.length;
@@ -625,7 +659,13 @@ function PreviewTable({
                 </td>
                 <Cell v={r.imei} strong />
                 <Cell v={r.abitur_id} />
-                <Cell v={r.img} truncate />
+                <td className="px-4 py-2 align-top whitespace-nowrap">
+                  <ImgViewButton
+                    img={r.img}
+                    canView={canViewImg}
+                    onView={onViewImage}
+                  />
+                </td>
                 <Cell v={r.common_ball} />
                 <Cell v={r.tday} />
                 <td className="px-4 py-2 align-top whitespace-nowrap">
@@ -689,10 +729,14 @@ function ResultTable({
   result,
   onExport,
   exporting,
+  canViewImg,
+  onViewImage,
 }: {
   result: ResultAnalysisResponse;
   onExport: () => void;
   exporting: boolean;
+  canViewImg: boolean;
+  onViewImage: (img: string) => void;
 }) {
   const [page, setPage] = useState(1);
   const total = result.items.length;
@@ -749,7 +793,7 @@ function ResultTable({
       <div className="glass-card p-0 overflow-hidden">
         {/* Gorizontal scroll — kenglikka sig'magan ustunlar uchun */}
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1120px] text-sm">
+          <table className="w-full min-w-[1240px] text-sm">
             <thead>
               <tr className="text-left text-[11px] uppercase tracking-[0.08em] text-gray-500 dark:text-slate-400 border-b border-gray-200 dark:border-slate-700 bg-gray-50/60 dark:bg-slate-800/40">
                 <th className="px-4 py-3 font-semibold whitespace-nowrap">#</th>
@@ -784,13 +828,16 @@ function ResultTable({
                 <th className="px-4 py-3 font-semibold whitespace-nowrap">
                   deleted
                 </th>
+                <th className="px-4 py-3 font-semibold whitespace-nowrap">
+                  Rasm
+                </th>
               </tr>
             </thead>
             <tbody>
               {total === 0 ? (
                 <tr>
                   <td
-                    colSpan={12}
+                    colSpan={13}
                     className="px-4 py-12 text-center text-gray-400 dark:text-slate-500"
                   >
                     Nomuvofiqlik topilmadi
@@ -798,7 +845,13 @@ function ResultTable({
                 </tr>
               ) : (
                 shown.map((it, i) => (
-                  <Row key={start + i} idx={start + i + 1} it={it} />
+                  <Row
+                    key={start + i}
+                    idx={start + i + 1}
+                    it={it}
+                    canViewImg={canViewImg}
+                    onViewImage={onViewImage}
+                  />
                 ))
               )}
             </tbody>
@@ -814,7 +867,17 @@ function ResultTable({
   );
 }
 
-function Row({ idx, it }: { idx: number; it: ResultAnalysisItem }) {
+function Row({
+  idx,
+  it,
+  canViewImg,
+  onViewImage,
+}: {
+  idx: number;
+  it: ResultAnalysisItem;
+  canViewImg: boolean;
+  onViewImage: (img: string) => void;
+}) {
   return (
     <tr className="border-b border-gray-100 dark:border-slate-800 last:border-0 hover:bg-gray-50/70 dark:hover:bg-slate-800/40 transition-colors">
       <td className="px-4 py-2.5 text-gray-400 dark:text-slate-500 tabular-nums">
@@ -859,6 +922,13 @@ function Row({ idx, it }: { idx: number; it: ResultAnalysisItem }) {
           </span>
         )}
       </td>
+      <td className="px-4 py-2.5 whitespace-nowrap">
+        <ImgViewButton
+          img={it.img ?? ""}
+          canView={canViewImg}
+          onView={onViewImage}
+        />
+      </td>
     </tr>
   );
 }
@@ -891,5 +961,180 @@ function Stat({
         {value.toLocaleString()}
       </span>
     </div>
+  );
+}
+
+/* ──────────────── Rasm: tugma + modal ──────────────── */
+
+function ImgViewButton({
+  img,
+  canView,
+  onView,
+}: {
+  img: string;
+  canView: boolean;
+  onView: (img: string) => void;
+}) {
+  if (!img) return <span className="text-gray-300 dark:text-slate-600">—</span>;
+  // Rasm bazasi URL'i sozlanmagan bo'lsa — xom qiymatni ko'rsatamiz.
+  if (!canView) {
+    return (
+      <span
+        className="font-mono text-[12px] text-gray-500 dark:text-slate-400 truncate inline-block max-w-[160px] align-middle"
+        title={img}
+      >
+        {img}
+      </span>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => onView(img)}
+      title={img}
+      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[12.5px] font-medium text-primary-700 dark:text-primary-300 hover:bg-primary-50 dark:hover:bg-primary-900/30 transition-colors"
+    >
+      <svg
+        className="w-4 h-4 shrink-0"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+        />
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+        />
+      </svg>
+      Rasm
+    </button>
+  );
+}
+
+function ImageModal({
+  url,
+  onClose,
+}: {
+  url: string | null;
+  onClose: () => void;
+}) {
+  const [status, setStatus] = useState<"loading" | "loaded" | "error">(
+    "loading",
+  );
+
+  useEffect(() => {
+    if (url) setStatus("loading");
+  }, [url]);
+
+  useEffect(() => {
+    if (!url) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [url, onClose]);
+
+  if (!url) return null;
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-modal-overlay"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+    >
+      <div
+        className="md3-dialog relative w-full max-w-3xl p-3 animate-modal-panel"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-2 pb-2">
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
+            Rasm
+          </h3>
+          <div className="flex items-center gap-1">
+            <a
+              href={url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn-icon"
+              title="Yangi oynada ochish"
+            >
+              <svg
+                className="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+                />
+              </svg>
+            </a>
+            <button
+              type="button"
+              onClick={onClose}
+              className="btn-icon"
+              aria-label="Yopish"
+            >
+              <svg
+                className="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M6 18L18 6M6 6l12 12"
+                />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <div className="relative min-h-[220px] flex items-center justify-center rounded-2xl overflow-hidden bg-gray-50 dark:bg-slate-900">
+          {status === "loading" && (
+            <span className="w-8 h-8 spinner absolute" aria-label="Yuklanmoqda" />
+          )}
+          {status === "error" ? (
+            <div className="py-16 text-center text-sm text-gray-400 dark:text-slate-500">
+              Rasm topilmadi
+            </div>
+          ) : (
+            <img
+              src={url}
+              alt="Rasm"
+              onLoad={() => setStatus("loaded")}
+              onError={() => setStatus("error")}
+              className={`max-h-[75vh] w-auto object-contain transition-opacity duration-200 ${
+                status === "loaded" ? "opacity-100" : "opacity-0"
+              }`}
+            />
+          )}
+        </div>
+
+        <p className="mt-2 px-2 text-[11px] text-gray-400 dark:text-slate-500 break-all">
+          {url}
+        </p>
+      </div>
+    </div>,
+    document.body,
   );
 }

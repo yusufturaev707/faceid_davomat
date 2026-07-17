@@ -33,7 +33,15 @@ _HEADERS = [
     ("abitur_id", 14),
     ("tday", 13),
     ("deleted", 10),
+    ("img (rasm)", 40),
 ]
+
+
+def _img_url(base: str, img: str | None) -> str:
+    """BASE_IMG_URL va img qiymatini bitta URL ga birlashtiradi."""
+    if not base or not img:
+        return ""
+    return f"{base.rstrip('/')}/{img.lstrip('/')}"
 
 _TITLE_FILL = PatternFill("solid", fgColor="1D4ED8")
 _META_FILL = PatternFill("solid", fgColor="2563EB")
@@ -55,7 +63,9 @@ def _fmt_day(value: str | None) -> str:
     return v
 
 
-def build_result_analysis_excel(resp: ResultAnalysisResponse) -> bytes:
+def build_result_analysis_excel(
+    resp: ResultAnalysisResponse, *, base_img_url: str = ""
+) -> bytes:
     wb = Workbook()
     ws = wb.active
     ws.title = "Tahlil"
@@ -97,6 +107,7 @@ def build_result_analysis_excel(resp: ResultAnalysisResponse) -> bytes:
     # Ma'lumot qatorlari
     for idx, it in enumerate(resp.items, start=1):
         row = header_row + idx
+        img_url = _img_url(base_img_url, it.img)
         values = [
             idx,
             it.last_name or "",
@@ -110,6 +121,7 @@ def build_result_analysis_excel(resp: ResultAnalysisResponse) -> bytes:
             it.abitur_id or "",
             _fmt_day(it.tday),
             it.deleted or "",
+            img_url,
         ]
         for i, v in enumerate(values, start=1):
             cell = ws.cell(row, i, v)
@@ -117,6 +129,11 @@ def build_result_analysis_excel(resp: ResultAnalysisResponse) -> bytes:
             cell.alignment = _CENTER if i in (1, 8, 9, 11, 12) else _LEFT
             if idx % 2 == 0:
                 cell.fill = _ZEBRA_FILL
+        # img ustuni — bosiladigan URL havola.
+        if img_url:
+            img_cell = ws.cell(row, ncols)
+            img_cell.hyperlink = img_url
+            img_cell.font = Font(color="1D4ED8", underline="single")
 
     ws.freeze_panes = "A4"
 

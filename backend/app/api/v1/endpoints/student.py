@@ -24,6 +24,7 @@ from app.crud.student import (
     delete_cheating_log,
     delete_student,
     delete_student_log,
+    get_cheating_logs_for_export,
     get_cheating_logs_paginated,
     get_filtered_students,
     get_student,
@@ -269,6 +270,71 @@ def list_cheating_logs(
         page=page,
         per_page=per_page,
         pages=math.ceil(total / per_page) if total else 0,
+    )
+
+
+@router.get("/cheating-logs/export")
+def export_cheating_logs(
+    student_id: int | None = None,
+    search: str | None = Query(
+        None,
+        description="FIO yoki JShShIR (imei) bo'yicha qidiruv (case-insensitive).",
+    ),
+    test_id: int | None = None,
+    region_id: int | None = None,
+    zone_id: int | None = None,
+    smena_id: int | None = Query(
+        None,
+        description="Smena.id (TestSessionSmena.test_smena_id bo'yicha filter).",
+    ),
+    reason_id: int | None = None,
+    reason_type_id: int | None = None,
+    date_from: str | None = Query(
+        None, description="Smena sanasi (YYYY-MM-DD) — boshlanish."
+    ),
+    date_to: str | None = Query(
+        None, description="Smena sanasi (YYYY-MM-DD) — tugash (inclusive)."
+    ),
+    db: Session = Depends(get_db),
+    _: User = Depends(PermissionChecker(P.CHEATING_LOG_READ.code)),
+):
+    """Chetlatilganlar ro'yxatini joriy filtrlar bo'yicha Excel (.xlsx) ga
+    eksport qilib beradi — adminka jadvalidagi ustunlar bilan bir xil."""
+    from datetime import datetime
+
+    from app.services.cheating_logs_excel import build_cheating_logs_excel
+
+    items = get_cheating_logs_for_export(
+        db,
+        student_id=student_id,
+        search=search,
+        test_id=test_id,
+        region_id=region_id,
+        zone_id=zone_id,
+        smena_id=smena_id,
+        reason_id=reason_id,
+        reason_type_id=reason_type_id,
+        date_from=date_from,
+        date_to=date_to,
+    )
+    if not items:
+        raise HTTPException(
+            status_code=404,
+            detail="Tanlangan filtr bo'yicha chetlatilgan topilmadi",
+        )
+
+    content = build_cheating_logs_excel(items, title="Chetlatilganlar ro'yxati")
+    stamp = datetime.now().strftime("%Y%m%d_%H%M")
+    filename = f"chetlatilganlar_{stamp}.xlsx"
+    return StreamingResponse(
+        BytesIO(content),
+        media_type=(
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        ),
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Cache-Control": "no-store",
+        },
     )
 
 

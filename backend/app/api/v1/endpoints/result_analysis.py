@@ -12,11 +12,13 @@ from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.core.permissions import P
 from app.crud import result_analysis as crud
 from app.dependencies import PermissionChecker, get_db
 from app.models.user import User
 from app.schemas.result_analysis import (
+    ResultAnalysisConfig,
     ResultAnalysisRequest,
     ResultAnalysisResponse,
     ScopeSession,
@@ -26,6 +28,12 @@ from app.services.result_analysis_excel import build_result_analysis_excel
 router = APIRouter()
 
 _ANALYZE = PermissionChecker(P.RESULT_ANALYSIS_READ.code)
+
+
+@router.get("/config", response_model=ResultAnalysisConfig)
+def config(_: User = Depends(_ANALYZE)) -> ResultAnalysisConfig:
+    """Frontend uchun runtime sozlamalar (rasm bazasi URL'i)."""
+    return ResultAnalysisConfig(base_img_url=settings.BASE_IMG_URL)
 
 
 @router.get("/sessions", response_model=list[ScopeSession])
@@ -67,7 +75,7 @@ def export(
         mode=body.mode,
         rows=body.rows,
     )
-    content = build_result_analysis_excel(resp)
+    content = build_result_analysis_excel(resp, base_img_url=settings.BASE_IMG_URL)
     return StreamingResponse(
         BytesIO(content),
         media_type=(

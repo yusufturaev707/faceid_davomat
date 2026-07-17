@@ -50,6 +50,7 @@ class ResultRow(BaseModel):
 
     imei: str | None = Field(default=None, max_length=64)
     abitur_id: str | None = Field(default=None, max_length=64)
+    img: str | None = Field(default=None, max_length=512)
     tday: str | None = Field(default=None, max_length=32)
     common_ball: str | None = Field(default=None, max_length=32)
     deleted: bool = False  # tahlil mantiqi uchun (parsed)
@@ -77,8 +78,15 @@ class ResultAnalysisItem(BaseModel):
     smena_name: str | None = None
     # Tashqi natija tizimidan (imei bo'yicha moslashtirilgan) qo'shimcha ustunlar:
     abitur_id: str | None = None
+    img: str | None = None  # natija tizimidagi rasm yo'li (BASE_IMG_URL bilan birlashadi)
     tday: str | None = None  # natija tizimidagi test kuni
     deleted: str | None = None  # natija tizimidagi deleted (xom qiymat)
+
+
+class ResultAnalysisConfig(BaseModel):
+    """Frontend uchun runtime sozlamalar."""
+
+    base_img_url: str
 
 
 class ResultAnalysisResponse(BaseModel):

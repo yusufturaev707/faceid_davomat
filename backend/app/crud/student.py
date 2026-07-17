@@ -1330,6 +1330,42 @@ def get_cheating_logs_paginated(
     return items, total
 
 
+def get_cheating_logs_for_export(
+    db: Session,
+    *,
+    student_id: int | None = None,
+    search: str | None = None,
+    test_id: int | None = None,
+    region_id: int | None = None,
+    zone_id: int | None = None,
+    smena_id: int | None = None,
+    reason_id: int | None = None,
+    reason_type_id: int | None = None,
+    date_from: "str | None" = None,
+    date_to: "str | None" = None,
+) -> list[dict]:
+    """Excel eksporti uchun — filtrlarga mos BARCHA cheating loglar (paginatsiz).
+
+    `get_cheating_logs_paginated` bilan bir xil query/filtr mantig'idan
+    foydalanadi; faqat sahifalash yo'q (katta `per_page`)."""
+    items, _total = get_cheating_logs_paginated(
+        db,
+        page=1,
+        per_page=1_000_000,
+        student_id=student_id,
+        search=search,
+        test_id=test_id,
+        region_id=region_id,
+        zone_id=zone_id,
+        smena_id=smena_id,
+        reason_id=reason_id,
+        reason_type_id=reason_type_id,
+        date_from=date_from,
+        date_to=date_to,
+    )
+    return items
+
+
 def create_cheating_log(db: Session, data: CheatingLogCreate) -> CheatingLog:
     log = CheatingLog(**data.model_dump())
     db.add(log)
