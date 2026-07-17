@@ -6,7 +6,7 @@ talabalar bilan `imei` bo'yicha solishtirib, nomuvofiqliklarni topadi
 huquqiga ega foydalanuvchilar uchun.
 """
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.core.permissions import P
@@ -16,11 +16,22 @@ from app.models.user import User
 from app.schemas.result_analysis import (
     ResultAnalysisRequest,
     ResultAnalysisResponse,
+    ScopeSession,
 )
 
 router = APIRouter()
 
 _ANALYZE = PermissionChecker(P.RESULT_ANALYSIS_READ.code)
+
+
+@router.get("/sessions", response_model=list[ScopeSession])
+def scope_sessions(
+    test_id: int = Query(..., description="Test id"),
+    db: Session = Depends(get_db),
+    _: User = Depends(_ANALYZE),
+) -> list[ScopeSession]:
+    """Test bo'yicha aktiv sessiyalar va ularning test kunlari (forma uchun)."""
+    return crud.get_scope_sessions(db, test_id=test_id)
 
 
 @router.post("/analyze", response_model=ResultAnalysisResponse)
@@ -29,17 +40,10 @@ def analyze(
     db: Session = Depends(get_db),
     _: User = Depends(_ANALYZE),
 ) -> ResultAnalysisResponse:
-    if body.date_from > body.date_to:
-        raise HTTPException(
-            status_code=400,
-            detail="Boshlanish sanasi tugash sanasidan katta bo'lmasin",
-        )
     return crud.analyze_results(
         db,
-        test_id=body.test_id,
-        smena_id=body.smena_id,
-        date_from=body.date_from,
-        date_to=body.date_to,
+        test_session_id=body.test_session_id,
+        day=body.day,
         mode=body.mode,
         rows=body.rows,
     )

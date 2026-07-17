@@ -27,6 +27,15 @@ class AnalysisMode(str, Enum):
     NOT_IN_FACE_HAS_RESULT = "not_in_face_has_result"
 
 
+class ScopeSession(BaseModel):
+    """Formaning ko'lam tanlovi uchun: aktiv test sessiya + uning test kunlari."""
+
+    id: int
+    name: str
+    number: int
+    days: list[str]  # ISO ("YYYY-MM-DD"), o'sish tartibida
+
+
 class ResultRow(BaseModel):
     """Textarea'ga joylangan bitta natija qatoridan tahlil uchun kerakli maydonlar.
 
@@ -42,10 +51,9 @@ class ResultRow(BaseModel):
 
 
 class ResultAnalysisRequest(BaseModel):
-    test_id: int
-    smena_id: int
-    date_from: date
-    date_to: date
+    test_session_id: int
+    # None — "Umumiy" (sessiyaning barcha kunlari); aks holda bitta test kuni.
+    day: date | None = None
     mode: AnalysisMode
     rows: list[ResultRow] = Field(default_factory=list, max_length=300000)
 

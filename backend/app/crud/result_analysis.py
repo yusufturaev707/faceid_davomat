@@ -37,6 +37,39 @@ def _norm(imei: str | None) -> str:
     return (imei or "").strip()
 
 
+def get_scope_sessions(db: Session, *, test_id: int) -> list[dict]:
+    """Berilgan testning aktiv (is_active=True) sessiyalari + har birining
+    noyob test kunlari. Forma ko'lam tanlovi uchun yengil yagona so'rov."""
+    sessions = db.execute(
+        select(TestSession.id, TestSession.name, TestSession.number)
+        .where(TestSession.test_id == test_id, TestSession.is_active.is_(True))
+        .order_by(TestSession.id)
+    ).all()
+    if not sessions:
+        return []
+
+    ids = [s.id for s in sessions]
+    day_rows = db.execute(
+        select(TestSessionSmena.test_session_id, TestSessionSmena.day)
+        .where(TestSessionSmena.test_session_id.in_(ids))
+        .distinct()
+        .order_by(TestSessionSmena.test_session_id, TestSessionSmena.day)
+    ).all()
+    days_map: dict[int, list[str]] = {}
+    for sid, d in day_rows:
+        days_map.setdefault(sid, []).append(d.isoformat())
+
+    return [
+        {
+            "id": s.id,
+            "name": s.name,
+            "number": s.number,
+            "days": days_map.get(s.id, []),
+        }
+        for s in sessions
+    ]
+
+
 def _scope_item(row) -> ResultAnalysisItem:
     """FaceID talaba qatoridan natija jadvali elementini yasaydi."""
     return ResultAnalysisItem(
@@ -54,10 +87,8 @@ def _scope_item(row) -> ResultAnalysisItem:
 def analyze_results(
     db: Session,
     *,
-    test_id: int,
-    smena_id: int,
-    date_from: date,
-    date_to: date,
+    test_session_id: int,
+    day: date | None,
     mode: AnalysisMode,
     rows: list[ResultRow],
 ) -> ResultAnalysisResponse:
@@ -76,6 +107,8 @@ def analyze_results(
                 tday_by_imei[imei] = r.tday.strip()
 
     # 2) Tanlangan ko'lam bo'yicha FaceID talabalari.
+    #    Ko'lam = test sessiya (+ ixtiyoriy bitta test kuni; `day=None` bo'lsa
+    #    sessiyaning barcha kunlari — "Umumiy").
     stmt = (
         select(
             Student.imei,
@@ -89,17 +122,13 @@ def analyze_results(
             TestSessionSmena.day.label("test_day"),
         )
         .join(TestSessionSmena, Student.session_smena_id == TestSessionSmena.id)
-        .join(TestSession, TestSessionSmena.test_session_id == TestSession.id)
         .outerjoin(Zone, Student.zone_id == Zone.id)
         .outerjoin(Region, Zone.region_id == Region.id)
         .outerjoin(Smena, TestSessionSmena.test_smena_id == Smena.id)
-        .where(
-            TestSession.test_id == test_id,
-            TestSessionSmena.test_smena_id == smena_id,
-            TestSessionSmena.day >= date_from,
-            TestSessionSmena.day <= date_to,
-        )
+        .where(TestSessionSmena.test_session_id == test_session_id)
     )
+    if day is not None:
+        stmt = stmt.where(TestSessionSmena.day == day)
     scope_rows = db.execute(stmt).all()
     scope_imeis: set[str] = {_norm(r.imei) for r in scope_rows if _norm(r.imei)}
 

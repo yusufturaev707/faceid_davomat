@@ -1,4 +1,12 @@
-import { useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
+import { createPortal } from "react-dom";
 
 export type Md3Option = {
   value: string;
@@ -16,6 +24,10 @@ export type Md3Option = {
  * Yorug' rejimda ham chiroyli va aniq: outlined trigger + elevatsiyali menyu,
  * hover state-layer, tanlangan element uchun belgi (✓), ixtiyoriy rang nuqtasi.
  * Tashqariga bosish va ESC bilan yopiladi; ixcham (h-9) balandlik.
+ *
+ * Ochilgan menyu `document.body`ga PORTAL orqali `fixed` joylashadi — shu bois
+ * u hech qanday ota-element `overflow`/stacking-context'i yoki keyingi
+ * kartalar/jadvallar ortida qolib ketmaydi (har doim ustda ko'rinadi).
  *
  * Controlled: `value` (string) + `onChange(value)`. Raqamli qiymatlar uchun
  * chaqiruvchi tomon String()/Number() bilan o'rab beradi. Bo'sh tanlov = "".
@@ -45,22 +57,64 @@ export default function Md3Select({
 }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [menuStyle, setMenuStyle] = useState<CSSProperties>({});
   const selected = options.find((o) => o.value === value) ?? null;
+
+  // Menyu joylashuvini trigger tugmasi rect'idan hisoblaymiz (fixed → viewport).
+  const computePosition = useCallback(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const gap = 6;
+    const spaceBelow = window.innerHeight - r.bottom;
+    const spaceAbove = r.top;
+    const openUp = spaceBelow < 260 && spaceAbove > spaceBelow;
+    const maxHeight = Math.min(288, (openUp ? spaceAbove : spaceBelow) - 12);
+    setMenuStyle({
+      position: "fixed",
+      left: Math.round(r.left),
+      width: Math.round(r.width),
+      maxHeight: Math.max(120, maxHeight),
+      zIndex: 9999,
+      ...(openUp
+        ? { bottom: Math.round(window.innerHeight - r.top + gap) }
+        : { top: Math.round(r.bottom + gap) }),
+    });
+  }, []);
+
+  // Ochilganda joylashuvni hisoblab, scroll/resize'da qayta hisoblaymiz.
+  useLayoutEffect(() => {
+    if (!open) return;
+    computePosition();
+    const onScroll = () => computePosition();
+    const onResize = () => computePosition();
+    // capture=true — ichki scroll konteynerlar ham ushlanadi.
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onResize);
+    return () => {
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onResize);
+    };
+  }, [open, computePosition]);
 
   useEffect(() => {
     if (!open) return;
-    const onDocClick = (e: MouseEvent) => {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
+    const onDocPointer = (e: Event) => {
+      const t = e.target as Node;
+      // Trigger yoki menyu ichi bo'lsa yopmaymiz (menyu portalda — alohida ref).
+      if (rootRef.current?.contains(t) || menuRef.current?.contains(t)) return;
+      setOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setOpen(false);
     };
-    document.addEventListener("mousedown", onDocClick);
+    document.addEventListener("mousedown", onDocPointer);
+    document.addEventListener("touchstart", onDocPointer);
     document.addEventListener("keydown", onKey);
     return () => {
-      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("mousedown", onDocPointer);
+      document.removeEventListener("touchstart", onDocPointer);
       document.removeEventListener("keydown", onKey);
     };
   }, [open]);
@@ -69,6 +123,83 @@ export default function Md3Select({
     onChange(v);
     setOpen(false);
   };
+
+  const menu = open ? (
+    <div
+      ref={menuRef}
+      role="listbox"
+      style={menuStyle}
+      className="p-1 rounded-2xl bg-surface dark:bg-slate-800 border border-gray-200/80 dark:border-slate-700/70 shadow-lg shadow-black/10 dark:shadow-black/40 overflow-auto animate-fade-in"
+    >
+      {clearable && (
+        <button
+          type="button"
+          onClick={() => pick("")}
+          className="w-full text-left px-3 py-2 rounded-xl text-[12.5px] text-gray-400 dark:text-slate-500 hover:bg-gray-100 dark:hover:bg-slate-700/50 transition-colors"
+        >
+          {placeholder}
+        </button>
+      )}
+      {options.length === 0 ? (
+        <div className="px-3 py-6 text-center text-[12.5px] text-gray-400 dark:text-slate-500">
+          Variant yo'q
+        </div>
+      ) : (
+        options.map((o) => {
+          const isActive = o.value === value;
+          return (
+            <button
+              key={o.value}
+              type="button"
+              role="option"
+              aria-selected={isActive}
+              disabled={o.disabled}
+              title={o.label}
+              onClick={() => !o.disabled && pick(o.value)}
+              className={`w-full text-left px-3 py-2 rounded-xl flex items-center gap-2 text-[13px] transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                isActive
+                  ? "bg-primary-50 dark:bg-primary-900/30"
+                  : "hover:bg-gray-100 dark:hover:bg-slate-700/50"
+              }`}
+            >
+              {o.dot && (
+                <span
+                  className={`w-2 h-2 rounded-full shrink-0 ${o.dot}`}
+                  aria-hidden
+                />
+              )}
+              <span
+                className={`truncate ${isActive ? "font-semibold" : "font-medium"}`}
+                style={o.color ? { color: o.color } : undefined}
+              >
+                {o.label}
+              </span>
+              {o.sublabel && (
+                <span className="text-gray-400 dark:text-slate-500 text-[12px] shrink-0">
+                  · {o.sublabel}
+                </span>
+              )}
+              {isActive && (
+                <svg
+                  className="w-4 h-4 ml-auto shrink-0 text-primary-600 dark:text-primary-400"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2.5}
+                    d="M5 13l4 4L19 7"
+                  />
+                </svg>
+              )}
+            </button>
+          );
+        })
+      )}
+    </div>
+  ) : null;
 
   return (
     <div ref={rootRef} className={`relative w-full ${className}`}>
@@ -122,80 +253,7 @@ export default function Md3Select({
         />
       </button>
 
-      {open && (
-        <div
-          role="listbox"
-          className="absolute z-50 left-0 right-0 mt-1.5 p-1 rounded-2xl bg-surface dark:bg-slate-800 border border-gray-200/80 dark:border-slate-700/70 shadow-lg shadow-black/10 dark:shadow-black/40 max-h-72 overflow-auto animate-fade-in"
-        >
-          {clearable && (
-            <button
-              type="button"
-              onClick={() => pick("")}
-              className="w-full text-left px-3 py-2 rounded-xl text-[12.5px] text-gray-400 dark:text-slate-500 hover:bg-gray-100 dark:hover:bg-slate-700/50 transition-colors"
-            >
-              {placeholder}
-            </button>
-          )}
-          {options.length === 0 ? (
-            <div className="px-3 py-6 text-center text-[12.5px] text-gray-400 dark:text-slate-500">
-              Variant yo'q
-            </div>
-          ) : (
-            options.map((o) => {
-              const isActive = o.value === value;
-              return (
-                <button
-                  key={o.value}
-                  type="button"
-                  role="option"
-                  aria-selected={isActive}
-                  disabled={o.disabled}
-                  title={o.label}
-                  onClick={() => !o.disabled && pick(o.value)}
-                  className={`w-full text-left px-3 py-2 rounded-xl flex items-center gap-2 text-[13px] transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
-                    isActive
-                      ? "bg-primary-50 dark:bg-primary-900/30"
-                      : "hover:bg-gray-100 dark:hover:bg-slate-700/50"
-                  }`}
-                >
-                  {o.dot && (
-                    <span
-                      className={`w-2 h-2 rounded-full shrink-0 ${o.dot}`}
-                      aria-hidden
-                    />
-                  )}
-                  <span
-                    className={`truncate ${isActive ? "font-semibold" : "font-medium"}`}
-                    style={o.color ? { color: o.color } : undefined}
-                  >
-                    {o.label}
-                  </span>
-                  {o.sublabel && (
-                    <span className="text-gray-400 dark:text-slate-500 text-[12px] shrink-0">
-                      · {o.sublabel}
-                    </span>
-                  )}
-                  {isActive && (
-                    <svg
-                      className="w-4 h-4 ml-auto shrink-0 text-primary-600 dark:text-primary-400"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2.5}
-                        d="M5 13l4 4L19 7"
-                      />
-                    </svg>
-                  )}
-                </button>
-              );
-            })
-          )}
-        </div>
-      )}
+      {menu && createPortal(menu, document.body)}
     </div>
   );
 }

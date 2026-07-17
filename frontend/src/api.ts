@@ -1135,10 +1135,8 @@ export interface ResultAnalysisRow {
 }
 
 export interface ResultAnalysisRequest {
-  test_id: number;
-  smena_id: number;
-  date_from: string; // YYYY-MM-DD
-  date_to: string; // YYYY-MM-DD
+  test_session_id: number;
+  day: string | null; // YYYY-MM-DD; null → "Umumiy" (barcha kunlar)
   mode: ResultAnalysisMode;
   rows: ResultAnalysisRow[];
 }
@@ -1161,6 +1159,24 @@ export interface ResultAnalysisResponse {
   pasted_total: number;
   pasted_result_count: number;
   items: ResultAnalysisItem[];
+}
+
+export interface ResultAnalysisScopeSession {
+  id: number;
+  name: string;
+  number: number;
+  days: string[]; // ISO "YYYY-MM-DD", o'sish tartibida
+}
+
+/** Test bo'yicha aktiv sessiyalar + test kunlari (forma ko'lam tanlovi uchun). */
+export async function getResultAnalysisSessionsApi(
+  testId: number,
+): Promise<ResultAnalysisScopeSession[]> {
+  const res = await apiClient.get<ResultAnalysisScopeSession[]>(
+    "/result-analysis/sessions",
+    { params: { test_id: testId } },
+  );
+  return res.data;
 }
 
 export async function analyzeResultsApi(

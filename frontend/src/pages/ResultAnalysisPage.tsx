@@ -1,25 +1,28 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   analyzeResultsApi,
-  getSmenasListApi,
+  getResultAnalysisSessionsApi,
   getTestsListApi,
   type ResultAnalysisItem,
   type ResultAnalysisMode,
   type ResultAnalysisResponse,
   type ResultAnalysisRow,
+  type ResultAnalysisScopeSession,
 } from "../api";
 import Md3Select, { type Md3Option } from "../components/Md3Select";
+import Pagination from "../components/Pagination";
 import { extractErrorMessage } from "../utils/errorMessage";
 
 /**
  * Natija uchun tahlil.
  *
- * Foydalanuvchi test (aktiv), sana oralig'i va smenani tanlaydi; so'ng tashqi
- * natija tizimidan (Excel/Access) ustunlarni textarea'ga joylaydi:
+ * Oqim: test (id bo'yicha) → shu testning aktiv (status=true) test sessiyasi →
+ * shu sessiyaning test kunlari (oxirida "Umumiy" — barcha kunlar). So'ng tashqi
+ * natija tizimidan (Excel/Access) ustunlar textarea'ga joylanadi:
  *   imei | abitur_id | img | common_ball | tday | deleted   (TAB bilan ajratilgan)
- * Joylangan matn jonli ravishda tekislangan jadvalga ajratiladi — har bir ustun
- * sarlavhasi o'z ma'lumotining kengligiga qarab joylashadi. Backend `imei`
- * bo'yicha FaceID bazasi bilan solishtirib, nomuvofiqliklarni chiqaradi.
+ * Joylangan matn jonli tekislangan jadvalga (pagination bilan) ajratiladi.
+ * Backend `imei` bo'yicha FaceID bazasi bilan solishtirib, nomuvofiqliklarni
+ * qaytaradi (natija jadvali ham pagination + gorizontal scroll bilan).
  */
 
 const COLUMNS = [
@@ -46,8 +49,9 @@ const MODE_OPTIONS: { value: ResultAnalysisMode; label: string }[] = [
   },
 ];
 
-// Jonli ko'rinish jadvalida ko'p bo'lsa ham cheklangan qator ko'rsatiladi.
-const PREVIEW_LIMIT = 50;
+const DAY_ALL = "all"; // "Umumiy" — sessiyaning barcha kunlari
+const PREVIEW_PAGE_SIZE = 20;
+const RESULT_PAGE_SIZE = 25;
 
 // Access/Excel'dan kelishi mumkin bo'lgan "deleted" (o'chirilgan) qiymatlari.
 // Access boolean'ni ko'pincha -1/0 yoki True/False ko'rinishida eksport qiladi.
@@ -114,12 +118,13 @@ function formatDay(value: string | null): string {
 
 export default function ResultAnalysisPage() {
   const [tests, setTests] = useState<Md3Option[]>([]);
-  const [smenas, setSmenas] = useState<Md3Option[]>([]);
-
   const [testId, setTestId] = useState("");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
-  const [smenaId, setSmenaId] = useState("");
+
+  const [sessions, setSessions] = useState<ResultAnalysisScopeSession[]>([]);
+  const [sessionsLoading, setSessionsLoading] = useState(false);
+  const [sessionId, setSessionId] = useState("");
+
+  const [daySel, setDaySel] = useState(""); // "" | DAY_ALL | "YYYY-MM-DD"
   const [mode, setMode] = useState<ResultAnalysisMode | "">("");
   const [pasted, setPasted] = useState("");
 
@@ -127,25 +132,18 @@ export default function ResultAnalysisPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Test (faqat aktiv) va smena ro'yxatlarini yuklaymiz.
+  // Testlar (faqat aktiv, id bo'yicha o'sish tartibida).
   useEffect(() => {
     let alive = true;
     (async () => {
       try {
-        const [testList, smenaList] = await Promise.all([
-          getTestsListApi(),
-          getSmenasListApi(),
-        ]);
+        const testList = await getTestsListApi();
         if (!alive) return;
         setTests(
           testList
             .filter((t) => t.is_active)
+            .sort((a, b) => a.id - b.id)
             .map((t) => ({ value: String(t.id), label: t.name })),
-        );
-        setSmenas(
-          [...smenaList]
-            .sort((a, b) => a.number - b.number)
-            .map((s) => ({ value: String(s.id), label: s.name })),
         );
       } catch (err) {
         if (alive) setError(extractErrorMessage(err));
@@ -156,8 +154,66 @@ export default function ResultAnalysisPage() {
     };
   }, []);
 
-  // Ko'lam to'liq tanlangach textarea/tahlil qismi ochiladi.
-  const scopeReady = Boolean(testId && dateFrom && dateTo && smenaId);
+  // Test tanlanganda — shu testning aktiv (status=true) sessiyalari.
+  useEffect(() => {
+    setSessions([]);
+    setSessionId("");
+    setDaySel("");
+    if (!testId) return;
+    let alive = true;
+    setSessionsLoading(true);
+    getResultAnalysisSessionsApi(Number(testId))
+      .then((res) => {
+        if (alive) setSessions(res);
+      })
+      .catch((err) => {
+        if (alive) setError(extractErrorMessage(err));
+      })
+      .finally(() => {
+        if (alive) setSessionsLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [testId]);
+
+  // Sessiya o'zgarsa — test kuni va undan keyingi hamma narsa tozalanadi.
+  useEffect(() => {
+    setDaySel("");
+    setPasted("");
+    setMode("");
+    setResult(null);
+  }, [sessionId]);
+
+  const sessionOptions: Md3Option[] = useMemo(
+    () =>
+      sessions.map((s) => ({
+        value: String(s.id),
+        label: s.name,
+        sublabel: `#${s.number}`,
+      })),
+    [sessions],
+  );
+
+  const selectedSession = useMemo(
+    () => sessions.find((s) => String(s.id) === sessionId) ?? null,
+    [sessions, sessionId],
+  );
+
+  // Sessiyaning test kunlari (backend o'sish tartibida beradi) + oxirida "Umumiy".
+  const dayOptions: Md3Option[] = useMemo(() => {
+    if (!selectedSession) return [];
+    const opts: Md3Option[] = selectedSession.days.map((d) => ({
+      value: d,
+      label: formatDay(d),
+    }));
+    if (selectedSession.days.length > 0) {
+      opts.push({ value: DAY_ALL, label: "Umumiy (barcha kunlar)" });
+    }
+    return opts;
+  }, [selectedSession]);
+
+  const scopeReady = Boolean(testId && sessionId && daySel);
 
   const parsedRows = useMemo(() => parseRows(pasted), [pasted]);
   const deletedCount = useMemo(
@@ -176,14 +232,7 @@ export default function ResultAnalysisPage() {
     [parsedRows],
   );
 
-  const dateRangeValid = !dateFrom || !dateTo || dateFrom <= dateTo;
-
-  const canSubmit =
-    scopeReady &&
-    !!mode &&
-    analysisRows.length > 0 &&
-    dateRangeValid &&
-    !loading;
+  const canSubmit = scopeReady && !!mode && analysisRows.length > 0 && !loading;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -193,10 +242,8 @@ export default function ResultAnalysisPage() {
     setResult(null);
     try {
       const data = await analyzeResultsApi({
-        test_id: Number(testId),
-        smena_id: Number(smenaId),
-        date_from: dateFrom,
-        date_to: dateTo,
+        test_session_id: Number(sessionId),
+        day: daySel === DAY_ALL ? null : daySel,
         mode,
         rows: analysisRows,
       });
@@ -206,6 +253,21 @@ export default function ResultAnalysisPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Test kuni tanlanganda — undan keyingi hamma narsa tozalanadi.
+  const handleDayChange = (v: string) => {
+    setDaySel(v);
+    setPasted("");
+    setMode("");
+    setResult(null);
+    setError(null);
+  };
+
+  // Tahlil turi tanlanganda — oldingi natija tozalanadi (qayta Tekshirish kerak).
+  const handleModeChange = (v: string) => {
+    setMode(v as ResultAnalysisMode);
+    setResult(null);
   };
 
   const handleReset = () => {
@@ -245,11 +307,11 @@ export default function ResultAnalysisPage() {
       </div>
 
       <form onSubmit={handleSubmit} className="glass-card p-6 sm:p-7 space-y-6">
-        {/* 1-qadam: ko'lam (test + sana oralig'i + smena) */}
+        {/* 1-qadam: ko'lam (test → sessiya → test kuni) */}
         <div className="space-y-4">
           <StepHeader n={1} title="Ko'lamni tanlang" />
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-5 gap-y-5">
-            <Field label="Test (aktiv)">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-5 gap-y-5">
+            <Field label="Test">
               <Md3Select
                 value={testId}
                 onChange={setTestId}
@@ -258,39 +320,37 @@ export default function ResultAnalysisPage() {
                 ariaLabel="Test"
               />
             </Field>
-            <Field label="Sana (dan)">
-              <input
-                type="date"
-                value={dateFrom}
-                max={dateTo || undefined}
-                onChange={(e) => setDateFrom(e.target.value)}
-                className="input-field"
-              />
-            </Field>
-            <Field label="Sana (gacha)">
-              <input
-                type="date"
-                value={dateTo}
-                min={dateFrom || undefined}
-                onChange={(e) => setDateTo(e.target.value)}
-                className="input-field"
-              />
-            </Field>
-            <Field label="Smena">
+            <Field label="Test sessiya (aktiv)">
               <Md3Select
-                value={smenaId}
-                onChange={setSmenaId}
-                options={smenas}
-                placeholder="Smenani tanlang"
-                ariaLabel="Smena"
+                value={sessionId}
+                onChange={setSessionId}
+                options={sessionOptions}
+                placeholder={
+                  !testId
+                    ? "Avval testni tanlang"
+                    : sessionsLoading
+                      ? "Yuklanmoqda..."
+                      : sessionOptions.length === 0
+                        ? "Aktiv sessiya yo'q"
+                        : "Sessiyani tanlang"
+                }
+                disabled={!testId || sessionsLoading || sessionOptions.length === 0}
+                ariaLabel="Test sessiya"
+              />
+            </Field>
+            <Field label="Test kuni">
+              <Md3Select
+                value={daySel}
+                onChange={handleDayChange}
+                options={dayOptions}
+                placeholder={
+                  !sessionId ? "Avval sessiyani tanlang" : "Kunni tanlang"
+                }
+                disabled={!sessionId || dayOptions.length === 0}
+                ariaLabel="Test kuni"
               />
             </Field>
           </div>
-          {!dateRangeValid && (
-            <p className="text-xs text-amber-600 dark:text-amber-400">
-              "Sana (dan)" "Sana (gacha)" dan katta bo'lmasligi kerak
-            </p>
-          )}
         </div>
 
         {/* 2-qadam: ma'lumot joylash + tahlil turi */}
@@ -333,14 +393,9 @@ export default function ResultAnalysisPage() {
               className="input-field font-mono text-[12.5px] leading-relaxed resize-y"
             />
 
-            {/* Jonli tekislangan ko'rinish — ustun sarlavhalari ma'lumot
-                kengligiga qarab joylashadi (haqiqiy jadval) */}
+            {/* Jonli tekislangan ko'rinish (pagination bilan) */}
             {parsedRows.length > 0 && (
-              <PreviewTable
-                rows={parsedRows}
-                total={parsedRows.length}
-                deletedCount={deletedCount}
-              />
+              <PreviewTable rows={parsedRows} deletedCount={deletedCount} />
             )}
 
             {/* Tahlil turi + tugmalar */}
@@ -348,7 +403,7 @@ export default function ResultAnalysisPage() {
               <Field label="Tahlil turi">
                 <Md3Select
                   value={mode}
-                  onChange={(v) => setMode(v as ResultAnalysisMode)}
+                  onChange={handleModeChange}
                   options={MODE_OPTIONS}
                   placeholder="Tahlil turini tanlang"
                   ariaLabel="Tahlil turi"
@@ -465,14 +520,23 @@ function Field({
 
 function PreviewTable({
   rows,
-  total,
   deletedCount,
 }: {
   rows: PreviewRow[];
-  total: number;
   deletedCount: number;
 }) {
-  const shown = rows.slice(0, PREVIEW_LIMIT);
+  const [page, setPage] = useState(1);
+  const total = rows.length;
+  const pages = Math.max(1, Math.ceil(total / PREVIEW_PAGE_SIZE));
+
+  // Ma'lumot o'zgarsa (paste/tahrir) — birinchi sahifaga qaytamiz.
+  useEffect(() => {
+    setPage(1);
+  }, [total]);
+
+  const start = (page - 1) * PREVIEW_PAGE_SIZE;
+  const shown = rows.slice(start, start + PREVIEW_PAGE_SIZE);
+
   return (
     <div className="surface-tonal p-0 overflow-hidden animate-fade-in">
       <div className="flex flex-wrap items-center gap-2 px-4 py-2.5 border-b border-gray-200/70 dark:border-slate-700/60">
@@ -489,36 +553,32 @@ function PreviewTable({
           </span>
         )}
       </div>
+
+      {/* Gorizontal scroll — kenglikka sig'magan ustunlar uchun */}
       <div className="overflow-x-auto">
-        <table className="w-full text-[12.5px]">
+        <table className="w-full min-w-[680px] text-[12.5px]">
           <thead>
             <tr className="text-left text-[10.5px] uppercase tracking-[0.08em] text-gray-500 dark:text-slate-400 border-b border-gray-200/70 dark:border-slate-700/60">
-              <th className="px-4 py-2.5 font-semibold whitespace-nowrap">
-                imei
-              </th>
-              <th className="px-4 py-2.5 font-semibold whitespace-nowrap">
-                abitur_id
-              </th>
-              <th className="px-4 py-2.5 font-semibold whitespace-nowrap">
-                img
-              </th>
-              <th className="px-4 py-2.5 font-semibold whitespace-nowrap">
-                common_ball
-              </th>
-              <th className="px-4 py-2.5 font-semibold whitespace-nowrap">
-                tday
-              </th>
-              <th className="px-4 py-2.5 font-semibold whitespace-nowrap">
-                deleted
-              </th>
+              <th className="px-4 py-2.5 font-semibold whitespace-nowrap">#</th>
+              {COLUMNS.map((c) => (
+                <th
+                  key={c}
+                  className="px-4 py-2.5 font-semibold whitespace-nowrap"
+                >
+                  {c}
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody className="font-mono">
             {shown.map((r, i) => (
               <tr
-                key={i}
+                key={start + i}
                 className="border-b border-gray-100 dark:border-slate-800/70 last:border-0"
               >
+                <td className="px-4 py-2 align-top whitespace-nowrap text-gray-400 dark:text-slate-500 tabular-nums">
+                  {start + i + 1}
+                </td>
                 <Cell v={r.imei} strong />
                 <Cell v={r.abitur_id} />
                 <Cell v={r.img} truncate />
@@ -540,10 +600,10 @@ function PreviewTable({
           </tbody>
         </table>
       </div>
-      {total > PREVIEW_LIMIT && (
-        <div className="px-4 py-2 text-[12px] text-gray-500 dark:text-slate-400 border-t border-gray-200/70 dark:border-slate-700/60">
-          … va yana {(total - PREVIEW_LIMIT).toLocaleString()} qator (tahlilda
-          hammasi hisobga olinadi)
+
+      {pages > 1 && (
+        <div className="px-4 pb-3">
+          <Pagination page={page} pages={pages} onPageChange={setPage} />
         </div>
       )}
     </div>
@@ -582,6 +642,18 @@ function Cell({
 /* ──────────────── Natija jadvali ──────────────── */
 
 function ResultTable({ result }: { result: ResultAnalysisResponse }) {
+  const [page, setPage] = useState(1);
+  const total = result.items.length;
+  const pages = Math.max(1, Math.ceil(total / RESULT_PAGE_SIZE));
+
+  // Har yangi tahlilda birinchi sahifaga qaytamiz.
+  useEffect(() => {
+    setPage(1);
+  }, [result]);
+
+  const start = (page - 1) * RESULT_PAGE_SIZE;
+  const shown = result.items.slice(start, start + RESULT_PAGE_SIZE);
+
   return (
     <div className="space-y-4 animate-fade-in">
       {/* Diagnostika */}
@@ -593,23 +665,38 @@ function ResultTable({ result }: { result: ResultAnalysisResponse }) {
       </div>
 
       <div className="glass-card p-0 overflow-hidden">
+        {/* Gorizontal scroll — kenglikka sig'magan ustunlar uchun */}
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full min-w-[860px] text-sm">
             <thead>
               <tr className="text-left text-[11px] uppercase tracking-[0.08em] text-gray-500 dark:text-slate-400 border-b border-gray-200 dark:border-slate-700 bg-gray-50/60 dark:bg-slate-800/40">
-                <th className="px-4 py-3 font-semibold">#</th>
-                <th className="px-4 py-3 font-semibold">Familiya</th>
-                <th className="px-4 py-3 font-semibold">Ism</th>
-                <th className="px-4 py-3 font-semibold">Sharif</th>
-                <th className="px-4 py-3 font-semibold">IMEI</th>
-                <th className="px-4 py-3 font-semibold">Viloyat</th>
-                <th className="px-4 py-3 font-semibold">Bino</th>
-                <th className="px-4 py-3 font-semibold">Test kuni</th>
-                <th className="px-4 py-3 font-semibold">Smena</th>
+                <th className="px-4 py-3 font-semibold whitespace-nowrap">#</th>
+                <th className="px-4 py-3 font-semibold whitespace-nowrap">
+                  Familiya
+                </th>
+                <th className="px-4 py-3 font-semibold whitespace-nowrap">Ism</th>
+                <th className="px-4 py-3 font-semibold whitespace-nowrap">
+                  Sharif
+                </th>
+                <th className="px-4 py-3 font-semibold whitespace-nowrap">
+                  IMEI
+                </th>
+                <th className="px-4 py-3 font-semibold whitespace-nowrap">
+                  Viloyat
+                </th>
+                <th className="px-4 py-3 font-semibold whitespace-nowrap">
+                  Bino
+                </th>
+                <th className="px-4 py-3 font-semibold whitespace-nowrap">
+                  Test kuni
+                </th>
+                <th className="px-4 py-3 font-semibold whitespace-nowrap">
+                  Smena
+                </th>
               </tr>
             </thead>
             <tbody>
-              {result.items.length === 0 ? (
+              {total === 0 ? (
                 <tr>
                   <td
                     colSpan={9}
@@ -619,11 +706,18 @@ function ResultTable({ result }: { result: ResultAnalysisResponse }) {
                   </td>
                 </tr>
               ) : (
-                result.items.map((it, i) => <Row key={i} idx={i + 1} it={it} />)
+                shown.map((it, i) => (
+                  <Row key={start + i} idx={start + i + 1} it={it} />
+                ))
               )}
             </tbody>
           </table>
         </div>
+        {pages > 1 && (
+          <div className="px-4 pb-4">
+            <Pagination page={page} pages={pages} onPageChange={setPage} />
+          </div>
+        )}
       </div>
     </div>
   );
@@ -635,28 +729,28 @@ function Row({ idx, it }: { idx: number; it: ResultAnalysisItem }) {
       <td className="px-4 py-2.5 text-gray-400 dark:text-slate-500 tabular-nums">
         {idx}
       </td>
-      <td className="px-4 py-2.5 font-medium text-gray-900 dark:text-white">
+      <td className="px-4 py-2.5 font-medium text-gray-900 dark:text-white whitespace-nowrap">
         {it.last_name || "—"}
       </td>
-      <td className="px-4 py-2.5 text-gray-800 dark:text-slate-200">
+      <td className="px-4 py-2.5 text-gray-800 dark:text-slate-200 whitespace-nowrap">
         {it.first_name || "—"}
       </td>
-      <td className="px-4 py-2.5 text-gray-800 dark:text-slate-200">
+      <td className="px-4 py-2.5 text-gray-800 dark:text-slate-200 whitespace-nowrap">
         {it.middle_name || "—"}
       </td>
-      <td className="px-4 py-2.5 font-mono text-[12.5px] text-gray-700 dark:text-slate-300">
+      <td className="px-4 py-2.5 font-mono text-[12.5px] text-gray-700 dark:text-slate-300 whitespace-nowrap">
         {it.imei || "—"}
       </td>
-      <td className="px-4 py-2.5 text-gray-800 dark:text-slate-200">
+      <td className="px-4 py-2.5 text-gray-800 dark:text-slate-200 whitespace-nowrap">
         {it.region_name || "—"}
       </td>
-      <td className="px-4 py-2.5 text-gray-800 dark:text-slate-200">
+      <td className="px-4 py-2.5 text-gray-800 dark:text-slate-200 whitespace-nowrap">
         {it.zone_name || "—"}
       </td>
-      <td className="px-4 py-2.5 text-gray-800 dark:text-slate-200 tabular-nums">
+      <td className="px-4 py-2.5 text-gray-800 dark:text-slate-200 tabular-nums whitespace-nowrap">
         {formatDay(it.test_day)}
       </td>
-      <td className="px-4 py-2.5 text-gray-800 dark:text-slate-200">
+      <td className="px-4 py-2.5 text-gray-800 dark:text-slate-200 whitespace-nowrap">
         {it.smena_name || "—"}
       </td>
     </tr>
