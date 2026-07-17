@@ -869,27 +869,16 @@ export default function StatisticsPage() {
               icon={<UsersIcon />}
             />
             <SummaryCard
-              title="Ishtirok etganlar"
+              title="Kelganlar"
               variant="success"
-              breakdown={deriveParticipation(stats.summary).participated}
+              breakdown={stats.summary.attended}
               icon={<CheckIcon />}
             />
             <SummaryCard
-              title="Ishtirok etmaganlar"
+              title="Kelmaganlar"
               variant="warning"
-              breakdown={deriveParticipation(stats.summary).notParticipated}
+              breakdown={stats.summary.not_attended}
               icon={<XIcon />}
-              extra={
-                <span
-                  title="Shundan testga umuman kelmaganlar (chetlatilmagan)"
-                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md font-medium leading-none bg-white/70 dark:bg-slate-800/60 text-gray-600 dark:text-slate-300 ring-1 ring-gray-200/70 dark:ring-slate-700/60"
-                >
-                  <span className="opacity-80">Kelmagan:</span>
-                  <span className="tabular-nums font-bold">
-                    {stats.summary.not_attended.total.toLocaleString("uz-UZ")}
-                  </span>
-                </span>
-              }
             />
             <CheatingCard cheating={stats.summary.cheating} />
           </div>
@@ -1532,9 +1521,13 @@ function OverviewPanel({
   presence: { onlineReps: number; activeDevices: number } | null;
 }) {
   const t = stats.summary.total.total;
-  const attended = stats.summary.attended.total;
-  const notAttended = stats.summary.not_attended.total;
-  const rate = t > 0 ? Math.round((attended / t) * 1000) / 10 : 0;
+  // Donut/legend endi ISHTIROK ko'rsatkichini ko'rsatadi:
+  //   Ishtirok etdi = Kelganlar − Chetlatilganlar
+  //   Qatnashmadi   = Umumiy − Ishtirok etdi (kelmaganlar + chetlatilganlar)
+  const { participated, notParticipated } = deriveParticipation(stats.summary);
+  const participatedTotal = participated.total;
+  const notParticipatedTotal = notParticipated.total;
+  const rate = t > 0 ? Math.round((participatedTotal / t) * 1000) / 10 : 0;
 
   const buildings = stats.regions.reduce(
     (sum, r) => sum + (r.zones?.length ?? 0),
@@ -1571,10 +1564,10 @@ function OverviewPanel({
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0" />
               <div>
                 <p className="text-base font-bold tabular-nums text-gray-900 dark:text-white leading-none">
-                  {attended.toLocaleString("uz-UZ")}
+                  {participatedTotal.toLocaleString("uz-UZ")}
                 </p>
                 <p className="text-[11px] text-gray-500 dark:text-slate-400 leading-none mt-0.5">
-                  Keldi
+                  Ishtirok etdi
                 </p>
               </div>
             </div>
@@ -1582,10 +1575,10 @@ function OverviewPanel({
               <span className="w-2.5 h-2.5 rounded-full bg-amber-400 shrink-0" />
               <div>
                 <p className="text-base font-bold tabular-nums text-gray-900 dark:text-white leading-none">
-                  {notAttended.toLocaleString("uz-UZ")}
+                  {notParticipatedTotal.toLocaleString("uz-UZ")}
                 </p>
                 <p className="text-[11px] text-gray-500 dark:text-slate-400 leading-none mt-0.5">
-                  Kelmadi
+                  Qatnashmadi
                 </p>
               </div>
             </div>

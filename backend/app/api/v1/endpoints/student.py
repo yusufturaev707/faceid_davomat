@@ -1139,15 +1139,23 @@ def remove_student_attendance_endpoint(
     Desktop operatori (STUDENT_LOG_CREATE ruxsati — davomat loglarini
     yaratuvchi) noto'g'ri qo'shilgan davomatni bekor qilishi uchun. Faqat
     `is_entered` o'zgaradi. Talaba topilmasa 404."""
-    student = remove_student_attendance(db, student_id)
+    student, was_entered = remove_student_attendance(db, student_id)
     if not student:
         raise HTTPException(status_code=404, detail="Talaba topilmadi")
     logger.info(
-        "Davomatdan olindi: student_id=%s user_id=%s",
+        "Davomatdan olindi: student_id=%s user_id=%s was_entered=%s",
         student_id,
         current_user.id,
+        was_entered,
     )
-    return {"status": "ok", "student_id": student_id, "is_entered": False}
+    # `was_entered` — operatsiyadan OLDINgi holat. Desktop shu asosda
+    # "allaqachon davomatda emas edi" degan xabarni ko'rsatadi.
+    return {
+        "status": "ok",
+        "student_id": student_id,
+        "is_entered": False,
+        "was_entered": was_entered,
+    }
 
 
 class UploadImageRequest(BaseModel):

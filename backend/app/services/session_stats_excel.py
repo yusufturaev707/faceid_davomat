@@ -10,19 +10,20 @@
   7+        — har bir viloyat bo'yicha statistika
   oxirgi    — "Жами:" yig'indi qatori
 
-Ustunlar semantikasi (shablon formulalariga mos):
+Ustunlar semantikasi (ustun NOMLARI shablondagidek qoladi — faqat qiymatlar):
   C  Иштирок этадиган абитуриентлар сони  = total
-  D  Иштирок этганлар (сони)              = C - F  (formula)        ← haqiqatda testdan o'tganlar
+  D  Иштирок этганлар (сони)              = attended  ← Kelganlar (is_entered;
+                                            chetlatilganlar ham binoga kelgani
+                                            uchun bunga kiradi)
   E  Иштирок этганлар (%)                 = D*100/C
-  F  Иштирок этмаганлар (сони)            = not_attended + chetlatilgan
+  F  Иштирок этмаганлар (сони)            = C - D  (formula: umumiy − kelganlar)
   G  Иштирок этмаганлар (%)               = F*100/C
   H  Тест синовларида қатнашмаганлар сони = C - D - I - J  (formula)
   I  Четлатилганлар — ҳудудга киришда     = cheating.at_entry
   J  Четлатилганлар — тест жараёнида      = cheating.during_test
 
-`dashboard_stats.attended` chetlatilganlarni ham o'z ichiga oladi, shuning uchun
-"haqiqatda testdan o'tganlar" (D) = attended - cheating, "иштирок этмаганлар"
-(F) = not_attended + cheating — shablon (F = H + I + J) bilan to'liq mos keladi.
+Shablon formulasi F = H + I + J saqlanadi:
+  H + I + J = (C − D − I − J) + I + J = C − D = F.
 """
 
 from __future__ import annotations
@@ -366,6 +367,9 @@ def build_session_stats_excel(
     ws = wb.active
     ws.title = labels.malumot
     ws.sheet_view.showGridLines = True
+    # Ekranda ochilganda zoom (kattalashtirish/kichraytirish) — 80%.
+    # Bu faqat ko'rish masshtabi; chop etishga ta'sir qilmaydi.
+    ws.sheet_view.zoomScale = 80
     ws.page_setup.orientation = "landscape"
     ws.page_setup.fitToWidth = 1
     ws.page_setup.fitToHeight = 0
@@ -450,11 +454,11 @@ def build_session_stats_excel(
     for idx, region in enumerate(stats.regions, start=1):
         st = region.stats
         total = st.total.total
-        cheating_total = st.cheating.total
+        # D = "Kelganlar" = attended (is_entered; chetlatilganlar ham binoga
+        #     kelgani uchun bunga kiradi). F va H formula orqali D dan olinadi.
+        attended = st.attended.total
         at_entry = st.cheating.at_entry
         during_test = st.cheating.during_test
-        # F = иштирок этмаганлар = umuman kelmaganlar + chetlatilganlar
-        not_participated = st.not_attended.total + cheating_total
 
         # B ustuni: lotinda DB nomi o'zicha, krillda translatsiya qilingan nom
         region_name = (
@@ -463,14 +467,14 @@ def build_session_stats_excel(
         ws.cell(row=row, column=1, value=idx)                 # A: T/r
         ws.cell(row=row, column=2, value=region_name)         # B: hudud
         ws.cell(row=row, column=3, value=total)               # C: total
-        ws.cell(row=row, column=4, value=f"=C{row}-F{row}")   # D: ishtirok etgan soni
+        ws.cell(row=row, column=4, value=attended)            # D: kelganlar soni
         ws.cell(row=row, column=5,
                 value=f"=IFERROR(D{row}*100/C{row},0)")       # E: %
-        ws.cell(row=row, column=6, value=not_participated)    # F: ishtirok etmagan soni
+        ws.cell(row=row, column=6, value=f"=C{row}-D{row}")   # F: C - D (umumiy - kelganlar)
         ws.cell(row=row, column=7,
                 value=f"=IFERROR(F{row}*100/C{row},0)")       # G: %
         ws.cell(row=row, column=8,
-                value=f"=C{row}-D{row}-I{row}-J{row}")        # H: qatnashmaganlar
+                value=f"=C{row}-D{row}-I{row}-J{row}")        # H: C - D - I - J
         ws.cell(row=row, column=9, value=at_entry)            # I: kirishda chetlatilgan
         ws.cell(row=row, column=10, value=during_test)        # J: testda chetlatilgan
 

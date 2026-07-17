@@ -609,19 +609,27 @@ def update_student(db: Session, student_id: int, data: StudentUpdate) -> Student
     return student
 
 
-def remove_student_attendance(db: Session, student_id: int) -> Student | None:
+def remove_student_attendance(
+    db: Session, student_id: int
+) -> tuple[Student | None, bool]:
     """Davomatdan olish — talabaning `is_entered` bayrog'ini False qiladi.
 
     Desktop operatori noto'g'ri qo'shilgan davomatni bekor qilganda ishlatiladi.
     Faqat `is_entered` o'zgaradi; boshqa holatlar (is_cheating, loglar)ga
-    tegilmaydi — atayin minimal va bashorat qilinadigan operatsiya."""
+    tegilmaydi — atayin minimal va bashorat qilinadigan operatsiya.
+
+    Qaytaradi: `(student, was_entered)` — `was_entered` operatsiyadan OLDIN
+    talaba davomatda bo'lgan-bo'lmaganini bildiradi (idempotent: allaqachon
+    False bo'lsa, yozuvga tegilmaydi). Talaba topilmasa `(None, False)`."""
     student = db.get(Student, student_id)
     if not student:
-        return None
-    student.is_entered = False
-    db.commit()
-    db.refresh(student)
-    return student
+        return None, False
+    was_entered = bool(student.is_entered)
+    if was_entered:
+        student.is_entered = False
+        db.commit()
+        db.refresh(student)
+    return student, was_entered
 
 
 def delete_student(db: Session, student_id: int) -> bool:
