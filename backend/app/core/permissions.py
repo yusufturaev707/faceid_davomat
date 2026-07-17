@@ -170,6 +170,13 @@ class P:
         "qabul",
     )
 
+    # === Natija uchun tahlil (tashqi natija tizimi vs FaceID DB, imei bo'yicha) ===
+    RESULT_ANALYSIS_READ = _Perm(
+        "result_analysis:read",
+        "Natija uchun tahlil (imei bo'yicha)",
+        "result_analysis",
+    )
+
 
 ALL_PERMISSIONS: list[_Perm] = [
     value

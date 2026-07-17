@@ -1119,3 +1119,56 @@ export async function getQabulStatsApi(
   });
   return res.data;
 }
+
+// === Natija uchun tahlil ===
+
+export type ResultAnalysisMode =
+  | "in_face_not_excluded_no_result"
+  | "in_face_excluded_has_result"
+  | "not_in_face_has_result";
+
+/** Textarea'dan olingan bitta natija qatori (solishtiruvga kerakli maydonlar). */
+export interface ResultAnalysisRow {
+  imei: string | null;
+  tday: string | null;
+  deleted: boolean;
+}
+
+export interface ResultAnalysisRequest {
+  test_id: number;
+  smena_id: number;
+  date_from: string; // YYYY-MM-DD
+  date_to: string; // YYYY-MM-DD
+  mode: ResultAnalysisMode;
+  rows: ResultAnalysisRow[];
+}
+
+export interface ResultAnalysisItem {
+  last_name: string | null;
+  first_name: string | null;
+  middle_name: string | null;
+  imei: string | null;
+  region_name: string | null;
+  zone_name: string | null;
+  test_day: string | null;
+  smena_name: string | null;
+}
+
+export interface ResultAnalysisResponse {
+  mode: ResultAnalysisMode;
+  count: number;
+  scope_total: number;
+  pasted_total: number;
+  pasted_result_count: number;
+  items: ResultAnalysisItem[];
+}
+
+export async function analyzeResultsApi(
+  data: ResultAnalysisRequest,
+): Promise<ResultAnalysisResponse> {
+  const res = await apiClient.post<ResultAnalysisResponse>(
+    "/result-analysis/analyze",
+    data,
+  );
+  return res.data;
+}

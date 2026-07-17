@@ -101,6 +101,9 @@ export const PERM = {
 
   // Qabul realtime statistika (yil dinamik)
   QABUL_READ: "qabul:read",
+
+  // Natija uchun tahlil (tashqi natija tizimi vs FaceID DB, imei bo'yicha)
+  RESULT_ANALYSIS_READ: "result_analysis:read",
 } as const;
 
 export type PermCode = (typeof PERM)[keyof typeof PERM];

@@ -1567,7 +1567,7 @@ function OverviewPanel({
                   {participatedTotal.toLocaleString("uz-UZ")}
                 </p>
                 <p className="text-[11px] text-gray-500 dark:text-slate-400 leading-none mt-0.5">
-                  Ishtirok etdi
+                  Qatnashdi
                 </p>
               </div>
             </div>
@@ -1823,7 +1823,6 @@ function RegionCard({
   const attended = item.stats.attended.total;
   const attendancePercent =
     total > 0 ? Math.round((attended / total) * 1000) / 10 : 0;
-  const { participated, notParticipated } = deriveParticipation(item.stats);
 
   // Davomat foiziga qarab progress rang — semantik signal
   const percentTone =
@@ -1918,13 +1917,13 @@ function RegionCard({
           accent="primary"
         />
         <MiniStat
-          label="Ishtirok etgan"
-          breakdown={participated}
+          label="Kelgan"
+          breakdown={item.stats.attended}
           accent="success"
         />
         <MiniStat
-          label="Ishtirok etmagan"
-          breakdown={notParticipated}
+          label="Kelmagan"
+          breakdown={item.stats.not_attended}
           accent="warning"        />
         <MiniCheating cheating={item.stats.cheating} />
       </div>
@@ -1989,23 +1988,7 @@ const MINI_SIZE: Record<
   },
 };
 
-/** "kelmagan N" — testga umuman kelmaganlar (chetlatilmagan) ixcham ko'rsatkich.
- *  Ota element font o'lchamini meros oladi (mini-plitka jins qatorida chiqadi). */
-function AbsentTag({ n }: { n: number }) {
-  return (
-    <span
-      title="Shundan testga umuman kelmaganlar (chetlatilmagan)"
-      className="inline-flex items-center gap-0.5 text-amber-700 dark:text-amber-300"
-    >
-      <span className="opacity-80">kelmagan: </span>
-      <span className="tabular-nums font-bold">
-        {n.toLocaleString("uz-UZ")}
-      </span>
-    </span>
-  );
-}
-
-/** MD3 tonal-surface stat tile (Umumiy / Ishtirok etgan / Ishtirok etmagan). */
+/** MD3 tonal-surface stat tile (Umumiy / Kelgan / Kelmagan). */
 function MiniStat({
   label,
   breakdown,
@@ -2142,7 +2125,6 @@ function RegionZonesModal({
   const attended = region.stats.attended.total;
   const attendancePercent =
     total > 0 ? Math.round((attended / total) * 1000) / 10 : 0;
-  const { participated, notParticipated } = deriveParticipation(region.stats);
 
   const percentTone =
     attendancePercent >= 75
@@ -2246,15 +2228,14 @@ function RegionZonesModal({
                     accent="primary"
                   />
                   <MiniStat
-                    label="Ishtirok etgan"
-                    breakdown={participated}
+                    label="Kelgan"
+                    breakdown={region.stats.attended}
                     accent="success"
                   />
                   <MiniStat
-                    label="Ishtirok etmagan"
-                    breakdown={notParticipated}
+                    label="Kelmagan"
+                    breakdown={region.stats.not_attended}
                     accent="warning"
-                    extra={<AbsentTag n={region.stats.not_attended.total} />}
                   />
                   <MiniCheating cheating={region.stats.cheating} />
                 </div>
@@ -2374,7 +2355,6 @@ function AllRegionsModal({
         : "from-red-400 to-red-500";
 
   const totalPct = pct(summary.attended.total, summary.total.total);
-  const summaryPart = deriveParticipation(summary);
   const thCls =
     "px-2.5 py-2.5 text-[11px] font-semibold text-gray-500 dark:text-slate-400 whitespace-nowrap";
   const numCls = "px-2.5 py-2 text-center align-middle";
@@ -2438,8 +2418,8 @@ function AllRegionsModal({
                 <th className={`${thCls} text-center w-12`}>№</th>
                 <th className={`${thCls} text-left`}>Viloyat</th>
                 <th className={`${thCls} text-center`}>Umumiy</th>
-                <th className={`${thCls} text-center`}>Ishtirok etgan</th>
-                <th className={`${thCls} text-center`}>Ishtirok etmagan</th>
+                <th className={`${thCls} text-center`}>Kelgan</th>
+                <th className={`${thCls} text-center`}>Kelmagan</th>
                 <th className={`${thCls} text-center`}>Chetlatilgan</th>
                 <th className={`${thCls} text-center w-40`}>Davomat</th>
               </tr>
@@ -2447,7 +2427,6 @@ function AllRegionsModal({
             <tbody>
               {regions.map((r) => {
                 const p = pct(r.stats.attended.total, r.stats.total.total);
-                const part = deriveParticipation(r.stats);
                 return (
                   <tr
                     key={r.region_id}
@@ -2469,15 +2448,15 @@ function AllRegionsModal({
                     </td>
                     <td className={numCls}>
                       <div className="font-bold tabular-nums text-emerald-700 dark:text-emerald-300 text-[14px]">
-                        {part.participated.total.toLocaleString("uz-UZ")}
+                        {r.stats.attended.total.toLocaleString("uz-UZ")}
                       </div>
-                      <GenderInline g={part.participated} />
+                      <GenderInline g={r.stats.attended} />
                     </td>
                     <td className={numCls}>
                       <div className="font-bold tabular-nums text-amber-700 dark:text-amber-300 text-[14px]">
-                        {part.notParticipated.total.toLocaleString("uz-UZ")}
+                        {r.stats.not_attended.total.toLocaleString("uz-UZ")}
                       </div>
-                      <GenderInline g={part.notParticipated} />
+                      <GenderInline g={r.stats.not_attended} />
                     </td>
                     <td className={numCls}>
                       <div className="font-bold tabular-nums text-red-700 dark:text-red-300 text-[14px]">
@@ -2520,15 +2499,15 @@ function AllRegionsModal({
                 </td>
                 <td className={numCls}>
                   <div className="font-bold tabular-nums text-[14px]">
-                    {summaryPart.participated.total.toLocaleString("uz-UZ")}
+                    {summary.attended.total.toLocaleString("uz-UZ")}
                   </div>
-                  <GenderInline g={summaryPart.participated} />
+                  <GenderInline g={summary.attended} />
                 </td>
                 <td className={numCls}>
                   <div className="font-bold tabular-nums text-[14px]">
-                    {summaryPart.notParticipated.total.toLocaleString("uz-UZ")}
+                    {summary.not_attended.total.toLocaleString("uz-UZ")}
                   </div>
-                  <GenderInline g={summaryPart.notParticipated} />
+                  <GenderInline g={summary.not_attended} />
                 </td>
                 <td className={numCls}>
                   <div className="font-bold tabular-nums text-[14px]">
@@ -2566,7 +2545,6 @@ function ZoneCard({
   const attended = item.stats.attended.total;
   const attendancePercent =
     total > 0 ? Math.round((attended / total) * 1000) / 10 : 0;
-  const { participated, notParticipated } = deriveParticipation(item.stats);
 
   const percentTone =
     attendancePercent >= 75
@@ -2648,14 +2626,14 @@ function ZoneCard({
           size={miniSize}
         />
         <MiniStat
-          label="Ishtirok etgan"
-          breakdown={participated}
+          label="Kelgan"
+          breakdown={item.stats.attended}
           accent="success"
           size={miniSize}
         />
         <MiniStat
-          label="Ishtirok etmagan"
-          breakdown={notParticipated}
+          label="Kelmagan"
+          breakdown={item.stats.not_attended}
           accent="warning"
           size={miniSize}        />
         <MiniCheating cheating={item.stats.cheating} size={miniSize} />
@@ -2784,7 +2762,6 @@ function AttendanceSummary({
   const total = stats.total.total;
   const attended = stats.attended.total;
   const pct = total > 0 ? Math.round((attended / total) * 1000) / 10 : 0;
-  const { participated, notParticipated } = deriveParticipation(stats);
 
   const percentTone =
     pct >= 75
@@ -2852,17 +2829,16 @@ function AttendanceSummary({
           size={z.mini}
         />
         <MiniStat
-          label="Ishtirok etgan"
-          breakdown={participated}
+          label="Kelgan"
+          breakdown={stats.attended}
           accent="success"
           size={z.mini}
         />
         <MiniStat
-          label="Ishtirok etmagan"
-          breakdown={notParticipated}
+          label="Kelmagan"
+          breakdown={stats.not_attended}
           accent="warning"
           size={z.mini}
-          extra={<AbsentTag n={stats.not_attended.total} />}
         />
         <MiniCheating cheating={stats.cheating} size={z.mini} />
       </div>

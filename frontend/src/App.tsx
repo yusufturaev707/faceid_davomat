@@ -40,6 +40,7 @@ import CheatingLogsPage from "./pages/CheatingLogsPage";
 import RolePermissionsPage from "./pages/RolePermissionsPage";
 import FailedLoginsPage from "./pages/FailedLoginsPage";
 import StatisticsPage from "./pages/StatisticsPage";
+import ResultAnalysisPage from "./pages/ResultAnalysisPage";
 
 /**
  * Asosiy sahifani foydalanuvchining huquqlariga qarab tanlash.
@@ -208,6 +209,14 @@ export default function App() {
             element={<PermissionRoute permission={PERM.CHEATING_LOG_READ} />}
           >
             <Route path="/cheating-logs" element={<CheatingLogsPage />} />
+          </Route>
+
+          <Route
+            element={
+              <PermissionRoute permission={PERM.RESULT_ANALYSIS_READ} />
+            }
+          >
+            <Route path="/result-analysis" element={<ResultAnalysisPage />} />
           </Route>
 
           {/* Tizim sozlamalari */}
