@@ -34,7 +34,12 @@ import Pagination from "../components/Pagination";
 import PermissionGate from "../components/PermissionGate";
 import Md3Select from "../components/Md3Select";
 import { PERM } from "../permissions";
+import { useAuth } from "../contexts/AuthContext";
 import { extractErrorMessage } from "../utils/errorMessage";
+
+// role.key=4 — foydalanuvchi faqat o'z region'i ma'lumotini ko'radi. Backend
+// region'ni majburan qo'llaydi; UI'da esa viloyat filtri yashiriladi.
+const REGION_SCOPE_ROLE_KEY = 4;
 
 const emptyForm: Record<string, any> = {
   session_smena_id: 0,
@@ -54,6 +59,8 @@ const emptyForm: Record<string, any> = {
 };
 
 export default function StudentsPage() {
+  const { user } = useAuth();
+  const isRegionScoped = user?.role_key === REGION_SCOPE_ROLE_KEY;
   const [data, setData] = useState<StudentListResponse | null>(null);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
@@ -868,22 +875,24 @@ export default function StudentsPage() {
                     label: t.name,
                   }))}
                 />
-                <FilterSelect
-                  label="Viloyat"
-                  value={filterRegionId}
-                  onChange={(v) => {
-                    setFilterRegionId(v);
-                    // Viloyat o'zgardi — eski bino tanlovi unga tegishli bo'lmasligi mumkin
-                    setFilterZoneId("");
-                    setPage(1);
-                  }}
-                  options={regions
-                    .filter((r) => r.is_active)
-                    .map((r) => ({
-                      value: String(r.id),
-                      label: r.name,
-                    }))}
-                />
+                {!isRegionScoped && (
+                  <FilterSelect
+                    label="Viloyat"
+                    value={filterRegionId}
+                    onChange={(v) => {
+                      setFilterRegionId(v);
+                      // Viloyat o'zgardi — eski bino tanlovi unga tegishli bo'lmasligi mumkin
+                      setFilterZoneId("");
+                      setPage(1);
+                    }}
+                    options={regions
+                      .filter((r) => r.is_active)
+                      .map((r) => ({
+                        value: String(r.id),
+                        label: r.name,
+                      }))}
+                  />
+                )}
                 <FilterSelect
                   label="Bino"
                   value={filterZoneId}
@@ -892,10 +901,11 @@ export default function StudentsPage() {
                     setPage(1);
                   }}
                   options={zones
-                    .filter(
-                      (z) =>
-                        z.is_active &&
-                        (!filterRegionId ||
+                    .filter((z) =>
+                      z.is_active &&
+                      (isRegionScoped
+                        ? z.region_id === user?.region_id
+                        : !filterRegionId ||
                           z.region_id === Number(filterRegionId)),
                     )
                     .map((z) => ({

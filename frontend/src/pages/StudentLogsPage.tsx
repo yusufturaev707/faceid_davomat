@@ -22,9 +22,16 @@ import Pagination from "../components/Pagination";
 import PermissionGate from "../components/PermissionGate";
 import Md3Select from "../components/Md3Select";
 import { PERM } from "../permissions";
+import { useAuth } from "../contexts/AuthContext";
 import { extractErrorMessage } from "../utils/errorMessage";
 
+// role.key=4 — foydalanuvchi faqat o'z region'i ma'lumotini ko'radi. Backend
+// region'ni majburan qo'llaydi; UI'da esa viloyat filtri yashiriladi.
+const REGION_SCOPE_ROLE_KEY = 4;
+
 export default function StudentLogsPage() {
+  const { user } = useAuth();
+  const isRegionScoped = user?.role_key === REGION_SCOPE_ROLE_KEY;
   const [data, setData] = useState<StudentLogListResponse | null>(null);
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(20);
@@ -76,14 +83,17 @@ export default function StudentLogsPage() {
   }, []);
 
   useEffect(() => {
-    if (!filterRegionId) {
+    // key=4 — foydalanuvchining o'z region'idagi binolar avtomatik yuklanadi
+    // (viloyat filtri yashirilgani uchun). Aks holda tanlangan viloyat binolari.
+    const regionId = isRegionScoped ? user?.region_id : Number(filterRegionId);
+    if (!regionId) {
       setZones([]);
       return;
     }
-    getZonesByRegionApi(Number(filterRegionId))
+    getZonesByRegionApi(Number(regionId))
       .then(setZones)
       .catch(() => setZones([]));
-  }, [filterRegionId]);
+  }, [filterRegionId, isRegionScoped, user?.region_id]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -376,19 +386,21 @@ export default function StudentLogsPage() {
                   label: t.name,
                 }))}
               />
-              <FilterSelect
-                label="Viloyat"
-                value={filterRegionId}
-                onChange={(v) => {
-                  setFilterRegionId(v);
-                  setFilterZoneId("");
-                  setPage(1);
-                }}
-                options={regions.map((r) => ({
-                  value: String(r.id),
-                  label: r.name,
-                }))}
-              />
+              {!isRegionScoped && (
+                <FilterSelect
+                  label="Viloyat"
+                  value={filterRegionId}
+                  onChange={(v) => {
+                    setFilterRegionId(v);
+                    setFilterZoneId("");
+                    setPage(1);
+                  }}
+                  options={regions.map((r) => ({
+                    value: String(r.id),
+                    label: r.name,
+                  }))}
+                />
+              )}
               <FilterSelect
                 label="Bino"
                 value={filterZoneId}
@@ -396,7 +408,7 @@ export default function StudentLogsPage() {
                   setFilterZoneId(v);
                   setPage(1);
                 }}
-                disabled={!filterRegionId}
+                disabled={!isRegionScoped && !filterRegionId}
                 options={zones.map((z) => ({
                   value: String(z.id),
                   label: z.name,

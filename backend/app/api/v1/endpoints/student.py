@@ -87,6 +87,82 @@ def _b64_to_bytes(val: str | None) -> bytes | None:
         raise HTTPException(status_code=400, detail=f"Base64 dekodlash xatosi: {exc}")
 
 
+# === Ro'yxatlar (Student / StudentLog / CheatingLog) uchun region qamrovi ===
+#
+# Role.key asosidagi ko'rish siyosati:
+#   key 1, 2, 3 → butun tizim bo'yicha barcha ma'lumot (region filtri ixtiyoriy).
+#   key 4       → faqat foydalanuvchiga biriktirilgan region'ga tegishli ma'lumot.
+#   boshqa key  → bu ro'yxatlar umuman ko'rinmaydi (403).
+_GLOBAL_SCOPE_ROLE_KEYS = frozenset({1, 2, 3})
+_REGION_SCOPE_ROLE_KEY = 4
+
+
+def _scoped_region_id(user: User, requested_region_id: int | None) -> int | None:
+    """Foydalanuvchi roli asosida amaldagi `region_id` filtrini qaytaradi.
+
+    - key 1/2/3: global — mijoz bergan ixtiyoriy `requested_region_id` saqlanadi.
+    - key 4: majburan foydalanuvchi region'i (mijoz boshqa region so'rasa ham
+      almashtiriladi — boshqa region ma'lumoti chiqmaydi). Region biriktirilmagan
+      bo'lsa 403.
+    - boshqa key: 403 (bu ro'yxatlarni ko'rish huquqi yo'q).
+    """
+    role_key = user.role_key
+    if role_key in _GLOBAL_SCOPE_ROLE_KEYS:
+        return requested_region_id
+    if role_key == _REGION_SCOPE_ROLE_KEY:
+        if not user.region_id:
+            raise HTTPException(
+                status_code=403,
+                detail="Foydalanuvchiga region biriktirilmagan",
+            )
+        return int(user.region_id)
+    raise HTTPException(
+        status_code=403,
+        detail="Bu ma'lumotlarni ko'rish uchun ruxsat yo'q",
+    )
+
+
+def _student_region_id(db: Session, student_id: int) -> int | None:
+    """Talabaning region_id'si (Student.zone → Zone.region_id). Yo'q bo'lsa None."""
+    from sqlalchemy import select as sa_select
+
+    from app.models.student import Student as StudentModel
+    from app.models.zone import Zone
+
+    return db.execute(
+        sa_select(Zone.region_id)
+        .join(StudentModel, StudentModel.zone_id == Zone.id)
+        .where(StudentModel.id == student_id)
+    ).scalar()
+
+
+def _assert_region_access(user: User, item_region_id: int | None) -> None:
+    """Bitta yozuv (detail) ko'rish uchun region ruxsatini tekshiradi.
+
+    - key 1/2/3: ruxsat (butun tizim).
+    - key 4: faqat foydalanuvchi region'idagi yozuv. Boshqa region yozuvi
+      so'ralsa 404 (yozuv mavjudligini oshkor qilmaslik uchun). Region
+      biriktirilmagan bo'lsa 403.
+    - boshqa key: 403 (ko'rish huquqi yo'q).
+    """
+    role_key = user.role_key
+    if role_key in _GLOBAL_SCOPE_ROLE_KEYS:
+        return
+    if role_key == _REGION_SCOPE_ROLE_KEY:
+        if not user.region_id:
+            raise HTTPException(
+                status_code=403,
+                detail="Foydalanuvchiga region biriktirilmagan",
+            )
+        if item_region_id is None or int(item_region_id) != int(user.region_id):
+            raise HTTPException(status_code=404, detail="Ma'lumot topilmadi")
+        return
+    raise HTTPException(
+        status_code=403,
+        detail="Bu ma'lumotlarni ko'rish uchun ruxsat yo'q",
+    )
+
+
 # ===================== StudentLog =====================
 
 
@@ -114,8 +190,9 @@ def list_student_logs(
     created_at_to: str | None = None,
     search: str | None = None,
     db: Session = Depends(get_db),
-    _: User = Depends(PermissionChecker(P.STUDENT_LOG_READ.code)),
+    current_user: User = Depends(PermissionChecker(P.STUDENT_LOG_READ.code)),
 ):
+    region_id = _scoped_region_id(current_user, region_id)
     items, total = get_student_logs_paginated(
         db,
         page=page,
@@ -153,12 +230,13 @@ def list_student_logs(
 def get_student_log_detail_endpoint(
     log_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(PermissionChecker(P.STUDENT_LOG_READ.code)),
+    current_user: User = Depends(PermissionChecker(P.STUDENT_LOG_READ.code)),
 ):
     """Bitta StudentLog — first_captured/last_captured rasmlari bilan."""
     log = get_student_log_detail(db, log_id)
     if not log:
         raise HTTPException(status_code=404, detail="Log topilmadi")
+    _assert_region_access(current_user, _student_region_id(db, log["student_id"]))
     return log
 
 
@@ -247,8 +325,9 @@ def list_cheating_logs(
         None, description="Smena sanasi (YYYY-MM-DD) — tugash (inclusive)."
     ),
     db: Session = Depends(get_db),
-    _: User = Depends(PermissionChecker(P.CHEATING_LOG_READ.code)),
+    current_user: User = Depends(PermissionChecker(P.CHEATING_LOG_READ.code)),
 ):
+    region_id = _scoped_region_id(current_user, region_id)
     items, total = get_cheating_logs_paginated(
         db,
         page=page,
@@ -296,7 +375,7 @@ def export_cheating_logs(
         None, description="Smena sanasi (YYYY-MM-DD) — tugash (inclusive)."
     ),
     db: Session = Depends(get_db),
-    _: User = Depends(PermissionChecker(P.CHEATING_LOG_READ.code)),
+    current_user: User = Depends(PermissionChecker(P.CHEATING_LOG_READ.code)),
 ):
     """Chetlatilganlar ro'yxatini joriy filtrlar bo'yicha Excel (.xlsx) ga
     eksport qilib beradi — adminka jadvalidagi ustunlar bilan bir xil."""
@@ -304,6 +383,7 @@ def export_cheating_logs(
 
     from app.services.cheating_logs_excel import build_cheating_logs_excel
 
+    region_id = _scoped_region_id(current_user, region_id)
     items = get_cheating_logs_for_export(
         db,
         student_id=student_id,
@@ -1018,8 +1098,9 @@ def list_students(
     is_applied: bool | None = None,
     search: str | None = None,
     db: Session = Depends(get_db),
-    _: User = Depends(PermissionChecker(P.STUDENT_READ.code)),
+    current_user: User = Depends(PermissionChecker(P.STUDENT_READ.code)),
 ):
+    region_id = _scoped_region_id(current_user, region_id)
     items, total = get_students_paginated(
         db,
         page=page,
@@ -1077,7 +1158,7 @@ def export_students(
     is_applied: bool | None = None,
     search: str | None = None,
     db: Session = Depends(get_db),
-    _: User = Depends(PermissionChecker(P.STUDENT_READ.code)),
+    current_user: User = Depends(PermissionChecker(P.STUDENT_READ.code)),
 ):
     """Filtrlangan talabalar ro'yxatini Excel (.xlsx) yoki PDF qilib yuklab olish.
 
@@ -1094,6 +1175,7 @@ def export_students(
         )
 
     cap = _EXPORT_MAX_XLSX if fmt == "xlsx" else _EXPORT_MAX_PDF
+    region_id = _scoped_region_id(current_user, region_id)
     rows = get_filtered_students(
         db,
         session_smena_id=session_smena_id,
@@ -1163,11 +1245,12 @@ def create_student_endpoint(
 def get_student_detail(
     student_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(PermissionChecker(P.STUDENT_READ.code)),
+    current_user: User = Depends(PermissionChecker(P.STUDENT_READ.code)),
 ):
     student = get_student(db, student_id)
     if not student:
         raise HTTPException(status_code=404, detail="Talaba topilmadi")
+    _assert_region_access(current_user, _student_region_id(db, student_id))
     return student
 
 
