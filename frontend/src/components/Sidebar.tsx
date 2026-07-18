@@ -53,7 +53,6 @@ export default function Sidebar({ drawerOpen = false, onClose }: SidebarProps) {
 
   const showSozlamalar = hasAnyPermission(
     PERM.USER_READ,
-    PERM.ONLINE_USERS_READ,
     PERM.ROLE_READ,
     PERM.ROLE_UPDATE,
     PERM.PERMISSION_READ,
@@ -81,6 +80,7 @@ export default function Sidebar({ drawerOpen = false, onClose }: SidebarProps) {
   const showBoshqaruv = hasAnyPermission(
     PERM.DASHBOARD_READ,
     PERM.DASHBOARD_STATS,
+    PERM.ONLINE_USERS_READ,
     PERM.LOG_READ,
     PERM.FACE_LOG_READ,
     PERM.API_KEY_READ,
@@ -315,25 +315,6 @@ export default function Sidebar({ drawerOpen = false, onClose }: SidebarProps) {
                   />
                 </svg>
                 Foydalanuvchilar
-              </NavLink>
-            )}
-
-            {hasPermission(PERM.ONLINE_USERS_READ) && (
-              <NavLink to="/online-users" className={navLinkClass}>
-                <svg
-                  className={iconClass}
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M13 10V3L4 14h7v7l9-11h-7z"
-                  />
-                </svg>
-                Online foydalanuvchilar
               </NavLink>
             )}
 
@@ -721,6 +702,25 @@ export default function Sidebar({ drawerOpen = false, onClose }: SidebarProps) {
                   />
                 </svg>
                 Dashboard
+              </NavLink>
+            )}
+
+            {hasPermission(PERM.ONLINE_USERS_READ) && (
+              <NavLink to="/online-users" className={navLinkClass}>
+                <svg
+                  className={iconClass}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M13 10V3L4 14h7v7l9-11h-7z"
+                  />
+                </svg>
+                Online foydalanuvchilar
               </NavLink>
             )}
 
