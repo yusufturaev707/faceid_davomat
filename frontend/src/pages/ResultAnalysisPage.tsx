@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   analyzeResultsApi,
@@ -135,7 +135,14 @@ export default function ResultAnalysisPage() {
 
   const [daySel, setDaySel] = useState(""); // "" | DAY_ALL | "YYYY-MM-DD"
   const [mode, setMode] = useState<ResultAnalysisMode | "">("");
-  const [pasted, setPasted] = useState("");
+
+  // Katta hajm (70k+ qator) uchun: textarea UNCONTROLLED — matn faqat DOM'da
+  // saqlanadi (React state'da ulkan nusxa mirror qilinmaydi), parse esa
+  // debounce bilan bir marta ishlaydi (har harf/renderʼda emas).
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const parseTimerRef = useRef<number | null>(null);
+  const [parsedRows, setParsedRows] = useState<PreviewRow[]>([]);
+  const [hasText, setHasText] = useState(false);
 
   const [result, setResult] = useState<ResultAnalysisResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -148,6 +155,35 @@ export default function ResultAnalysisPage() {
     const url = buildImgUrl(baseImgUrl, img);
     if (url) setModalUrl(url);
   };
+
+  // Textarea tozalash (DOM + parsed holat) va debounce timer'ni bekor qilish.
+  const clearPasted = () => {
+    if (parseTimerRef.current !== null) window.clearTimeout(parseTimerRef.current);
+    parseTimerRef.current = null;
+    if (textareaRef.current) textareaRef.current.value = "";
+    setHasText(false);
+    setParsedRows([]);
+  };
+
+  // Har o'zgarishda emas — 350ms jimlikdan keyin bir marta parse qilamiz.
+  const handlePastedChange = () => {
+    const val = textareaRef.current?.value ?? "";
+    setHasText(val.length > 0);
+    if (parseTimerRef.current !== null) window.clearTimeout(parseTimerRef.current);
+    parseTimerRef.current = window.setTimeout(() => {
+      parseTimerRef.current = null;
+      setParsedRows(parseRows(val));
+    }, 350);
+  };
+
+  // Unmount'da osilib qolgan timer'ni tozalaymiz.
+  useEffect(
+    () => () => {
+      if (parseTimerRef.current !== null)
+        window.clearTimeout(parseTimerRef.current);
+    },
+    [],
+  );
 
   // Testlar (faqat aktiv, id bo'yicha o'sish tartibida).
   useEffect(() => {
@@ -204,7 +240,10 @@ export default function ResultAnalysisPage() {
   // Sessiya o'zgarsa — test kuni va undan keyingi hamma narsa tozalanadi.
   useEffect(() => {
     setDaySel("");
-    setPasted("");
+    if (parseTimerRef.current !== null) window.clearTimeout(parseTimerRef.current);
+    if (textareaRef.current) textareaRef.current.value = "";
+    setHasText(false);
+    setParsedRows([]);
     setMode("");
     setResult(null);
   }, [sessionId]);
@@ -239,7 +278,6 @@ export default function ResultAnalysisPage() {
 
   const scopeReady = Boolean(testId && sessionId && daySel);
 
-  const parsedRows = useMemo(() => parseRows(pasted), [pasted]);
   const deletedCount = useMemo(
     () => parsedRows.reduce((n, r) => n + (r.isDeleted ? 1 : 0), 0),
     [parsedRows],
@@ -254,22 +292,20 @@ export default function ResultAnalysisPage() {
     [parsedRows],
   );
 
-  // Backend solishtiruv + ko'rsatish uchun maydonlarni oladi.
-  const analysisRows: ResultAnalysisRow[] = useMemo(
-    () =>
-      parsedRows.map((r) => ({
-        imei: r.imei,
-        abitur_id: r.abitur_id || null,
-        img: r.img || null,
-        tday: r.tday || null,
-        common_ball: r.common_ball || null,
-        deleted: r.isDeleted,
-        deleted_raw: r.deleted || null,
-      })),
-    [parsedRows],
-  );
+  // Backend payload'ini FAQAT kerak bo'lganda quramiz (submit/export) — 70k
+  // qatorli ikkinchi doimiy nusxani xotirada saqlab turmaslik uchun.
+  const buildAnalysisRows = (): ResultAnalysisRow[] =>
+    parsedRows.map((r) => ({
+      imei: r.imei,
+      abitur_id: r.abitur_id || null,
+      img: r.img || null,
+      tday: r.tday || null,
+      common_ball: r.common_ball || null,
+      deleted: r.isDeleted,
+      deleted_raw: r.deleted || null,
+    }));
 
-  const canSubmit = scopeReady && !!mode && analysisRows.length > 0 && !loading;
+  const canSubmit = scopeReady && !!mode && parsedRows.length > 0 && !loading;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -282,7 +318,7 @@ export default function ResultAnalysisPage() {
         test_session_id: Number(sessionId),
         day: daySel === DAY_ALL ? null : daySel,
         mode,
-        rows: analysisRows,
+        rows: buildAnalysisRows(),
       });
       setResult(data);
     } catch (err) {
@@ -295,7 +331,7 @@ export default function ResultAnalysisPage() {
   // Test kuni tanlanganda — undan keyingi hamma narsa tozalanadi.
   const handleDayChange = (v: string) => {
     setDaySel(v);
-    setPasted("");
+    clearPasted();
     setMode("");
     setResult(null);
     setError(null);
@@ -316,7 +352,7 @@ export default function ResultAnalysisPage() {
         test_session_id: Number(sessionId),
         day: daySel === DAY_ALL ? null : daySel,
         mode,
-        rows: analysisRows,
+        rows: buildAnalysisRows(),
       });
     } catch (err) {
       setError(extractErrorMessage(err));
@@ -327,7 +363,7 @@ export default function ResultAnalysisPage() {
 
   const handleReset = () => {
     setMode("");
-    setPasted("");
+    clearPasted();
     setResult(null);
     setError(null);
   };
@@ -437,8 +473,8 @@ export default function ResultAnalysisPage() {
             </div>
 
             <textarea
-              value={pasted}
-              onChange={(e) => setPasted(e.target.value)}
+              ref={textareaRef}
+              onChange={handlePastedChange}
               rows={7}
               spellCheck={false}
               placeholder={
@@ -500,7 +536,7 @@ export default function ResultAnalysisPage() {
                     </>
                   )}
                 </button>
-                {(pasted || mode || result) && (
+                {(hasText || mode || result) && (
                   <button
                     type="button"
                     onClick={handleReset}

@@ -39,6 +39,7 @@ import StudentLogsPage from "./pages/StudentLogsPage";
 import CheatingLogsPage from "./pages/CheatingLogsPage";
 import RolePermissionsPage from "./pages/RolePermissionsPage";
 import FailedLoginsPage from "./pages/FailedLoginsPage";
+import OnlineUsersPage from "./pages/OnlineUsersPage";
 import StatisticsPage from "./pages/StatisticsPage";
 import ResultAnalysisPage from "./pages/ResultAnalysisPage";
 
@@ -222,6 +223,12 @@ export default function App() {
           {/* Tizim sozlamalari */}
           <Route element={<PermissionRoute permission={PERM.USER_READ} />}>
             <Route path="/users" element={<UsersPage />} />
+          </Route>
+
+          <Route
+            element={<PermissionRoute permission={PERM.ONLINE_USERS_READ} />}
+          >
+            <Route path="/online-users" element={<OnlineUsersPage />} />
           </Route>
 
           <Route element={<PermissionRoute permission={PERM.DAVOMAT_BOT_READ} />}>
