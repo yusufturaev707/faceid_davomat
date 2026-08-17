@@ -154,7 +154,7 @@ def get_task_status(
     summary="Ikki yuzni solishtirishga yuborish",
     description="Ikki rasmni Celery navbatiga yuboradi va task_id qaytaradi.",
 )
-@limiter.limit("300/minute")
+@limiter.limit("1000/minute")
 def submit_verify_two_face(
     request: Request,
     payload: TwoFaceVerifyRequest,

@@ -69,6 +69,24 @@ class PassportUpdateRequest(BaseModel):
     rows: list[PassportUpdateRow] = Field(..., min_length=1, max_length=20000)
 
 
+# Bitta rasm uchun base64 satr uzunligi chegarasi (~3 MB dekodlangan rasm).
+# Frontend so'rovlarni bo'lak-bo'lak yuboradi, shuning uchun `rows` cheklovi kichik.
+_MAX_IMAGE_B64_LEN = 4_200_000
+
+
+class PassportImageRow(BaseModel):
+    """Ommaviy passport RASMINI yangilash uchun bitta qator (jshshir + base64)."""
+
+    jshshir: str = Field(..., max_length=20)
+    image: str = Field(..., max_length=_MAX_IMAGE_B64_LEN)
+
+
+class PassportImageUpdateRequest(BaseModel):
+    """Paste qilingan `jshshir + base64 rasm` qatorlaridan ps_img yangilash so'rovi."""
+
+    rows: list[PassportImageRow] = Field(..., min_length=1, max_length=50)
+
+
 class PassportInvalidItem(BaseModel):
     row: int
     jshshir: str

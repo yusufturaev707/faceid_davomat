@@ -40,12 +40,14 @@ from app.models.test_session import TestSession
 from app.models.user import User
 from app.models.zone import Zone
 from app.schemas.student import (
+    PassportImageUpdateRequest,
     PassportUpdateRequest,
     PassportUpdateResult,
     StudentResponse,
 )
 from app.services.passport_updater import (
     parse_passport_excel,
+    update_session_passport_images,
     update_session_passports,
 )
 from app.schemas.test_session import (
@@ -832,6 +834,31 @@ async def update_passports_excel(
         )
 
     return update_session_passports(db, session_id, rows)
+
+
+@router.post(
+    "/{session_id}/passport-update/images",
+    response_model=PassportUpdateResult,
+    summary="Passport rasmlarini (ps_img) base64 orqali ommaviy yangilash",
+)
+def update_passport_images(
+    session_id: int,
+    payload: PassportImageUpdateRequest,
+    db: Session = Depends(get_db),
+    _: User = Depends(PermissionChecker(P.TEST_SESSION_UPDATE.code)),
+):
+    """`jshshir + base64 rasm` qatorlari bo'yicha `StudentPsData.ps_img` yangilash.
+
+    Rasm DB ga odatdagidek BLOB (xom bayt) ko'rinishida yoziladi. Rasm
+    almashgani uchun talabaning eski embedding'i tozalanadi va `is_ready=False`
+    bo'ladi — embedding bosqichini qayta ishga tushirish kerak.
+
+    So'rov hajmi katta bo'lmasligi uchun frontend qatorlarni bo'lak-bo'lak
+    yuboradi (bitta so'rovda 50 tagacha qator).
+    """
+    _require_session(db, session_id)
+    rows = [r.model_dump() for r in payload.rows]
+    return update_session_passport_images(db, session_id, rows)
 
 
 @router.get("/{session_id}/student-load-progress")

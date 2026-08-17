@@ -441,6 +441,12 @@ export interface PassportUpdateRow {
   ps_num: string;
 }
 
+/** Passport rasmini (ps_img) base64 orqali yangilash uchun bitta qator. */
+export interface PassportImageRow {
+  jshshir: string;
+  image: string;
+}
+
 export interface PassportInvalidItem {
   row: number;
   jshshir: string;

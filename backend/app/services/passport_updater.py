@@ -12,6 +12,8 @@ shuning uchun sinxron bajariladi — Celery talab qilinmaydi.
 
 from __future__ import annotations
 
+import base64
+import binascii
 import logging
 import re
 from io import BytesIO
@@ -90,14 +92,22 @@ def clean_cell(value: object) -> str:
     return str(value).strip()
 
 
-def validate_row(jshshir: str, ps_ser: str, ps_num: str) -> str | None:
-    """Bitta qatorni tekshiradi. Xato bo'lsa — sabab matnini, aks holda None qaytaradi."""
+def validate_jshshir(jshshir: str) -> str | None:
+    """JSHSHIR ni tekshiradi. Xato bo'lsa — sabab matnini, aks holda None."""
     if not jshshir:
         return "JSHSHIR bo'sh"
     if len(jshshir) > _MAX_JSHSHIR:
         return f"JSHSHIR {_MAX_JSHSHIR} belgidan oshmasin"
     if not jshshir.isdigit():
         return "JSHSHIR faqat raqamlardan iborat bo'lishi kerak"
+    return None
+
+
+def validate_row(jshshir: str, ps_ser: str, ps_num: str) -> str | None:
+    """Bitta qatorni tekshiradi. Xato bo'lsa — sabab matnini, aks holda None qaytaradi."""
+    err = validate_jshshir(jshshir)
+    if err:
+        return err
     if not ps_ser:
         return "Pasport seriyasi bo'sh"
     if len(ps_ser) > _MAX_PS_SER:
@@ -257,6 +267,165 @@ def update_session_passports(
     db.commit()
     logger.info(
         "Passport yangilash: session=%d, total=%d, updated=%d, not_found=%d, invalid=%d",
+        session_id, total, updated, len(not_found), len(invalid),
+    )
+    return {
+        "total": total,
+        "updated": updated,
+        "not_found": not_found,
+        "invalid": invalid,
+    }
+
+
+# ─── Passport RASMI (ps_img) ommaviy yangilash ────────────────────────────
+
+# Bitta rasm uchun dekodlangandan keyingi hajm chegaralari.
+_MIN_IMAGE_BYTES = 512           # 512 B dan kichigi rasm bo'lishi mumkin emas
+_MAX_IMAGE_BYTES = 3 * 1024 * 1024  # 3 MB
+
+# Ko'p ishlatiladigan rasm formatlarining "sehrli baytlari" (magic bytes).
+# Base64 noto'g'ri (masalan matn yoki PDF) bo'lsa — DB ga yozmaymiz, chunki
+# keyinchalik embedding bosqichida dekodlash xatosi bo'ladi.
+_IMAGE_SIGNATURES: tuple[tuple[bytes, str], ...] = (
+    (b"\xff\xd8\xff", "JPEG"),
+    (b"\x89PNG\r\n\x1a\n", "PNG"),
+    (b"BM", "BMP"),
+    (b"GIF87a", "GIF"),
+    (b"GIF89a", "GIF"),
+)
+
+# `data:image/jpeg;base64,....` shaklidagi data-URL prefiksi.
+_DATA_URL_RE = re.compile(r"^data:[^;,]*;base64,", re.IGNORECASE)
+
+
+def _detect_image_format(raw: bytes) -> str | None:
+    """Bayt oqimidan rasm formatini aniqlaydi. Rasm bo'lmasa — None."""
+    for sig, name in _IMAGE_SIGNATURES:
+        if raw.startswith(sig):
+            return name
+    # WEBP: "RIFF" + 4 bayt hajm + "WEBP"
+    if raw[:4] == b"RIFF" and raw[8:12] == b"WEBP":
+        return "WEBP"
+    return None
+
+
+def decode_passport_image(value: str) -> tuple[bytes | None, str | None]:
+    """base64 satrni (data-URL yoki sof base64) rasm baytlariga aylantiradi.
+
+    Qaytaradi: `(raw_bytes, None)` yoki xato bo'lsa `(None, "sabab")`.
+    """
+    text = (value or "").strip()
+    if not text:
+        return None, "Rasm bo'sh"
+
+    text = _DATA_URL_RE.sub("", text)
+    # Excel/matn muharrirlaridan nusxalanganda base64 ichiga qator uzilishi va
+    # bo'shliqlar tushib qolishi mumkin — ularni olib tashlaymiz.
+    text = re.sub(r"\s+", "", text)
+    # URL-safe base64 (`-` va `_`) ni ham qabul qilamiz.
+    text = text.replace("-", "+").replace("_", "/")
+    # To'ldiruvchi `=` yetishmasa — qo'shib qo'yamiz.
+    if len(text) % 4:
+        text += "=" * (4 - len(text) % 4)
+
+    try:
+        raw = base64.b64decode(text, validate=True)
+    except (binascii.Error, ValueError):
+        return None, "Base64 formati noto'g'ri"
+
+    if len(raw) < _MIN_IMAGE_BYTES:
+        return None, "Rasm juda kichik (buzilgan bo'lishi mumkin)"
+    if len(raw) > _MAX_IMAGE_BYTES:
+        return None, f"Rasm hajmi {_MAX_IMAGE_BYTES // (1024 * 1024)}MB dan oshmasin"
+    if _detect_image_format(raw) is None:
+        return None, "Bu rasm emas (JPEG/PNG/WEBP/BMP/GIF kutilgan)"
+    return raw, None
+
+
+def update_session_passport_images(
+    db: Session, session_id: int, rows: list[dict]
+) -> dict:
+    """`rows` ichidagi base64 rasmlarni sessiya talabalarining `ps_img` iga yozadi.
+
+    Har bir qator: `{"jshshir": str, "image": str}`. Rasm `StudentPsData.ps_img`
+    ga odatdagidek BLOB (xom bayt) ko'rinishida saqlanadi — base64 emas.
+
+    Rasm almashgani uchun eski `embedding` yaroqsiz bo'lib qoladi: uni tozalab,
+    talabani `is_ready=False` qilamiz — shunda embedding bosqichini qayta ishga
+    tushirganda ("faqat tayyor bo'lmaganlar") bu talabalar qayta hisoblanadi.
+
+    Qaytaradi: `update_session_passports` bilan bir xil summary.
+    """
+    total = len(rows)
+    invalid: list[dict] = []
+    not_found: list[str] = []
+
+    # 1) Validatsiya + dekodlash. Bir xil jshshir takror kelsa — oxirgisi ustun.
+    valid: dict[str, bytes] = {}
+    for idx, row in enumerate(rows, start=1):
+        jshshir = clean_cell(row.get("jshshir"))
+        err = validate_jshshir(jshshir)
+        if err:
+            invalid.append({"row": idx, "jshshir": jshshir, "error": err})
+            continue
+        raw, img_err = decode_passport_image(str(row.get("image") or ""))
+        if img_err or raw is None:
+            invalid.append({"row": idx, "jshshir": jshshir, "error": img_err or "Rasm yaroqsiz"})
+            continue
+        valid[jshshir] = raw
+
+    if not valid:
+        return {"total": total, "updated": 0, "not_found": [], "invalid": invalid}
+
+    # 2) Shu sessiyaga tegishli, jshshir'i mos keladigan talabalar.
+    smena_subq = sa_select(TestSessionSmena.id).where(
+        TestSessionSmena.test_session_id == session_id
+    )
+    students = db.scalars(
+        sa_select(Student).where(
+            Student.session_smena_id.in_(smena_subq),
+            Student.imei.in_(list(valid.keys())),
+        )
+    ).all()
+
+    by_imei: dict[str, list[Student]] = {}
+    for st in students:
+        by_imei.setdefault(st.imei or "", []).append(st)
+
+    # 3) Mavjud ps_data yozuvlarini bitta so'rovda olib kelamiz.
+    student_ids = [st.id for st in students]
+    ps_by_student: dict[int, StudentPsData] = {}
+    if student_ids:
+        for ps in db.scalars(
+            sa_select(StudentPsData).where(StudentPsData.student_id.in_(student_ids))
+        ).all():
+            ps_by_student[ps.student_id] = ps
+
+    # 4) Yangilash.
+    updated = 0
+    for jshshir, raw in valid.items():
+        matched = by_imei.get(jshshir)
+        if not matched:
+            not_found.append(jshshir)
+            continue
+        for st in matched:
+            ps = ps_by_student.get(st.id)
+            if ps is None:
+                # ps_ser/ps_num NOT NULL — rasm yo'li orqali kelganda ular
+                # noma'lum, shuning uchun bo'sh qiymat bilan yozuv ochamiz.
+                ps = StudentPsData(student_id=st.id, ps_ser="", ps_num="")
+                db.add(ps)
+                ps_by_student[st.id] = ps
+            ps.ps_img = raw
+            ps.embedding = None  # eski embedding endi boshqa rasmga tegishli
+            st.is_image = True
+            st.is_face = False
+            st.is_ready = False
+            updated += 1
+
+    db.commit()
+    logger.info(
+        "Passport rasm yangilash: session=%d, total=%d, updated=%d, not_found=%d, invalid=%d",
         session_id, total, updated, len(not_found), len(invalid),
     )
     return {

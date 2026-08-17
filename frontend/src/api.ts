@@ -591,6 +591,24 @@ export async function uploadSessionPassportsExcelApi(
   return res.data;
 }
 
+/**
+ * `jshshir + base64 rasm` qatorlari bo'yicha `StudentPsData.ps_img` ni ommaviy
+ * yangilash. Rasm serverda BLOB (xom bayt) ko'rinishida saqlanadi.
+ *
+ * Bitta so'rovda 50 tagacha qator qabul qilinadi — katta paste'ni chaqiruvchi
+ * tomon bo'laklarga bo'lib yuborishi kerak (`updateSessionPassportImagesChunked`).
+ */
+export async function updateSessionPassportImagesApi(
+  sessionId: number,
+  rows: import("./interfaces").PassportImageRow[],
+): Promise<import("./interfaces").PassportUpdateResult> {
+  const res = await apiClient.post(
+    `/test-sessions/${sessionId}/passport-update/images`,
+    { rows },
+  );
+  return res.data;
+}
+
 /** Passport yangilash shabloni (.xlsx: jshshir, ps_ser, ps_num) yuklab olish. */
 export async function downloadPassportTemplate(): Promise<void> {
   const res = await apiClient.get("/test-sessions/passport-template", {

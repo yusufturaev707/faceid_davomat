@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import type {
+  PassportImageRow,
   PassportUpdateResult,
   PassportUpdateRow,
   SessionStateResponse,
@@ -30,6 +31,7 @@ import {
   uploadStudentsExcelApi,
   downloadStudentsExcelTemplate,
   updateSessionPassportsApi,
+  updateSessionPassportImagesApi,
   uploadSessionPassportsExcelApi,
   downloadPassportTemplate,
   fileToBase64,
@@ -120,13 +122,16 @@ export default function TestSessionDetailPage() {
 
   // === Passport (ps_ser/ps_num) ommaviy yangilash ===
   const [showPassportUpdate, setShowPassportUpdate] = useState(false);
-  const [passportMode, setPassportMode] = useState<"paste" | "excel">("paste");
+  const [passportMode, setPassportMode] = useState<"paste" | "image" | "excel">("paste");
   const [passportPaste, setPassportPaste] = useState("");
   const [passportFile, setPassportFile] = useState<File | null>(null);
   const [passportSubmitting, setPassportSubmitting] = useState(false);
   const [passportError, setPassportError] = useState<string | null>(null);
   const [passportResult, setPassportResult] = useState<PassportUpdateResult | null>(null);
   const [passportTplDownloading, setPassportTplDownloading] = useState(false);
+  // Rasm (base64) tab'i: paste matni va bo'lak-bo'lak yuborish progressi
+  const [passportImgPaste, setPassportImgPaste] = useState("");
+  const [passportImgSent, setPassportImgSent] = useState(0);
 
   const fetchSession = useCallback(async () => {
     if (!id) return;
@@ -666,6 +671,8 @@ export default function TestSessionDetailPage() {
   const openPassportUpdate = () => {
     setPassportMode("paste");
     setPassportPaste("");
+    setPassportImgPaste("");
+    setPassportImgSent(0);
     setPassportFile(null);
     setPassportError(null);
     setPassportResult(null);
@@ -689,11 +696,39 @@ export default function TestSessionDetailPage() {
     setPassportSubmitting(true);
     setPassportError(null);
     setPassportResult(null);
+    setPassportImgSent(0);
     try {
       let result: PassportUpdateResult;
       if (passportMode === "excel") {
         if (!passportFile) return;
         result = await uploadSessionPassportsExcelApi(session.id, passportFile);
+      } else if (passportMode === "image") {
+        const rows = parsePastedPassportImages(passportImgPaste);
+        if (rows.length === 0) {
+          setPassportError(
+            "Qatorlar topilmadi. Har bir qatorda: jshshir, so'ng TAB va rasmning base64 matni bo'lsin.",
+          );
+          return;
+        }
+        // Base64 rasmlar og'ir — so'rov tanasi katta bo'lib ketmasligi uchun
+        // qatorlarni hajm bo'yicha bo'laklarga bo'lib ketma-ket yuboramiz.
+        result = { total: 0, updated: 0, not_found: [], invalid: [] };
+        let offset = 0;
+        for (const chunk of chunkImageRows(rows)) {
+          const part = await updateSessionPassportImagesApi(session.id, chunk);
+          result = {
+            total: result.total + part.total,
+            updated: result.updated + part.updated,
+            not_found: [...result.not_found, ...part.not_found],
+            // Bo'lak ichidagi qator raqamini umumiy ro'yxatdagi raqamga keltiramiz
+            invalid: [
+              ...result.invalid,
+              ...part.invalid.map((it) => ({ ...it, row: it.row + offset })),
+            ],
+          };
+          offset += chunk.length;
+          setPassportImgSent(offset);
+        }
       } else {
         const rows = parsePastedPassports(passportPaste);
         if (rows.length === 0) {
@@ -1780,11 +1815,18 @@ export default function TestSessionDetailPage() {
         const invalidCount = parsed.filter(
           (r) => validatePassportRowClient(r) !== null,
         ).length;
+        const parsedImgs =
+          passportMode === "image" ? parsePastedPassportImages(passportImgPaste) : [];
+        const invalidImgCount = parsedImgs.filter(
+          (r) => validatePassportImageRowClient(r) !== null,
+        ).length;
         const canSubmit =
           !passportSubmitting &&
           (passportMode === "excel"
             ? !!passportFile
-            : parsed.length > 0 && invalidCount < parsed.length);
+            : passportMode === "image"
+              ? parsedImgs.length > 0 && invalidImgCount < parsedImgs.length
+              : parsed.length > 0 && invalidCount < parsed.length);
 
         return (
           <Modal
@@ -1849,6 +1891,8 @@ export default function TestSessionDetailPage() {
                       onClick={() => {
                         setPassportResult(null);
                         setPassportPaste("");
+                        setPassportImgPaste("");
+                        setPassportImgSent(0);
                         setPassportFile(null);
                       }}
                       className="btn-secondary"
@@ -1869,6 +1913,7 @@ export default function TestSessionDetailPage() {
                   <div className="flex p-1 gap-1 rounded-xl bg-gray-100 dark:bg-slate-700/40">
                     {([
                       ["paste", "Nusxa joylash"],
+                      ["image", "Rasm (base64)"],
                       ["excel", "Excel fayl"],
                     ] as const).map(([key, label]) => (
                       <button
@@ -1896,28 +1941,59 @@ export default function TestSessionDetailPage() {
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
-                      Ustunlar: <code className="font-mono">jshshir</code>,{" "}
-                      <code className="font-mono">ps_ser</code>,{" "}
-                      <code className="font-mono">ps_num</code>
+                      {passportMode === "image" ? (
+                        <>
+                          Ustunlar: <code className="font-mono">jshshir</code>,{" "}
+                          <code className="font-mono">rasm (base64)</code>
+                        </>
+                      ) : (
+                        <>
+                          Ustunlar: <code className="font-mono">jshshir</code>,{" "}
+                          <code className="font-mono">ps_ser</code>,{" "}
+                          <code className="font-mono">ps_num</code>
+                        </>
+                      )}
                     </p>
-                    <p className="text-[12px] leading-relaxed">
-                      <strong>jshshir</strong> bo'yicha shu sessiyadagi talaba topiladi
-                      va passport seriyasi/raqami yangilanadi. Topilmagan JSHSHIR'lar
-                      o'tkazib yuboriladi.
-                    </p>
+                    {passportMode === "image" ? (
+                      <p className="text-[12px] leading-relaxed">
+                        <strong>jshshir</strong> bo'yicha shu sessiyadagi talaba topiladi
+                        va pasport rasmi (<code className="font-mono">ps_img</code>)
+                        yangilanadi — rasm bazaga odatdagidek BLOB ko'rinishida
+                        saqlanadi. Topilmagan JSHSHIR'lar o'tkazib yuboriladi.
+                      </p>
+                    ) : (
+                      <p className="text-[12px] leading-relaxed">
+                        <strong>jshshir</strong> bo'yicha shu sessiyadagi talaba topiladi
+                        va passport seriyasi/raqami yangilanadi. Topilmagan JSHSHIR'lar
+                        o'tkazib yuboriladi.
+                      </p>
+                    )}
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={handlePassportTemplate}
-                    disabled={passportTplDownloading || passportSubmitting}
-                    className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-primary-700 dark:text-primary-200 bg-primary-50 dark:bg-primary-900/30 hover:bg-primary-100 dark:hover:bg-primary-900/50 border border-primary-200/70 dark:border-primary-800/40 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V4" />
-                    </svg>
-                    {passportTplDownloading ? "Yuklab olinmoqda..." : "Shablonni yuklab olish (.xlsx)"}
-                  </button>
+                  {passportMode === "image" ? (
+                    <p className="text-[12px] text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 px-3 py-2 rounded-lg flex items-start gap-2">
+                      <svg className="w-4 h-4 mt-px shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                      </svg>
+                      <span>
+                        Rasm almashgani uchun talabaning eski embedding'i tozalanadi va
+                        u <strong>"tayyor emas"</strong> holatiga o'tadi. Yangilagandan
+                        so'ng embedding bosqichini qayta ishga tushiring.
+                      </span>
+                    </p>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handlePassportTemplate}
+                      disabled={passportTplDownloading || passportSubmitting}
+                      className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-primary-700 dark:text-primary-200 bg-primary-50 dark:bg-primary-900/30 hover:bg-primary-100 dark:hover:bg-primary-900/50 border border-primary-200/70 dark:border-primary-800/40 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V4" />
+                      </svg>
+                      {passportTplDownloading ? "Yuklab olinmoqda..." : "Shablonni yuklab olish (.xlsx)"}
+                    </button>
+                  )}
 
                   {passportMode === "paste" ? (
                     <div className="space-y-2">
@@ -1990,6 +2066,93 @@ export default function TestSessionDetailPage() {
                         </div>
                       )}
                     </div>
+                  ) : passportMode === "image" ? (
+                    <div className="space-y-2">
+                      <Field label="Har bir qatorda: jshshir → TAB → rasmning base64 matni">
+                        <textarea
+                          value={passportImgPaste}
+                          onChange={(e) => {
+                            setPassportImgPaste(e.target.value);
+                            setPassportError(null);
+                          }}
+                          disabled={passportSubmitting}
+                          rows={6}
+                          placeholder={
+                            "32401200012345\t/9j/4AAQSkZJRgABAQAA...\n" +
+                            "33301200067890\tdata:image/png;base64,iVBORw0KGgo..."
+                          }
+                          className="input-field w-full font-mono text-[13px] resize-y"
+                        />
+                      </Field>
+
+                      {/* Jonli ko'rinish (preview) */}
+                      {parsedImgs.length > 0 && (
+                        <div className="rounded-xl border border-gray-200 dark:border-slate-700 overflow-hidden">
+                          <div className="flex items-center justify-between px-3 py-2 bg-gray-50 dark:bg-slate-700/40 text-[12px]">
+                            <span className="font-medium text-gray-600 dark:text-slate-300">
+                              {parsedImgs.length} qator aniqlandi
+                            </span>
+                            {invalidImgCount > 0 && (
+                              <span className="text-rose-600 dark:text-rose-400 font-medium">
+                                {invalidImgCount} ta xato
+                              </span>
+                            )}
+                          </div>
+                          <div className="max-h-56 overflow-y-auto">
+                            <table className="w-full text-[12px]">
+                              <thead className="sticky top-0 bg-white dark:bg-slate-800">
+                                <tr className="text-left text-gray-400 dark:text-slate-500">
+                                  <th className="px-3 py-1.5 font-medium">#</th>
+                                  <th className="px-3 py-1.5 font-medium">jshshir</th>
+                                  <th className="px-3 py-1.5 font-medium">Rasm</th>
+                                  <th className="px-3 py-1.5 font-medium">Hajm</th>
+                                </tr>
+                              </thead>
+                              <tbody className="font-mono">
+                                {parsedImgs.slice(0, 100).map((r, i) => {
+                                  const err = validatePassportImageRowClient(r);
+                                  return (
+                                    <tr
+                                      key={i}
+                                      className={`border-t border-gray-100 dark:border-slate-700/60 ${
+                                        err ? "bg-rose-50/60 dark:bg-rose-900/10" : ""
+                                      }`}
+                                      title={err ?? ""}
+                                    >
+                                      <td className="px-3 py-1 text-gray-400">{i + 1}</td>
+                                      <td className="px-3 py-1 text-gray-700 dark:text-slate-200">
+                                        {r.jshshir || <span className="text-rose-500">—</span>}
+                                      </td>
+                                      <td className="px-3 py-1">
+                                        {err ? (
+                                          <span className="text-rose-500 font-sans">{err}</span>
+                                        ) : (
+                                          <img
+                                            src={
+                                              DATA_URL_PREFIX_RE.test(r.image)
+                                                ? r.image
+                                                : `data:image/jpeg;base64,${r.image}`
+                                            }
+                                            alt=""
+                                            className="w-8 h-10 object-cover rounded border border-gray-200 dark:border-slate-600"
+                                            onError={(e) => {
+                                              e.currentTarget.style.visibility = "hidden";
+                                            }}
+                                          />
+                                        )}
+                                      </td>
+                                      <td className="px-3 py-1 text-gray-500 dark:text-slate-400">
+                                        {r.image ? `${b64SizeKb(r.image)} KB` : "—"}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   ) : (
                     <Field label="Excel fayl (.xlsx)">
                       <input
@@ -2027,9 +2190,17 @@ export default function TestSessionDetailPage() {
 
             {!passportResult && (
               <ModalFooter
-                onCancel={() => setShowPassportUpdate(false)}
+                onCancel={() =>
+                  passportSubmitting ? undefined : setShowPassportUpdate(false)
+                }
                 onConfirm={handlePassportSubmit}
-                confirmText={passportSubmitting ? "Yangilanmoqda..." : "Yangilash"}
+                confirmText={
+                  !passportSubmitting
+                    ? "Yangilash"
+                    : passportMode === "image" && parsedImgs.length > 0
+                      ? `Yuborilmoqda... ${passportImgSent}/${parsedImgs.length}`
+                      : "Yangilanmoqda..."
+                }
                 disabled={!canSubmit}
               />
             )}
@@ -2213,6 +2384,92 @@ function splitCombinedPassport(ps_ser: string, ps_num: string): [string, string]
   const m = COMBINED_PASSPORT_RE.exec(ps_ser.trim());
   if (!m) return [ps_ser, ps_num];
   return [m[1].toUpperCase(), m[2]];
+}
+
+// --- Passport RASMI (base64) tab'i uchun yordamchilar ---
+
+// Bitta so'rovda yuboriladigan maksimal qator soni va base64 belgilar hajmi.
+// Hajm chegarasi reverse-proxy'ning body limitidan (odatda 1 MB) past turadi.
+const IMG_CHUNK_ROWS = 20;
+const IMG_CHUNK_CHARS = 900_000;
+
+// Bitta rasm uchun base64 uzunligi chegarasi — backend'dagi 3 MB ga mos.
+const MAX_IMG_B64_LEN = 4_200_000;
+const MIN_IMG_B64_LEN = 683; // ~512 bayt
+
+// `data:image/png;base64,` prefiksi va base64 alifbosi.
+const DATA_URL_PREFIX_RE = /^data:[^;,]*;base64,/i;
+const BASE64_RE = /^[A-Za-z0-9+/\-_]+={0,2}$/;
+
+/**
+ * Paste qilingan matnni `{jshshir, image}` qatorlariga ajratadi.
+ *
+ * Har bir qator: `jshshir<TAB>base64`. Base64 ichida `,` va `;` uchrashi
+ * mumkin (`data:image/png;base64,...`), shuning uchun oddiy paste'dan farqli
+ * ravishda faqat BIRINCHI ajratgich bo'yicha bo'linadi.
+ */
+function parsePastedPassportImages(text: string): PassportImageRow[] {
+  const rows: PassportImageRow[] = [];
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    // Sarlavha qatori (jshshir / image / rasm ...) — o'tkazib yuboramiz
+    if (/^(jshshir|pinfl|imei)\b[\s,;\t]*(image|rasm|photo|base64)?\s*$/i.test(line)) {
+      continue;
+    }
+    // Birinchi TAB, aks holda birinchi bo'shliq(lar) yoki `;` bo'yicha bo'lamiz.
+    const m = /^([^\t]*?)(?:\t|\s+|;)(.*)$/s.exec(line);
+    if (!m) {
+      rows.push({ jshshir: line, image: "" });
+      continue;
+    }
+    rows.push({
+      jshshir: m[1].trim(),
+      image: m[2].replace(/\s+/g, ""),
+    });
+  }
+  return rows;
+}
+
+/** Bitta rasm qatorini client tomonda tekshiradi (backend bilan bir xil qoidalar). */
+function validatePassportImageRowClient(r: PassportImageRow): string | null {
+  if (!r.jshshir) return "JSHSHIR bo'sh";
+  if (!/^\d{1,14}$/.test(r.jshshir)) return "JSHSHIR 14 ta raqamgacha bo'lishi kerak";
+  if (!r.image) return "Rasm (base64) bo'sh";
+  const b64 = r.image.replace(DATA_URL_PREFIX_RE, "");
+  if (b64.length < MIN_IMG_B64_LEN) return "Rasm juda kichik (buzilgan bo'lishi mumkin)";
+  if (b64.length > MAX_IMG_B64_LEN) return "Rasm hajmi 3MB dan oshmasin";
+  if (!BASE64_RE.test(b64)) return "Base64 formati noto'g'ri";
+  return null;
+}
+
+/** Base64 uzunligidan taxminiy fayl hajmini (KB) hisoblaydi. */
+function b64SizeKb(image: string): number {
+  const b64 = image.replace(DATA_URL_PREFIX_RE, "");
+  return Math.max(1, Math.round((b64.length * 3) / 4 / 1024));
+}
+
+/** Qatorlarni so'rov hajmi bo'yicha bo'laklarga bo'ladi. */
+function chunkImageRows(rows: PassportImageRow[]): PassportImageRow[][] {
+  const chunks: PassportImageRow[][] = [];
+  let current: PassportImageRow[] = [];
+  let chars = 0;
+  for (const row of rows) {
+    // Bitta qatorning o'zi chegaradan katta bo'lsa ham — alohida yuboriladi
+    // (backend uni "rasm hajmi oshmasin" deb rad etadi).
+    if (
+      current.length > 0 &&
+      (current.length >= IMG_CHUNK_ROWS || chars + row.image.length > IMG_CHUNK_CHARS)
+    ) {
+      chunks.push(current);
+      current = [];
+      chars = 0;
+    }
+    current.push(row);
+    chars += row.image.length;
+  }
+  if (current.length > 0) chunks.push(current);
+  return chunks;
 }
 
 /** Bitta qatorni client tomonda tekshiradi (backend bilan bir xil qoidalar). */
