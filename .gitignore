@@ -22,8 +22,8 @@ davomat_bot/.env.example
 
 backend/celerybeat-schedule*
 
-#frontend/node_modules/
-#frontend/dist/
+frontend/node_modules/
+frontend/dist/
 
 
 # Byte-compiled / optimized / DLL files
