@@ -20,9 +20,9 @@ export default function SessionStatesPage() {
       createItem={createSessionStateApi}
       updateItem={updateSessionStateApi}
       deleteItem={deleteSessionStateApi}
-      createPermission={PERM.LOOKUP_CREATE}
-      updatePermission={PERM.LOOKUP_UPDATE}
-      deletePermission={PERM.LOOKUP_DELETE}
+      createPermission={PERM.SESSION_STATE_CREATE}
+      updatePermission={PERM.SESSION_STATE_UPDATE}
+      deletePermission={PERM.SESSION_STATE_DELETE}
     />
   );
 }

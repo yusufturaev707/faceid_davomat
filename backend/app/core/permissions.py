@@ -146,11 +146,199 @@ class P:
         "cheating_log",
     )
 
-    # === Lookup tables (tests, smenas, session_states, regions, zones, reasons, reason_types, blacklist, genders) ===
-    LOOKUP_READ = _Perm("lookup:read", "Ma'lumotnomalarni ko'rish", "lookup")
-    LOOKUP_CREATE = _Perm("lookup:create", "Ma'lumotnoma yozuvi yaratish", "lookup")
-    LOOKUP_UPDATE = _Perm("lookup:update", "Ma'lumotnoma yozuvini tahrirlash", "lookup")
-    LOOKUP_DELETE = _Perm("lookup:delete", "Ma'lumotnoma yozuvini o'chirish", "lookup")
+    # === Ma'lumotnomalar (Sozlamalar bo'limi) ===
+    # Ilgari bularning hammasi bitta `lookup:*` guruhida edi — ya'ni bir
+    # bo'limga ruxsat berish qolganlarini ham ochib yuborardi. Endi har
+    # bir ma'lumotnoma o'z guruhida, alohida boshqariladi.
+
+    REGION_READ = _Perm(
+        "region:read",
+        "Viloyatlarni ko'rish",
+        "region",
+    )
+    REGION_CREATE = _Perm(
+        "region:create",
+        "Viloyat yaratish",
+        "region",
+    )
+    REGION_UPDATE = _Perm(
+        "region:update",
+        "Viloyatni tahrirlash",
+        "region",
+    )
+    REGION_DELETE = _Perm(
+        "region:delete",
+        "Viloyatni o'chirish",
+        "region",
+    )
+
+    ZONE_READ = _Perm(
+        "zone:read",
+        "Binolarni ko'rish",
+        "zone",
+    )
+    ZONE_CREATE = _Perm(
+        "zone:create",
+        "Bino yaratish",
+        "zone",
+    )
+    ZONE_UPDATE = _Perm(
+        "zone:update",
+        "Binoni tahrirlash",
+        "zone",
+    )
+    ZONE_DELETE = _Perm(
+        "zone:delete",
+        "Binoni o'chirish",
+        "zone",
+    )
+
+    TEST_READ = _Perm(
+        "test:read",
+        "Testlarni ko'rish",
+        "test",
+    )
+    TEST_CREATE = _Perm(
+        "test:create",
+        "Test yaratish",
+        "test",
+    )
+    TEST_UPDATE = _Perm(
+        "test:update",
+        "Testni tahrirlash",
+        "test",
+    )
+    TEST_DELETE = _Perm(
+        "test:delete",
+        "Testni o'chirish",
+        "test",
+    )
+
+    SMENA_READ = _Perm(
+        "smena:read",
+        "Smenalarni ko'rish",
+        "smena",
+    )
+    SMENA_CREATE = _Perm(
+        "smena:create",
+        "Smena yaratish",
+        "smena",
+    )
+    SMENA_UPDATE = _Perm(
+        "smena:update",
+        "Smenani tahrirlash",
+        "smena",
+    )
+    SMENA_DELETE = _Perm(
+        "smena:delete",
+        "Smenani o'chirish",
+        "smena",
+    )
+
+    SESSION_STATE_READ = _Perm(
+        "session_state:read",
+        "Sessiya holatlarini ko'rish",
+        "session_state",
+    )
+    SESSION_STATE_CREATE = _Perm(
+        "session_state:create",
+        "Sessiya holati yaratish",
+        "session_state",
+    )
+    SESSION_STATE_UPDATE = _Perm(
+        "session_state:update",
+        "Sessiya holatini tahrirlash",
+        "session_state",
+    )
+    SESSION_STATE_DELETE = _Perm(
+        "session_state:delete",
+        "Sessiya holatini o'chirish",
+        "session_state",
+    )
+
+    REASON_READ = _Perm(
+        "reason:read",
+        "Chetlatish sabablarini ko'rish",
+        "reason",
+    )
+    REASON_CREATE = _Perm(
+        "reason:create",
+        "Chetlatish sababi yaratish",
+        "reason",
+    )
+    REASON_UPDATE = _Perm(
+        "reason:update",
+        "Chetlatish sababini tahrirlash",
+        "reason",
+    )
+    REASON_DELETE = _Perm(
+        "reason:delete",
+        "Chetlatish sababini o'chirish",
+        "reason",
+    )
+
+    REASON_TYPE_READ = _Perm(
+        "reason_type:read",
+        "Chetlatish turlarini ko'rish",
+        "reason_type",
+    )
+    REASON_TYPE_CREATE = _Perm(
+        "reason_type:create",
+        "Chetlatish turi yaratish",
+        "reason_type",
+    )
+    REASON_TYPE_UPDATE = _Perm(
+        "reason_type:update",
+        "Chetlatish turini tahrirlash",
+        "reason_type",
+    )
+    REASON_TYPE_DELETE = _Perm(
+        "reason_type:delete",
+        "Chetlatish turini o'chirish",
+        "reason_type",
+    )
+
+    GENDER_READ = _Perm(
+        "gender:read",
+        "Jinslarni ko'rish",
+        "gender",
+    )
+    GENDER_CREATE = _Perm(
+        "gender:create",
+        "Jins yaratish",
+        "gender",
+    )
+    GENDER_UPDATE = _Perm(
+        "gender:update",
+        "Jinsni tahrirlash",
+        "gender",
+    )
+    GENDER_DELETE = _Perm(
+        "gender:delete",
+        "Jinsni o'chirish",
+        "gender",
+    )
+
+    BLACKLIST_READ = _Perm(
+        "blacklist:read",
+        "Qora ro'yxatni ko'rish",
+        "blacklist",
+    )
+    BLACKLIST_CREATE = _Perm(
+        "blacklist:create",
+        "Qora ro'yxatga qo'shish",
+        "blacklist",
+    )
+    BLACKLIST_UPDATE = _Perm(
+        "blacklist:update",
+        "Qora ro'yxat yozuvini tahrirlash",
+        "blacklist",
+    )
+    BLACKLIST_DELETE = _Perm(
+        "blacklist:delete",
+        "Qora ro'yxatdan o'chirish",
+        "blacklist",
+    )
 
     # === Security audit ===
     FAILED_LOGIN_READ = _Perm(

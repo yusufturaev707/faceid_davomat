@@ -20,9 +20,9 @@ export default function GendersPage() {
       createItem={createGenderApi}
       updateItem={updateGenderApi}
       deleteItem={deleteGenderApi}
-      createPermission={PERM.LOOKUP_CREATE}
-      updatePermission={PERM.LOOKUP_UPDATE}
-      deletePermission={PERM.LOOKUP_DELETE}
+      createPermission={PERM.GENDER_CREATE}
+      updatePermission={PERM.GENDER_UPDATE}
+      deletePermission={PERM.GENDER_DELETE}
     />
   );
 }

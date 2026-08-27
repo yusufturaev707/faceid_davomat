@@ -22,10 +22,44 @@ router = APIRouter()
 # session_states, regions, zones, reasons, reason_types, blacklist, genders).
 # Role endpointlari alohida — role:* permissionlari bilan.
 
-_LOOKUP_READ = PermissionChecker(P.LOOKUP_READ.code)
-_LOOKUP_CREATE = PermissionChecker(P.LOOKUP_CREATE.code)
-_LOOKUP_UPDATE = PermissionChecker(P.LOOKUP_UPDATE.code)
-_LOOKUP_DELETE = PermissionChecker(P.LOOKUP_DELETE.code)
+# Ma'lumotnomalar — har bir bo'lim o'z permissioniga ega. Ilgari bularning
+# hammasi bitta `lookup:*` da edi va bir bo'limga ruxsat berish qolganlarini
+# ham ochib yuborardi.
+_REGION_CREATE = PermissionChecker(P.REGION_CREATE.code)
+_REGION_UPDATE = PermissionChecker(P.REGION_UPDATE.code)
+_REGION_DELETE = PermissionChecker(P.REGION_DELETE.code)
+
+_ZONE_CREATE = PermissionChecker(P.ZONE_CREATE.code)
+_ZONE_UPDATE = PermissionChecker(P.ZONE_UPDATE.code)
+_ZONE_DELETE = PermissionChecker(P.ZONE_DELETE.code)
+
+_TEST_CREATE = PermissionChecker(P.TEST_CREATE.code)
+_TEST_UPDATE = PermissionChecker(P.TEST_UPDATE.code)
+_TEST_DELETE = PermissionChecker(P.TEST_DELETE.code)
+
+_SMENA_CREATE = PermissionChecker(P.SMENA_CREATE.code)
+_SMENA_UPDATE = PermissionChecker(P.SMENA_UPDATE.code)
+_SMENA_DELETE = PermissionChecker(P.SMENA_DELETE.code)
+
+_SESSION_STATE_CREATE = PermissionChecker(P.SESSION_STATE_CREATE.code)
+_SESSION_STATE_UPDATE = PermissionChecker(P.SESSION_STATE_UPDATE.code)
+_SESSION_STATE_DELETE = PermissionChecker(P.SESSION_STATE_DELETE.code)
+
+_REASON_CREATE = PermissionChecker(P.REASON_CREATE.code)
+_REASON_UPDATE = PermissionChecker(P.REASON_UPDATE.code)
+_REASON_DELETE = PermissionChecker(P.REASON_DELETE.code)
+
+_REASON_TYPE_CREATE = PermissionChecker(P.REASON_TYPE_CREATE.code)
+_REASON_TYPE_UPDATE = PermissionChecker(P.REASON_TYPE_UPDATE.code)
+_REASON_TYPE_DELETE = PermissionChecker(P.REASON_TYPE_DELETE.code)
+
+_GENDER_CREATE = PermissionChecker(P.GENDER_CREATE.code)
+_GENDER_UPDATE = PermissionChecker(P.GENDER_UPDATE.code)
+_GENDER_DELETE = PermissionChecker(P.GENDER_DELETE.code)
+
+_BLACKLIST_CREATE = PermissionChecker(P.BLACKLIST_CREATE.code)
+_BLACKLIST_UPDATE = PermissionChecker(P.BLACKLIST_UPDATE.code)
+_BLACKLIST_DELETE = PermissionChecker(P.BLACKLIST_DELETE.code)
 
 # Rol RO'YXATI (faqat nom/kalit) bir nechta sahifada selektor sifatida kerak:
 # foydalanuvchi kartochkasi, davomat botlari, huquqlarni boshqarish. Shu bois
@@ -63,7 +97,7 @@ def list_tests(
 def create_test(
     body: schemas.TestCreate,
     db: Session = Depends(get_db),
-    _: User = Depends(_LOOKUP_CREATE),
+    _: User = Depends(_TEST_CREATE),
 ):
     try:
         return crud.create_test(db, body.model_dump())
@@ -76,7 +110,7 @@ def update_test(
     item_id: int,
     body: schemas.TestUpdate,
     db: Session = Depends(get_db),
-    _: User = Depends(_LOOKUP_UPDATE),
+    _: User = Depends(_TEST_UPDATE),
 ):
     try:
         obj = crud.update_test(db, item_id, body.model_dump(exclude_unset=True))
@@ -89,7 +123,7 @@ def update_test(
 
 @router.delete("/tests/{item_id}", status_code=204, tags=["tests"])
 def delete_test(
-    item_id: int, db: Session = Depends(get_db), _: User = Depends(_LOOKUP_DELETE)
+    item_id: int, db: Session = Depends(get_db), _: User = Depends(_TEST_DELETE)
 ):
     try:
         if not crud.delete_test(db, item_id):
@@ -114,7 +148,7 @@ def list_smenas(
 def create_smena(
     body: schemas.SmenaCreate,
     db: Session = Depends(get_db),
-    _: User = Depends(_LOOKUP_CREATE),
+    _: User = Depends(_SMENA_CREATE),
 ):
     try:
         return crud.create_smena(db, body.model_dump())
@@ -129,7 +163,7 @@ def update_smena(
     item_id: int,
     body: schemas.SmenaUpdate,
     db: Session = Depends(get_db),
-    _: User = Depends(_LOOKUP_UPDATE),
+    _: User = Depends(_SMENA_UPDATE),
 ):
     try:
         obj = crud.update_smena(db, item_id, body.model_dump(exclude_unset=True))
@@ -142,7 +176,7 @@ def update_smena(
 
 @router.delete("/smenas/{item_id}", status_code=204, tags=["smenas"])
 def delete_smena(
-    item_id: int, db: Session = Depends(get_db), _: User = Depends(_LOOKUP_DELETE)
+    item_id: int, db: Session = Depends(get_db), _: User = Depends(_SMENA_DELETE)
 ):
     try:
         if not crud.delete_smena(db, item_id):
@@ -174,7 +208,7 @@ def list_session_states(
 def create_session_state(
     body: schemas.SessionStateCreate,
     db: Session = Depends(get_db),
-    _: User = Depends(_LOOKUP_CREATE),
+    _: User = Depends(_SESSION_STATE_CREATE),
 ):
     try:
         return crud.create_session_state(db, body.model_dump())
@@ -191,7 +225,7 @@ def update_session_state(
     item_id: int,
     body: schemas.SessionStateUpdate,
     db: Session = Depends(get_db),
-    _: User = Depends(_LOOKUP_UPDATE),
+    _: User = Depends(_SESSION_STATE_UPDATE),
 ):
     try:
         obj = crud.update_session_state(
@@ -206,7 +240,7 @@ def update_session_state(
 
 @router.delete("/session-states/{item_id}", status_code=204, tags=["session-states"])
 def delete_session_state(
-    item_id: int, db: Session = Depends(get_db), _: User = Depends(_LOOKUP_DELETE)
+    item_id: int, db: Session = Depends(get_db), _: User = Depends(_SESSION_STATE_DELETE)
 ):
     try:
         if not crud.delete_session_state(db, item_id):
@@ -231,7 +265,7 @@ def list_regions(
 def create_region(
     body: schemas.RegionCreate,
     db: Session = Depends(get_db),
-    _: User = Depends(_LOOKUP_CREATE),
+    _: User = Depends(_REGION_CREATE),
 ):
     try:
         return crud.create_region(db, body.model_dump())
@@ -246,7 +280,7 @@ def update_region(
     item_id: int,
     body: schemas.RegionUpdate,
     db: Session = Depends(get_db),
-    _: User = Depends(_LOOKUP_UPDATE),
+    _: User = Depends(_REGION_UPDATE),
 ):
     try:
         obj = crud.update_region(db, item_id, body.model_dump(exclude_unset=True))
@@ -259,7 +293,7 @@ def update_region(
 
 @router.delete("/regions/{item_id}", status_code=204, tags=["regions"])
 def delete_region(
-    item_id: int, db: Session = Depends(get_db), _: User = Depends(_LOOKUP_DELETE)
+    item_id: int, db: Session = Depends(get_db), _: User = Depends(_REGION_DELETE)
 ):
     try:
         if not crud.delete_region(db, item_id):
@@ -315,7 +349,7 @@ def list_my_region_zones(
 )
 def sync_zones_from_otm_endpoint(
     db: Session = Depends(get_db),
-    _: User = Depends(_LOOKUP_CREATE),
+    _: User = Depends(_ZONE_CREATE),
 ):
     """Tashqi `API_OTM_ZONES` dan binolar ro'yxatini olib, tizimda mavjud
     bo'lmaganini insert qiladi.
@@ -342,7 +376,7 @@ def sync_zones_from_otm_endpoint(
 def create_zone(
     body: schemas.ZoneCreate,
     db: Session = Depends(get_db),
-    _: User = Depends(_LOOKUP_CREATE),
+    _: User = Depends(_ZONE_CREATE),
 ):
     try:
         return crud.create_zone(db, body.model_dump())
@@ -355,7 +389,7 @@ def update_zone(
     item_id: int,
     body: schemas.ZoneUpdate,
     db: Session = Depends(get_db),
-    _: User = Depends(_LOOKUP_UPDATE),
+    _: User = Depends(_ZONE_UPDATE),
 ):
     try:
         obj = crud.update_zone(db, item_id, body.model_dump(exclude_unset=True))
@@ -368,7 +402,7 @@ def update_zone(
 
 @router.delete("/zones/{item_id}", status_code=204, tags=["zones"])
 def delete_zone(
-    item_id: int, db: Session = Depends(get_db), _: User = Depends(_LOOKUP_DELETE)
+    item_id: int, db: Session = Depends(get_db), _: User = Depends(_ZONE_DELETE)
 ):
     try:
         if not crud.delete_zone(db, item_id):
@@ -442,7 +476,7 @@ def list_reasons(
 def create_reason(
     body: schemas.ReasonCreate,
     db: Session = Depends(get_db),
-    _: User = Depends(_LOOKUP_CREATE),
+    _: User = Depends(_REASON_CREATE),
 ):
     try:
         return crud.create_reason(db, body.model_dump())
@@ -457,7 +491,7 @@ def update_reason(
     item_id: int,
     body: schemas.ReasonUpdate,
     db: Session = Depends(get_db),
-    _: User = Depends(_LOOKUP_UPDATE),
+    _: User = Depends(_REASON_UPDATE),
 ):
     try:
         obj = crud.update_reason(db, item_id, body.model_dump(exclude_unset=True))
@@ -470,7 +504,7 @@ def update_reason(
 
 @router.delete("/reasons/{item_id}", status_code=204, tags=["reasons"])
 def delete_reason(
-    item_id: int, db: Session = Depends(get_db), _: User = Depends(_LOOKUP_DELETE)
+    item_id: int, db: Session = Depends(get_db), _: User = Depends(_REASON_DELETE)
 ):
     try:
         if not crud.delete_reason(db, item_id):
@@ -502,7 +536,7 @@ def list_reason_types(
 def create_reason_type(
     body: schemas.ReasonTypeCreate,
     db: Session = Depends(get_db),
-    _: User = Depends(_LOOKUP_CREATE),
+    _: User = Depends(_REASON_TYPE_CREATE),
 ):
     try:
         return crud.create_reason_type(db, body.model_dump())
@@ -519,7 +553,7 @@ def update_reason_type(
     item_id: int,
     body: schemas.ReasonTypeUpdate,
     db: Session = Depends(get_db),
-    _: User = Depends(_LOOKUP_UPDATE),
+    _: User = Depends(_REASON_TYPE_UPDATE),
 ):
     try:
         obj = crud.update_reason_type(db, item_id, body.model_dump(exclude_unset=True))
@@ -532,7 +566,7 @@ def update_reason_type(
 
 @router.delete("/reason-types/{item_id}", status_code=204, tags=["reason-types"])
 def delete_reason_type(
-    item_id: int, db: Session = Depends(get_db), _: User = Depends(_LOOKUP_DELETE)
+    item_id: int, db: Session = Depends(get_db), _: User = Depends(_REASON_TYPE_DELETE)
 ):
     try:
         if not crud.delete_reason_type(db, item_id):
@@ -564,7 +598,7 @@ def list_blacklist(
 def create_blacklist(
     body: schemas.StudentBlacklistCreate,
     db: Session = Depends(get_db),
-    _: User = Depends(_LOOKUP_CREATE),
+    _: User = Depends(_BLACKLIST_CREATE),
 ):
     try:
         return crud.create_blacklist_item(db, body.model_dump())
@@ -581,7 +615,7 @@ def update_blacklist(
     item_id: int,
     body: schemas.StudentBlacklistUpdate,
     db: Session = Depends(get_db),
-    _: User = Depends(_LOOKUP_UPDATE),
+    _: User = Depends(_BLACKLIST_UPDATE),
 ):
     try:
         obj = crud.update_blacklist_item(
@@ -596,7 +630,7 @@ def update_blacklist(
 
 @router.delete("/blacklist/{item_id}", status_code=204, tags=["blacklist"])
 def delete_blacklist(
-    item_id: int, db: Session = Depends(get_db), _: User = Depends(_LOOKUP_DELETE)
+    item_id: int, db: Session = Depends(get_db), _: User = Depends(_BLACKLIST_DELETE)
 ):
     try:
         if not crud.delete_blacklist_item(db, item_id):
@@ -621,7 +655,7 @@ def list_genders(
 def create_gender(
     body: schemas.GenderCreate,
     db: Session = Depends(get_db),
-    _: User = Depends(_LOOKUP_CREATE),
+    _: User = Depends(_GENDER_CREATE),
 ):
     try:
         return crud.create_gender(db, body.model_dump())
@@ -636,7 +670,7 @@ def update_gender(
     item_id: int,
     body: schemas.GenderUpdate,
     db: Session = Depends(get_db),
-    _: User = Depends(_LOOKUP_UPDATE),
+    _: User = Depends(_GENDER_UPDATE),
 ):
     try:
         obj = crud.update_gender(db, item_id, body.model_dump(exclude_unset=True))
@@ -649,7 +683,7 @@ def update_gender(
 
 @router.delete("/genders/{item_id}", status_code=204, tags=["genders"])
 def delete_gender(
-    item_id: int, db: Session = Depends(get_db), _: User = Depends(_LOOKUP_DELETE)
+    item_id: int, db: Session = Depends(get_db), _: User = Depends(_GENDER_DELETE)
 ):
     try:
         if not crud.delete_gender(db, item_id):

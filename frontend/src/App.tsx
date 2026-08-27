@@ -259,22 +259,40 @@ export default function App() {
           </Route>
 
           {/* Ma'lumotnomalar */}
-          <Route element={<PermissionRoute permission={PERM.LOOKUP_READ} />}>
-            <Route path="/manage-tests" element={<TestsPage />} />
-            <Route path="/manage-smenas" element={<SmenasPage />} />
-            <Route
-              path="/manage-session-states"
-              element={<SessionStatesPage />}
-            />
+          <Route element={<PermissionRoute permission={PERM.REGION_READ} />}>
             <Route path="/manage-regions" element={<RegionsPage />} />
+          </Route>
+
+          <Route element={<PermissionRoute permission={PERM.ZONE_READ} />}>
             <Route path="/manage-zones" element={<ZonesPage />} />
+          </Route>
+
+          <Route element={<PermissionRoute permission={PERM.TEST_READ} />}>
+            <Route path="/manage-tests" element={<TestsPage />} />
+          </Route>
+
+          <Route element={<PermissionRoute permission={PERM.SMENA_READ} />}>
+            <Route path="/manage-smenas" element={<SmenasPage />} />
+          </Route>
+
+          <Route element={<PermissionRoute permission={PERM.SESSION_STATE_READ} />}>
+            <Route path="/manage-session-states" element={<SessionStatesPage />} />
+          </Route>
+
+          <Route element={<PermissionRoute permission={PERM.REASON_READ} />}>
             <Route path="/manage-reasons" element={<ReasonsPage />} />
-            <Route
-              path="/manage-reason-types"
-              element={<ReasonTypesPage />}
-            />
-            <Route path="/manage-blacklist" element={<BlacklistPage />} />
+          </Route>
+
+          <Route element={<PermissionRoute permission={PERM.REASON_TYPE_READ} />}>
+            <Route path="/manage-reason-types" element={<ReasonTypesPage />} />
+          </Route>
+
+          <Route element={<PermissionRoute permission={PERM.GENDER_READ} />}>
             <Route path="/manage-genders" element={<GendersPage />} />
+          </Route>
+
+          <Route element={<PermissionRoute permission={PERM.BLACKLIST_READ} />}>
+            <Route path="/manage-blacklist" element={<BlacklistPage />} />
           </Route>
         </Route>
       </Route>

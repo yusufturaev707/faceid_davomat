@@ -35,9 +35,9 @@ export default function BlacklistPage() {
       createItem={createBlacklistApi}
       updateItem={updateBlacklistApi}
       deleteItem={deleteBlacklistApi}
-      createPermission={PERM.LOOKUP_CREATE}
-      updatePermission={PERM.LOOKUP_UPDATE}
-      deletePermission={PERM.LOOKUP_DELETE}
+      createPermission={PERM.BLACKLIST_CREATE}
+      updatePermission={PERM.BLACKLIST_UPDATE}
+      deletePermission={PERM.BLACKLIST_DELETE}
       searchKeys={["imei", "description"]}
       searchPlaceholder="JSHSHIR yoki izoh bo'yicha qidirish..."
     />

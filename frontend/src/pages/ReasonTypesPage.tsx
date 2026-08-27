@@ -20,9 +20,9 @@ export default function ReasonTypesPage() {
       createItem={createReasonTypeApi}
       updateItem={updateReasonTypeApi}
       deleteItem={deleteReasonTypeApi}
-      createPermission={PERM.LOOKUP_CREATE}
-      updatePermission={PERM.LOOKUP_UPDATE}
-      deletePermission={PERM.LOOKUP_DELETE}
+      createPermission={PERM.REASON_TYPE_CREATE}
+      updatePermission={PERM.REASON_TYPE_UPDATE}
+      deletePermission={PERM.REASON_TYPE_DELETE}
     />
   );
 }

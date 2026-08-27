@@ -125,11 +125,11 @@ export default function ZonesPage() {
       createItem={createZoneApi}
       updateItem={updateZoneApi}
       deleteItem={deleteZoneApi}
-      createPermission={PERM.LOOKUP_CREATE}
-      updatePermission={PERM.LOOKUP_UPDATE}
-      deletePermission={PERM.LOOKUP_DELETE}
+      createPermission={PERM.ZONE_CREATE}
+      updatePermission={PERM.ZONE_UPDATE}
+      deletePermission={PERM.ZONE_DELETE}
       headerActions={(reload) => (
-        <PermissionGate permission={PERM.LOOKUP_CREATE}>
+        <PermissionGate permission={PERM.ZONE_CREATE}>
           <OtmZoneSyncButton onSynced={reload} />
         </PermissionGate>
       )}

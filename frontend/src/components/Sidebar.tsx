@@ -57,7 +57,15 @@ export default function Sidebar({ drawerOpen = false, onClose }: SidebarProps) {
     PERM.ROLE_UPDATE,
     PERM.PERMISSION_READ,
     PERM.FAILED_LOGIN_READ,
-    PERM.LOOKUP_READ,
+    PERM.BLACKLIST_READ,
+    PERM.GENDER_READ,
+    PERM.REASON_READ,
+    PERM.REASON_TYPE_READ,
+    PERM.REGION_READ,
+    PERM.SESSION_STATE_READ,
+    PERM.SMENA_READ,
+    PERM.TEST_READ,
+    PERM.ZONE_READ,
   );
 
   // Botlar — Davomat va Statistika bot foydalanuvchilari alohida guruhda
@@ -375,161 +383,175 @@ export default function Sidebar({ drawerOpen = false, onClose }: SidebarProps) {
               </NavLink>
             )}
 
-            {hasPermission(PERM.LOOKUP_READ) && (
-              <>
-                <NavLink to="/manage-regions" className={navLinkClass}>
-                  <svg
-                    className={iconClass}
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                    />
-                  </svg>
-                  Viloyatlar
-                </NavLink>
+            {hasPermission(PERM.REGION_READ) && (
+              <NavLink to="/manage-regions" className={navLinkClass}>
+                <svg
+                  className={iconClass}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+                Viloyatlar
+              </NavLink>
+            )}
 
-                <NavLink to="/manage-zones" className={navLinkClass}>
-                  <svg
-                    className={iconClass}
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
-                    />
-                  </svg>
-                  Binolar
-                </NavLink>
+            {hasPermission(PERM.ZONE_READ) && (
+              <NavLink to="/manage-zones" className={navLinkClass}>
+                <svg
+                  className={iconClass}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
+                  />
+                </svg>
+                Binolar
+              </NavLink>
+            )}
 
-                <NavLink to="/manage-tests" className={navLinkClass}>
-                  <svg
-                    className={iconClass}
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"
-                    />
-                  </svg>
-                  Testlar
-                </NavLink>
+            {hasPermission(PERM.TEST_READ) && (
+              <NavLink to="/manage-tests" className={navLinkClass}>
+                <svg
+                  className={iconClass}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"
+                  />
+                </svg>
+                Testlar
+              </NavLink>
+            )}
 
-                <NavLink to="/manage-smenas" className={navLinkClass}>
-                  <svg
-                    className={iconClass}
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                    />
-                  </svg>
-                  Smenalar
-                </NavLink>
+            {hasPermission(PERM.SMENA_READ) && (
+              <NavLink to="/manage-smenas" className={navLinkClass}>
+                <svg
+                  className={iconClass}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+                Smenalar
+              </NavLink>
+            )}
 
-                <NavLink to="/manage-session-states" className={navLinkClass}>
-                  <svg
-                    className={iconClass}
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A2 2 0 013 12V7a4 4 0 014-4z"
-                    />
-                  </svg>
-                  Sessiya holatlari
-                </NavLink>
+            {hasPermission(PERM.SESSION_STATE_READ) && (
+              <NavLink to="/manage-session-states" className={navLinkClass}>
+                <svg
+                  className={iconClass}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A2 2 0 013 12V7a4 4 0 014-4z"
+                  />
+                </svg>
+                Sessiya holatlari
+              </NavLink>
+            )}
 
-                <NavLink to="/manage-reasons" className={navLinkClass}>
-                  <svg
-                    className={iconClass}
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-                    />
-                  </svg>
-                  Chetlatish sabablari
-                </NavLink>
+            {hasPermission(PERM.REASON_READ) && (
+              <NavLink to="/manage-reasons" className={navLinkClass}>
+                <svg
+                  className={iconClass}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                  />
+                </svg>
+                Chetlatish sabablari
+              </NavLink>
+            )}
 
-                <NavLink to="/manage-reason-types" className={navLinkClass}>
-                  <svg
-                    className={iconClass}
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
-                    />
-                  </svg>
-                  Chetlatish turi
-                </NavLink>
+            {hasPermission(PERM.REASON_TYPE_READ) && (
+              <NavLink to="/manage-reason-types" className={navLinkClass}>
+                <svg
+                  className={iconClass}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
+                  />
+                </svg>
+                Chetlatish turi
+              </NavLink>
+            )}
 
-                <NavLink to="/manage-genders" className={navLinkClass}>
-                  <svg
-                    className={iconClass}
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-                    />
-                  </svg>
-                  Jinslar
-                </NavLink>
+            {hasPermission(PERM.GENDER_READ) && (
+              <NavLink to="/manage-genders" className={navLinkClass}>
+                <svg
+                  className={iconClass}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                  />
+                </svg>
+                Jinslar
+              </NavLink>
+            )}
 
-                <NavLink to="/manage-blacklist" className={navLinkClass}>
-                  <svg
-                    className={iconClass}
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"
-                    />
-                  </svg>
-                  Qora ro'yxat
-                </NavLink>
-              </>
+            {hasPermission(PERM.BLACKLIST_READ) && (
+              <NavLink to="/manage-blacklist" className={navLinkClass}>
+                <svg
+                  className={iconClass}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"
+                  />
+                </svg>
+                Qora ro'yxat
+              </NavLink>
             )}
           </>
         )}

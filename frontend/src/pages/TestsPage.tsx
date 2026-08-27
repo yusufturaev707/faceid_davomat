@@ -20,9 +20,9 @@ export default function TestsPage() {
       createItem={createTestApi}
       updateItem={updateTestApi}
       deleteItem={deleteTestApi}
-      createPermission={PERM.LOOKUP_CREATE}
-      updatePermission={PERM.LOOKUP_UPDATE}
-      deletePermission={PERM.LOOKUP_DELETE}
+      createPermission={PERM.TEST_CREATE}
+      updatePermission={PERM.TEST_UPDATE}
+      deletePermission={PERM.TEST_DELETE}
     />
   );
 }

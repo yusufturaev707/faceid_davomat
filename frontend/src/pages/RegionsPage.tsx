@@ -35,9 +35,9 @@ export default function RegionsPage() {
       createItem={createRegionApi}
       updateItem={updateRegionApi}
       deleteItem={deleteRegionApi}
-      createPermission={PERM.LOOKUP_CREATE}
-      updatePermission={PERM.LOOKUP_UPDATE}
-      deletePermission={PERM.LOOKUP_DELETE}
+      createPermission={PERM.REGION_CREATE}
+      updatePermission={PERM.REGION_UPDATE}
+      deletePermission={PERM.REGION_DELETE}
     />
   );
 }

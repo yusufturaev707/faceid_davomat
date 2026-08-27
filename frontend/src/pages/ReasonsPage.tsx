@@ -46,9 +46,9 @@ export default function ReasonsPage() {
       createItem={createReasonApi}
       updateItem={updateReasonApi}
       deleteItem={deleteReasonApi}
-      createPermission={PERM.LOOKUP_CREATE}
-      updatePermission={PERM.LOOKUP_UPDATE}
-      deletePermission={PERM.LOOKUP_DELETE}
+      createPermission={PERM.REASON_CREATE}
+      updatePermission={PERM.REASON_UPDATE}
+      deletePermission={PERM.REASON_DELETE}
     />
   );
 }

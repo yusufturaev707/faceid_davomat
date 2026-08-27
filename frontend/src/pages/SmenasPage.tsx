@@ -20,9 +20,9 @@ export default function SmenasPage() {
       createItem={createSmenaApi}
       updateItem={updateSmenaApi}
       deleteItem={deleteSmenaApi}
-      createPermission={PERM.LOOKUP_CREATE}
-      updatePermission={PERM.LOOKUP_UPDATE}
-      deletePermission={PERM.LOOKUP_DELETE}
+      createPermission={PERM.SMENA_CREATE}
+      updatePermission={PERM.SMENA_UPDATE}
+      deletePermission={PERM.SMENA_DELETE}
     />
   );
 }
