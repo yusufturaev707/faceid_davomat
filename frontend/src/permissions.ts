@@ -82,6 +82,8 @@ export const PERM = {
   CHEATING_LOG_CREATE: "cheating_log:create",
   CHEATING_LOG_UPDATE: "cheating_log:update",
   CHEATING_LOG_DELETE: "cheating_log:delete",
+  // Ro'yxatni faylga chiqarish — ko'rishdan alohida
+  CHEATING_LOG_EXPORT: "cheating_log:export",
 
   // Ma'lumotnomalar (umumiy)
   LOOKUP_READ: "lookup:read",

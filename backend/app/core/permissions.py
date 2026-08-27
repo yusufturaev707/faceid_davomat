@@ -139,6 +139,12 @@ class P:
     CHEATING_LOG_CREATE = _Perm("cheating_log:create", "Qoidabuzarlik yozish", "cheating_log")
     CHEATING_LOG_UPDATE = _Perm("cheating_log:update", "Qoidabuzarlikni tahrirlash", "cheating_log")
     CHEATING_LOG_DELETE = _Perm("cheating_log:delete", "Qoidabuzarlikni o'chirish", "cheating_log")
+    # Ro'yxatni faylga chiqarish — ko'rishdan alohida boshqariladi.
+    CHEATING_LOG_EXPORT = _Perm(
+        "cheating_log:export",
+        "Chetlatilganlar ro'yxatini Excel'ga yuklash",
+        "cheating_log",
+    )
 
     # === Lookup tables (tests, smenas, session_states, regions, zones, reasons, reason_types, blacklist, genders) ===
     LOOKUP_READ = _Perm("lookup:read", "Ma'lumotnomalarni ko'rish", "lookup")

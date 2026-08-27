@@ -45,6 +45,7 @@ _DERIVED_PERMISSIONS: dict[str, str] = {
     "statistics:absentees": "statistics:read",
     "student:export_excel": "student:read",
     "student:export_pdf": "student:read",
+    "cheating_log:export": "cheating_log:read",
 }
 
 

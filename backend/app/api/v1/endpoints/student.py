@@ -349,6 +349,20 @@ def list_cheating_logs(
     )
 
 
+def _require_perm(user: User, perm) -> None:
+    """Qo'shimcha (endpoint darajasidagidan tashqari) permission talabi.
+
+    Admin (`role_key == 1`) `PermissionChecker` dagidek o'tkazib yuboriladi,
+    ikkala tekshiruv bir xil qoidada ishlashi uchun.
+    """
+    if user.role_key == 1 or user.has_perm(perm.code):
+        return
+    raise HTTPException(
+        status_code=403,
+        detail=f"Huquq yetarli emas. Kerakli: {perm.code}",
+    )
+
+
 @router.get("/cheating-logs/export")
 def export_cheating_logs(
     student_id: int | None = None,
@@ -379,6 +393,8 @@ def export_cheating_logs(
     from datetime import datetime
 
     from app.services.cheating_logs_excel import build_cheating_logs_excel
+
+    _require_perm(current_user, P.CHEATING_LOG_EXPORT)
 
     region_id = _scoped_region_id(current_user, region_id)
     items = get_cheating_logs_for_export(
@@ -1150,13 +1166,8 @@ def _require_export_permission(user: User, fmt: str) -> None:
     Admin (`role_key == 1`) `PermissionChecker` dagidek o'tkazib yuboriladi.
     """
     perm = _EXPORT_PERMISSION.get(fmt)
-    if perm is None or user.role_key == 1:
-        return
-    if not user.has_perm(perm.code):
-        raise HTTPException(
-            status_code=403,
-            detail=f"Huquq yetarli emas. Kerakli: {perm.code}",
-        )
+    if perm is not None:
+        _require_perm(user, perm)
 
 
 @router.get("/export")

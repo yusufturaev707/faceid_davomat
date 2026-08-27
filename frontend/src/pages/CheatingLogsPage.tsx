@@ -413,49 +413,51 @@ export default function CheatingLogsPage() {
               Tozalash
             </button>
           )}
-          <button
-            onClick={handleExport}
-            disabled={exporting}
-            title="Joriy filtr bo'yicha chetlatilganlar ro'yxatini Excel (.xlsx) ga yuklab olish"
-            className="inline-flex items-center gap-1.5 px-3 !py-2 rounded-xl text-sm font-semibold bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-not-allowed text-white shadow-sm transition-colors"
-          >
-            {exporting ? (
-              <svg
-                className="w-4 h-4 animate-spin"
-                fill="none"
-                viewBox="0 0 24 24"
-              >
-                <circle
-                  className="opacity-25"
-                  cx="12"
-                  cy="12"
-                  r="10"
+          <PermissionGate permission={PERM.CHEATING_LOG_EXPORT}>
+            <button
+              onClick={handleExport}
+              disabled={exporting}
+              title="Joriy filtr bo'yicha chetlatilganlar ro'yxatini Excel (.xlsx) ga yuklab olish"
+              className="inline-flex items-center gap-1.5 px-3 !py-2 rounded-xl text-sm font-semibold bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-not-allowed text-white shadow-sm transition-colors"
+            >
+              {exporting ? (
+                <svg
+                  className="w-4 h-4 animate-spin"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  />
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                  />
+                </svg>
+              ) : (
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
                   stroke="currentColor"
-                  strokeWidth="4"
-                />
-                <path
-                  className="opacity-75"
-                  fill="currentColor"
-                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                />
-              </svg>
-            ) : (
-              <svg
-                className="w-4 h-4"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
-                />
-              </svg>
-            )}
-            <span>{exporting ? "Tayyorlanmoqda…" : "Excel"}</span>
-          </button>
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                  />
+                </svg>
+              )}
+              <span>{exporting ? "Tayyorlanmoqda…" : "Excel"}</span>
+            </button>
+          </PermissionGate>
           <div className="flex items-center gap-3 ml-auto self-center">
             <div className="flex items-center gap-1.5">
               <span className="text-[10px] uppercase tracking-wider text-gray-500 dark:text-slate-400 font-semibold">
