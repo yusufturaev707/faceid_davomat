@@ -734,7 +734,7 @@ export default function StudentsPage() {
                 Tozalash
               </button>
             )}
-            <PermissionGate permission={PERM.STUDENT_UPDATE}>
+            <PermissionGate permission={PERM.STUDENT_FETCH_GTSP}>
               <button
                 onClick={handleBulkGtsp}
                 disabled={
@@ -1453,50 +1453,52 @@ export default function StudentsPage() {
 
                 {/* Actions */}
                 <div className="detail-section px-5 py-4 flex gap-2">
-                  <button
-                    onClick={async (e) => {
-                      e.stopPropagation();
-                      setFetchingGtsp(true);
-                      try {
-                        const updated = await fetchGtspImageApi(selected.id);
-                        setSelected(updated);
-                        // Ro'yxatni ham yangilash
-                        setData((prev) =>
-                          prev
-                            ? {
-                                ...prev,
-                                items: prev.items.map((s) =>
-                                  s.id === updated.id
-                                    ? { ...s, ...updated }
-                                    : s,
-                                ),
-                              }
-                            : prev,
-                        );
-                      } catch (err) {
-                        alert(extractErrorMessage(err));
-                      } finally {
-                        setFetchingGtsp(false);
-                      }
-                    }}
-                    disabled={fetchingGtsp}
-                    className="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 text-sm font-medium text-teal-700 dark:text-teal-400 bg-teal-50 dark:bg-teal-900/20 hover:bg-teal-100 dark:hover:bg-teal-900/30 rounded-lg transition-colors disabled:opacity-50"
-                  >
-                    <svg
-                      className="w-4 h-4"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
+                  <PermissionGate permission={PERM.STUDENT_FETCH_GTSP}>
+                    <button
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        setFetchingGtsp(true);
+                        try {
+                          const updated = await fetchGtspImageApi(selected.id);
+                          setSelected(updated);
+                          // Ro'yxatni ham yangilash
+                          setData((prev) =>
+                            prev
+                              ? {
+                                  ...prev,
+                                  items: prev.items.map((s) =>
+                                    s.id === updated.id
+                                      ? { ...s, ...updated }
+                                      : s,
+                                  ),
+                                }
+                              : prev,
+                          );
+                        } catch (err) {
+                          alert(extractErrorMessage(err));
+                        } finally {
+                          setFetchingGtsp(false);
+                        }
+                      }}
+                      disabled={fetchingGtsp}
+                      className="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 text-sm font-medium text-teal-700 dark:text-teal-400 bg-teal-50 dark:bg-teal-900/20 hover:bg-teal-100 dark:hover:bg-teal-900/30 rounded-lg transition-colors disabled:opacity-50"
                     >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
-                      />
-                    </svg>
-                    {fetchingGtsp ? "Yuklanmoqda..." : "GTSP rasm"}
-                  </button>
+                      <svg
+                        className="w-4 h-4"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                        />
+                      </svg>
+                      {fetchingGtsp ? "Yuklanmoqda..." : "GTSP rasm"}
+                    </button>
+                  </PermissionGate>
                   <PermissionGate permission={PERM.STUDENT_UPDATE}>
                     <button
                       onClick={(e) => {

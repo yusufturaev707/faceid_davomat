@@ -27,7 +27,16 @@ _LOOKUP_CREATE = PermissionChecker(P.LOOKUP_CREATE.code)
 _LOOKUP_UPDATE = PermissionChecker(P.LOOKUP_UPDATE.code)
 _LOOKUP_DELETE = PermissionChecker(P.LOOKUP_DELETE.code)
 
-_ROLE_READ = PermissionChecker(P.ROLE_READ.code)
+# Rol RO'YXATI (faqat nom/kalit) bir nechta sahifada selektor sifatida kerak:
+# foydalanuvchi kartochkasi, davomat botlari, huquqlarni boshqarish. Shu bois
+# ular ham o'tadi — `PermissionChecker` argumentlari OR bilan tekshiriladi.
+# Rol YARATISH/TAHRIRLASH esa avvalgidek faqat role:create/update bilan.
+_ROLE_READ = PermissionChecker(
+    P.ROLE_READ.code,
+    P.USER_READ.code,
+    P.DAVOMAT_BOT_READ.code,
+    P.ROLE_UPDATE.code,
+)
 _ROLE_CREATE = PermissionChecker(P.ROLE_CREATE.code)
 _ROLE_UPDATE = PermissionChecker(P.ROLE_UPDATE.code)
 _ROLE_DELETE = PermissionChecker(P.ROLE_DELETE.code)

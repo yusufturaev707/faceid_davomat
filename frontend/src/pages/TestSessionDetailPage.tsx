@@ -39,12 +39,14 @@ import {
 import Md3Select from "../components/Md3Select";
 import PageLoader from "../components/PageLoader";
 import PermissionGate from "../components/PermissionGate";
+import { usePermission } from "../hooks/usePermission";
 import { PERM } from "../permissions";
 import { extractErrorMessage } from "../utils/errorMessage";
 
 export default function TestSessionDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { hasPermission } = usePermission();
 
   const [session, setSession] = useState<TestSessionResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -463,6 +465,21 @@ export default function TestSessionDetailPage() {
   const currentStepIndex = sortedStates.findIndex(
     (s) => s.id === session?.test_state_id
   );
+
+  // Keyingi bosqichga o'tish og'ir fon jarayonini boshlashi mumkin:
+  //   key=2 → talabgorlarni yuklash, key=3 → embedding.
+  // Backend ham aynan shu qoidani tekshiradi (`_require_process_permission`),
+  // bu yerdagisi faqat tugmani ko'rsatmaslik uchun.
+  const nextState = sortedStates[currentStepIndex + 1];
+  const nextStepProcessPerm =
+    nextState?.key === 2
+      ? PERM.TEST_SESSION_LOAD_STUDENTS
+      : nextState?.key === 3
+        ? PERM.TEST_SESSION_EMBEDDING
+        : null;
+  const canGoNextStep =
+    hasPermission(PERM.TEST_SESSION_UPDATE) &&
+    (!nextStepProcessPerm || hasPermission(nextStepProcessPerm));
 
   // Student yuklashni bekor qilish — backend flag qo'yadi, natija ("cancelled")
   // odatdagi progress polling orqali keladi (state rollback + tozalash tugagach).
@@ -1102,7 +1119,8 @@ export default function TestSessionDetailPage() {
                   {Math.round(loadProgress)}%
                 </span>
                 {/* Bekor qilish — faqat student yuklash (state key=2) jarayonida */}
-                {states.find((s) => s.id === targetStateId)?.key === 2 && (
+                {states.find((s) => s.id === targetStateId)?.key === 2 &&
+                  hasPermission(PERM.TEST_SESSION_CANCEL_PROCESS) && (
                   <button
                     type="button"
                     onClick={handleCancelLoad}
@@ -1162,7 +1180,9 @@ export default function TestSessionDetailPage() {
                 Sessiya oldingi holatida qoldi. Qayta urinib ko'ring yoki administratorga murojaat qiling.
               </p>
               {/* Resumable qayta yuklash — faqat 'talabalar yuklash' bosqichida (key=2) */}
-              {currentStateKey === 2 && !changingState && (
+              {currentStateKey === 2 &&
+                !changingState &&
+                hasPermission(PERM.TEST_SESSION_LOAD_STUDENTS) && (
                 <button
                   onClick={handleReloadLoad}
                   className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white transition-colors"
@@ -1302,7 +1322,7 @@ export default function TestSessionDetailPage() {
               </PermissionGate>
             )}
             {/* Keyingi holatga o'tish tugmasi */}
-            {currentStepIndex < sortedStates.length - 1 && (
+            {currentStepIndex < sortedStates.length - 1 && canGoNextStep && (
               <PermissionGate permission={PERM.TEST_SESSION_UPDATE}>
                 <button
                   onClick={handleNextStep}
@@ -1375,7 +1395,7 @@ export default function TestSessionDetailPage() {
             </h3>
             <div className="flex items-center gap-2">
               {!changingState && studentStats.not_ready > 0 && (
-                <PermissionGate permission={PERM.TEST_SESSION_UPDATE}>
+                <PermissionGate permission={PERM.TEST_SESSION_EMBEDDING}>
                   <button
                     onClick={handleRetryEmbedding}
                     disabled={retryingEmbedding}

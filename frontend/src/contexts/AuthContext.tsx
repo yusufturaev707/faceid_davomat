@@ -16,6 +16,8 @@ interface AuthContextType {
   loading: boolean;
   login: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  /** `/auth/me` ni qayta o'qib, ruxsatlarni yangilaydi. */
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -75,6 +77,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  // Ruxsatlar faqat login paytida olinardi — admin rolga huquq qo'shsa,
+  // foydalanuvchi buni qayta kirmaguncha ko'rmasdi. Endi tab'ga qaytilganda
+  // (va qo'lda chaqirilganda) `/auth/me` qayta o'qiladi. Backend baribir har
+  // so'rovda DB'dan tekshiradi — bu faqat UI ni haqiqatga moslash uchun.
+  const refreshUser = useCallback(async () => {
+    try {
+      const me = await getMeApi();
+      setUser(me);
+    } catch {
+      // Jimgina — 401 bo'lsa interceptor logout qiladi
+    }
+  }, []);
+
+  useEffect(() => {
+    let lastAt = 0;
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      // Tez-tez tab almashtirishda /auth/me ni bombardimon qilmaymiz
+      if (Date.now() - lastAt < 30_000) return;
+      lastAt = Date.now();
+      if (getAccessToken()) void refreshUser();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [refreshUser]);
+
   const logout = useCallback(async () => {
     try {
       await logoutApi();
@@ -96,7 +124,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, isAuthenticated, isAdmin, loading, login, logout }}
+      value={{ user, isAuthenticated, isAdmin, loading, login, logout, refreshUser }}
     >
       {children}
     </AuthContext.Provider>

@@ -23,6 +23,69 @@ logger = logging.getLogger("faceid.core.permission_sync")
 
 ADMIN_ROLE_KEY = 1
 
+# Qamrov permissioni. `student.py` dagi `_has_global_scope` shuni tekshiradi.
+_ALL_REGIONS_CODE = "student:all_regions"
+
+# Migratsiyagacha global qamrovga ega bo'lgan rol key'lari. Faqat bir
+# martalik backfill uchun ishlatiladi — ish vaqtidagi mantiqda `key`
+# endi umuman qatnashmaydi.
+_LEGACY_GLOBAL_ROLE_KEYS = (2, 3)
+
+# Kengroq permissiondan ajratib chiqarilgan yangi permissionlar.
+#   {yangi_codename: manba_codename}
+# Yangi permission BIRINCHI marta yaratilganda, manba permissionga ega bo'lgan
+# har bir rolga u ham beriladi — shunda mavjud rollarning xulqi o'zgarmaydi,
+# lekin admin endi faqat shu imkoniyatni alohida olib tashlay oladi.
+_DERIVED_PERMISSIONS: dict[str, str] = {
+    "student:fetch_gtsp": "student:update",
+    "test_session:load_students": "test_session:update",
+    "test_session:embedding": "test_session:update",
+    "test_session:cancel_process": "test_session:update",
+    "statistics:export": "statistics:read",
+    "statistics:absentees": "statistics:read",
+}
+
+
+def _backfill_all_regions(db: Session, perm: Permission) -> None:
+    """Eski global qamrovli rollarga (key 2, 3) yangi qamrov permissionini berish.
+
+    Faqat permission birinchi marta yaratilganda chaqiriladi, shuning uchun
+    idempotent va admin qarorlarini bekor qilmaydi.
+    """
+    roles = db.execute(
+        select(Role).where(Role.key.in_(_LEGACY_GLOBAL_ROLE_KEYS))
+    ).unique().scalars().all()
+    for role in roles:
+        if perm not in role.permissions:
+            role.permissions = list(role.permissions) + [perm]
+            logger.info(
+                "Backfill: %s -> rol '%s' (key=%s)", perm.codename, role.name, role.key
+            )
+
+
+def _backfill_derived(db: Session, existing: dict, added_codes: set[str]) -> None:
+    """Yangi ajratilgan permissionlarni manba permissionga ega rollarga berish.
+
+    Faqat shu sync'da YANGI yaratilgan codename'lar uchun ishlaydi, shuning
+    uchun bir martalik: keyingi startuplarda admin qarorlari saqlanadi.
+    """
+    for new_code, source_code in _DERIVED_PERMISSIONS.items():
+        if new_code not in added_codes:
+            continue
+        new_perm = existing.get(new_code)
+        source_perm = existing.get(source_code)
+        if new_perm is None or source_perm is None:
+            continue
+        roles = db.execute(select(Role)).unique().scalars().all()
+        for role in roles:
+            codes = {p.codename for p in role.permissions}
+            if source_code in codes and new_code not in codes:
+                role.permissions = list(role.permissions) + [new_perm]
+                logger.info(
+                    "Backfill: %s -> rol '%s' (manba: %s)",
+                    new_code, role.name, source_code,
+                )
+
 
 def sync_permission_catalog() -> dict:
     """DB'ni ALL_PERMISSIONS bilan sinxronlash.
@@ -33,6 +96,7 @@ def sync_permission_catalog() -> dict:
     added = 0
     updated = 0
     admin_synced = False
+    added_codes: set[str] = set()
     try:
         existing = {
             p.codename: p
@@ -48,6 +112,7 @@ def sync_permission_catalog() -> dict:
                 db.add(current)
                 existing[perm.code] = current
                 added += 1
+                added_codes.add(perm.code)
             else:
                 if current.name != perm.name or current.group != perm.group:
                     current.name = perm.name
@@ -65,6 +130,17 @@ def sync_permission_catalog() -> dict:
             if current_codes != target_codes:
                 admin_role.permissions = list(existing.values())
                 admin_synced = True
+
+        # Bir martalik backfill: `student:all_regions` shu sync'da YANGI
+        # yaratilgan bo'lsa — ilgari global qamrovga ega bo'lgan rollarga
+        # (eski qattiq kodlangan key 2 va 3) uni beramiz, toki ularning
+        # xulqi o'zgarmasin. Permission allaqachon mavjud bo'lsa hech narsa
+        # qilinmaydi — ya'ni admin uni qo'lda olib tashlasa, qayta qo'shilmaydi.
+        if _ALL_REGIONS_CODE in added_codes:
+            _backfill_all_regions(db, existing[_ALL_REGIONS_CODE])
+
+        # Kengroq permissiondan ajratilgan yangi permissionlar uchun backfill
+        _backfill_derived(db, existing, added_codes)
 
         db.commit()
         logger.info(

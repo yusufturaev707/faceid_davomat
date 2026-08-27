@@ -75,12 +75,46 @@ class P:
     TEST_SESSION_CREATE = _Perm("test_session:create", "Test sessiya yaratish", "test_session")
     TEST_SESSION_UPDATE = _Perm("test_session:update", "Test sessiyani tahrirlash", "test_session")
     TEST_SESSION_DELETE = _Perm("test_session:delete", "Test sessiyani o'chirish", "test_session")
+    # Sessiya jarayonlari — `test_session:update` dan ajratilgan, chunki bular
+    # og'ir fon vazifalarini (Celery) ishga tushiradi va imtihon kunida
+    # ehtiyotkorlik talab qiladi.
+    TEST_SESSION_LOAD_STUDENTS = _Perm(
+        "test_session:load_students",
+        "Talabgorlarni yuklab olish jarayonini boshlash",
+        "test_session",
+    )
+    TEST_SESSION_EMBEDDING = _Perm(
+        "test_session:embedding",
+        "Face embedding jarayonini boshlash",
+        "test_session",
+    )
+    TEST_SESSION_CANCEL_PROCESS = _Perm(
+        "test_session:cancel_process",
+        "Yuklash/embedding jarayonini bekor qilish",
+        "test_session",
+    )
 
     # === Students ===
     STUDENT_READ = _Perm("student:read", "Studentlarni ko'rish", "student")
     STUDENT_CREATE = _Perm("student:create", "Student yaratish", "student")
     STUDENT_UPDATE = _Perm("student:update", "Studentni tahrirlash", "student")
     STUDENT_DELETE = _Perm("student:delete", "Studentni o'chirish", "student")
+    # Viloyat scope: bu ruxsat BO'LMAGAN foydalanuvchi faqat o'z
+    # `region_id` idagi ma'lumotlarni ko'radi. Ilgari bu rol `key`
+    # (1/2/3 global, 4 region) bo'yicha qattiq kodlangan edi — natijada
+    # yangi rollar permissiondan qat'i nazar 403 olardi.
+    STUDENT_ALL_REGIONS = _Perm(
+        "student:all_regions",
+        "Barcha viloyatlar ma'lumotlarini ko'rish (talabgor, log, qoidabuzarlik)",
+        "student",
+    )
+    # GTSP tashqi xizmatidan rasm/FIO olish — tahrirlashdan alohida, chunki
+    # bu tashqi API'ni chaqiradi va ommaviy rejimda og'ir yuk beradi.
+    STUDENT_FETCH_GTSP = _Perm(
+        "student:fetch_gtsp",
+        "GTSP dan rasm va FIO olish",
+        "student",
+    )
 
     # === Student Logs ===
     STUDENT_LOG_READ = _Perm("student_log:read", "Student loglarini ko'rish", "student_log")
@@ -111,6 +145,17 @@ class P:
     STATISTICS_READ = _Perm(
         "statistics:read",
         "Test sessiya statistikasini ko'rish",
+        "statistics",
+    )
+    # Davomat bo'limidagi ikkita eksport — ko'rishdan alohida boshqariladi.
+    STATISTICS_EXPORT = _Perm(
+        "statistics:export",
+        "Davomat statistikasini Excel'ga yuklash",
+        "statistics",
+    )
+    STATISTICS_ABSENTEES = _Perm(
+        "statistics:absentees",
+        "Kelmaganlar ro'yxatini Excel'ga yuklash",
         "statistics",
     )
 

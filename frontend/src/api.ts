@@ -1299,3 +1299,15 @@ export async function exportResultAnalysisApi(
     throw err;
   }
 }
+
+/**
+ * Test Dashboard ko'rsatkichlari + oxirgi 30 kunlik kirish grafigi.
+ * Qamrov serverda aniqlanadi: `student:all_regions` bo'lsa butun tizim,
+ * aks holda foydalanuvchining o'z viloyati.
+ */
+export async function getTestDashboardOverviewApi(): Promise<
+  import("./interfaces").TestDashboardOverviewResponse
+> {
+  const res = await apiClient.get("/test-sessions/dashboard-overview");
+  return res.data;
+}

@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 from app.core.permissions import P
+from app.core.region_scope import has_global_scope
 from app.crud.student import (
     bulk_create_student_logs,
     bulk_reassign_zone,
@@ -89,37 +90,41 @@ def _b64_to_bytes(val: str | None) -> bytes | None:
 
 # === Ro'yxatlar (Student / StudentLog / CheatingLog) uchun region qamrovi ===
 #
-# Role.key asosidagi ko'rish siyosati:
-#   key 1, 2, 3 → butun tizim bo'yicha barcha ma'lumot (region filtri ixtiyoriy).
-#   key 4       → faqat foydalanuvchiga biriktirilgan region'ga tegishli ma'lumot.
-#   boshqa key  → bu ro'yxatlar umuman ko'rinmaydi (403).
-_GLOBAL_SCOPE_ROLE_KEYS = frozenset({1, 2, 3})
-_REGION_SCOPE_ROLE_KEY = 4
+# Qamrov PERMISSION bilan aniqlanadi, rol `key` i bilan emas:
+#   `student:all_regions` bor  → butun tizim (region filtri ixtiyoriy).
+#   yo'q                        → faqat foydalanuvchining o'z `region_id` i.
+#
+# Endpointga kirish huquqi allaqachon `PermissionChecker` da tekshirilgan
+# (student:read / student_log:read / cheating_log:read), shuning uchun bu
+# yerda faqat QAMROV hal qilinadi — kirishni qayta rad etmaydi.
+#
+# Ilgari bu `key in {1,2,3}` / `key == 4` ko'rinishida qattiq kodlangan edi:
+# adminkada yaratilgan yangi rol (key 5, 6, ...) qanday ruxsat berilishidan
+# qat'i nazar 403 olardi.
+
+
+# Qamrov mantiqi `app.core.region_scope` da — dashboard endpointi ham shuni
+# ishlatadi, ikki nusxa bo'lib ketmasligi uchun.
+_has_global_scope = has_global_scope
 
 
 def _scoped_region_id(user: User, requested_region_id: int | None) -> int | None:
-    """Foydalanuvchi roli asosida amaldagi `region_id` filtrini qaytaradi.
+    """Amaldagi `region_id` filtrini qaytaradi (qamrov).
 
-    - key 1/2/3: global — mijoz bergan ixtiyoriy `requested_region_id` saqlanadi.
-    - key 4: majburan foydalanuvchi region'i (mijoz boshqa region so'rasa ham
-      almashtiriladi — boshqa region ma'lumoti chiqmaydi). Region biriktirilmagan
-      bo'lsa 403.
-    - boshqa key: 403 (bu ro'yxatlarni ko'rish huquqi yo'q).
+    - `student:all_regions` bor: mijoz bergan `requested_region_id` saqlanadi
+      (None bo'lsa — filtr yo'q, hamma viloyat).
+    - Yo'q: majburan foydalanuvchining o'z viloyati. Mijoz boshqa viloyat
+      so'rasa ham almashtiriladi — chet viloyat ma'lumoti chiqmaydi.
+      Viloyat biriktirilmagan bo'lsa 403.
     """
-    role_key = user.role_key
-    if role_key in _GLOBAL_SCOPE_ROLE_KEYS:
+    if _has_global_scope(user):
         return requested_region_id
-    if role_key == _REGION_SCOPE_ROLE_KEY:
-        if not user.region_id:
-            raise HTTPException(
-                status_code=403,
-                detail="Foydalanuvchiga region biriktirilmagan",
-            )
-        return int(user.region_id)
-    raise HTTPException(
-        status_code=403,
-        detail="Bu ma'lumotlarni ko'rish uchun ruxsat yo'q",
-    )
+    if not user.region_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Foydalanuvchiga viloyat biriktirilmagan",
+        )
+    return int(user.region_id)
 
 
 def _student_region_id(db: Session, student_id: int) -> int | None:
@@ -137,30 +142,22 @@ def _student_region_id(db: Session, student_id: int) -> int | None:
 
 
 def _assert_region_access(user: User, item_region_id: int | None) -> None:
-    """Bitta yozuv (detail) ko'rish uchun region ruxsatini tekshiradi.
+    """Bitta yozuv (detail) ko'rish uchun viloyat qamrovini tekshiradi.
 
-    - key 1/2/3: ruxsat (butun tizim).
-    - key 4: faqat foydalanuvchi region'idagi yozuv. Boshqa region yozuvi
-      so'ralsa 404 (yozuv mavjudligini oshkor qilmaslik uchun). Region
+    - `student:all_regions` bor: ruxsat (butun tizim).
+    - Yo'q: faqat foydalanuvchi viloyatidagi yozuv. Chet viloyat yozuvi
+      so'ralsa 404 — yozuv mavjudligini oshkor qilmaslik uchun. Viloyat
       biriktirilmagan bo'lsa 403.
-    - boshqa key: 403 (ko'rish huquqi yo'q).
     """
-    role_key = user.role_key
-    if role_key in _GLOBAL_SCOPE_ROLE_KEYS:
+    if _has_global_scope(user):
         return
-    if role_key == _REGION_SCOPE_ROLE_KEY:
-        if not user.region_id:
-            raise HTTPException(
-                status_code=403,
-                detail="Foydalanuvchiga region biriktirilmagan",
-            )
-        if item_region_id is None or int(item_region_id) != int(user.region_id):
-            raise HTTPException(status_code=404, detail="Ma'lumot topilmadi")
-        return
-    raise HTTPException(
-        status_code=403,
-        detail="Bu ma'lumotlarni ko'rish uchun ruxsat yo'q",
-    )
+    if not user.region_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Foydalanuvchiga viloyat biriktirilmagan",
+        )
+    if item_region_id is None or int(item_region_id) != int(user.region_id):
+        raise HTTPException(status_code=404, detail="Ma'lumot topilmadi")
 
 
 # ===================== StudentLog =====================
@@ -1355,7 +1352,7 @@ def upload_student_image(
 def fetch_gtsp_image(
     student_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(PermissionChecker(P.STUDENT_UPDATE.code)),
+    _: User = Depends(PermissionChecker(P.STUDENT_FETCH_GTSP.code)),
 ):
     """GTSP API dan studentning rasmini yuklab olish.
 
@@ -1452,7 +1449,7 @@ def fetch_gtsp_bulk(
     is_applied: bool | None = None,
     search: str | None = None,
     db: Session = Depends(get_db),
-    _: User = Depends(PermissionChecker(P.STUDENT_UPDATE.code)),
+    _: User = Depends(PermissionChecker(P.STUDENT_FETCH_GTSP.code)),
 ):
     """Filtr/qidiruvga mos BARCHA studentlarning rasmini GTSP'dan yuklash.
 

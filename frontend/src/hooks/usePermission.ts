@@ -3,8 +3,12 @@ import type { PermissionCode } from "../permissions";
 
 /**
  * Permission tekshirish hook.
- * Admin (role_key=1) seed skriptda AVTOMATIK barcha permissionlarni oladi,
- * shuning uchun "isAdmin" explicit bypass emas — permission listidan o'tadi.
+ * Admin (role_key=1) startup'dagi permission sync'da AVTOMATIK barcha
+ * permissionlarni oladi, shuning uchun bu yerda alohida bypass shart emas.
+ *
+ * DIQQAT: backend `PermissionChecker` esa role_key==1 da tekshiruvni butunlay
+ * o'tkazib yuboradi. Ya'ni admin rolidan biror ruxsat qo'lda olib tashlansa,
+ * UI uni yashiradi, API esa baribir ruxsat beradi (keyingi sync qaytaradi).
  * `isAdmin` flag faqat UI uchun (masalan, danger zone bannerlari) ishlatilsin.
  */
 export function usePermission() {

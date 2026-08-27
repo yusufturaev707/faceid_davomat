@@ -53,12 +53,20 @@ export const PERM = {
   TEST_SESSION_CREATE: "test_session:create",
   TEST_SESSION_UPDATE: "test_session:update",
   TEST_SESSION_DELETE: "test_session:delete",
+  // Og'ir fon jarayonlari — tahrirlashdan alohida boshqariladi
+  TEST_SESSION_LOAD_STUDENTS: "test_session:load_students",
+  TEST_SESSION_EMBEDDING: "test_session:embedding",
+  TEST_SESSION_CANCEL_PROCESS: "test_session:cancel_process",
 
   // Studentlar
   STUDENT_READ: "student:read",
   STUDENT_CREATE: "student:create",
   STUDENT_UPDATE: "student:update",
   STUDENT_DELETE: "student:delete",
+  // Qamrov: bu ruxsatsiz foydalanuvchi faqat o'z viloyati ma'lumotini ko'radi
+  STUDENT_ALL_REGIONS: "student:all_regions",
+  // GTSP tashqi xizmatidan rasm/FIO olish
+  STUDENT_FETCH_GTSP: "student:fetch_gtsp",
 
   // Student loglari
   STUDENT_LOG_READ: "student_log:read",
@@ -83,6 +91,9 @@ export const PERM = {
 
   // Test sessiya statistika dashboard
   STATISTICS_READ: "statistics:read",
+  // Davomat bo'limidagi eksportlar
+  STATISTICS_EXPORT: "statistics:export",
+  STATISTICS_ABSENTEES: "statistics:absentees",
 
   // Pasport ma'lumotlari (GTSP)
   PASPORT_INFO_READ: "pasport_info:read",

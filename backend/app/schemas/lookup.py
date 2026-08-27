@@ -159,6 +159,14 @@ class ZoneSyncResult(BaseModel):
 
 # ---- Role ----
 class RoleCreate(BaseModel):
+    """Rol yaratish.
+
+    `key` — faqat identifikator. Yagona maxsus qiymat: **1 = Admin**,
+    `PermissionChecker` uni barcha tekshiruvlardan o'tkazib yuboradi.
+    Qolgan qiymatlar xulqqa ta'sir qilmaydi — ko'rish qamrovi endi
+    `student:all_regions` permissioni bilan boshqariladi.
+    """
+
     name: str = Field(..., min_length=1, max_length=100)
     key: int
     is_active: bool = True

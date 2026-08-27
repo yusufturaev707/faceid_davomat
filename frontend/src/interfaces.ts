@@ -394,6 +394,25 @@ export interface DashboardStatsResponse {
   regions: RegionStatItem[];
 }
 
+// === Test Dashboard ko'rsatkichlari (viloyat qamrovida) ===
+
+export interface DailyEnteredItem {
+  /** YYYY-MM-DD */
+  date: string;
+  count: number;
+}
+
+export interface TestDashboardOverviewResponse {
+  total_students: number;
+  total_rejected: number;
+  active_sessions: number;
+  active_session_students: number;
+  daily_entered: DailyEnteredItem[];
+  region_id: number | null;
+  /** null bo'lsa — barcha viloyatlar qamrovi */
+  region_name: string | null;
+}
+
 export interface TestSessionListResponse {
   items: TestSessionResponse[];
   total: number;

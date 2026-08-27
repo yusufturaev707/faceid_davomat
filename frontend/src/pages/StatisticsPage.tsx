@@ -62,6 +62,8 @@ import {
 } from "../api";
 import PageLoader from "../components/PageLoader";
 import Md3Select from "../components/Md3Select";
+import PermissionGate from "../components/PermissionGate";
+import { PERM } from "../permissions";
 import { extractErrorMessage } from "../utils/errorMessage";
 
 // Real-time polling kechikishi (session ready / state.key=4)
@@ -819,44 +821,48 @@ export default function StatisticsPage() {
                 onChange={setExcelAlphabet}
                 disabled={exporting}
               />
-              <button
-                type="button"
-                onClick={handleExport}
-                disabled={exporting}
-                className="inline-flex items-center gap-1.5 px-3 h-8 rounded-full text-[12.5px] font-semibold bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-not-allowed text-white shadow-sm transition-colors"
-                title="Tanlangan statistikani Excel (.xlsx) hisobotiga yuklab olish"
-              >
-                {exporting ? (
-                  <>
-                    <Spinner className="w-3.5 h-3.5" />
-                    <span>Tayyorlanmoqda…</span>
-                  </>
-                ) : (
-                  <>
-                    <DownloadIcon className="w-3.5 h-3.5" />
-                    <span>Excel</span>
-                  </>
-                )}
-              </button>
-              <button
-                type="button"
-                onClick={handleExportAbsentees}
-                disabled={exportingAbsentees}
-                className="inline-flex items-center gap-1.5 px-3 h-8 rounded-full text-[12.5px] font-semibold border border-emerald-600 text-emerald-700 hover:bg-emerald-600 hover:text-white hover:border-emerald-600 disabled:opacity-60 disabled:cursor-not-allowed bg-transparent shadow-sm transition-colors dark:text-emerald-400 dark:border-emerald-500 dark:hover:bg-emerald-500 dark:hover:text-white"
-                title="Tanlangan ko'lam uchun kelmaganlar ro'yxatini Excel (.xlsx) ga yuklab olish (sana → region → zone → smena → guruh tartibida)"
-              >
-                {exportingAbsentees ? (
-                  <>
-                    <Spinner className="w-3.5 h-3.5" />
-                    <span>Tayyorlanmoqda…</span>
-                  </>
-                ) : (
-                  <>
-                    <DownloadIcon className="w-3.5 h-3.5" />
-                    <span>Kelmaganlar</span>
-                  </>
-                )}
-              </button>
+              <PermissionGate permission={PERM.STATISTICS_EXPORT}>
+                <button
+                  type="button"
+                  onClick={handleExport}
+                  disabled={exporting}
+                  className="inline-flex items-center gap-1.5 px-3 h-8 rounded-full text-[12.5px] font-semibold bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-not-allowed text-white shadow-sm transition-colors"
+                  title="Tanlangan statistikani Excel (.xlsx) hisobotiga yuklab olish"
+                >
+                  {exporting ? (
+                    <>
+                      <Spinner className="w-3.5 h-3.5" />
+                      <span>Tayyorlanmoqda…</span>
+                    </>
+                  ) : (
+                    <>
+                      <DownloadIcon className="w-3.5 h-3.5" />
+                      <span>Excel</span>
+                    </>
+                  )}
+                </button>
+                </PermissionGate>
+              <PermissionGate permission={PERM.STATISTICS_ABSENTEES}>
+                <button
+                  type="button"
+                  onClick={handleExportAbsentees}
+                  disabled={exportingAbsentees}
+                  className="inline-flex items-center gap-1.5 px-3 h-8 rounded-full text-[12.5px] font-semibold border border-emerald-600 text-emerald-700 hover:bg-emerald-600 hover:text-white hover:border-emerald-600 disabled:opacity-60 disabled:cursor-not-allowed bg-transparent shadow-sm transition-colors dark:text-emerald-400 dark:border-emerald-500 dark:hover:bg-emerald-500 dark:hover:text-white"
+                  title="Tanlangan ko'lam uchun kelmaganlar ro'yxatini Excel (.xlsx) ga yuklab olish (sana → region → zone → smena → guruh tartibida)"
+                >
+                  {exportingAbsentees ? (
+                    <>
+                      <Spinner className="w-3.5 h-3.5" />
+                      <span>Tayyorlanmoqda…</span>
+                    </>
+                  ) : (
+                    <>
+                      <DownloadIcon className="w-3.5 h-3.5" />
+                      <span>Kelmaganlar</span>
+                    </>
+                  )}
+                </button>
+                </PermissionGate>
             </div>
           </div>
 

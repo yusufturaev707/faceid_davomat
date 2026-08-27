@@ -47,9 +47,11 @@ export default function UsersPage() {
 
   useEffect(() => {
     loadUsers();
-    getRolesListApi().then(setRoles);
-    getRegionsListApi().then(setRegions);
-    getZonesListApi().then(setAllZones);
+    // Selektor lookuplari — ruxsat yetmasa sahifa yiqilmasin, tegishli
+    // ro'yxat bo'sh qolsin (asosiy ro'yxat baribir ko'rinadi).
+    getRolesListApi().then(setRoles).catch(() => setRoles([]));
+    getRegionsListApi().then(setRegions).catch(() => setRegions([]));
+    getZonesListApi().then(setAllZones).catch(() => setAllZones([]));
   }, []);
 
   async function loadUsers() {

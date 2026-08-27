@@ -1,7 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import type { TestSessionListResponse } from "../interfaces";
-import { getTestSessionsApi } from "../api";
+import type {
+  TestDashboardOverviewResponse,
+  TestSessionListResponse,
+} from "../interfaces";
+import { getTestDashboardOverviewApi, getTestSessionsApi } from "../api";
+import DailyEnteredChart from "../components/DailyEnteredChart";
 import PageLoader from "../components/PageLoader";
 
 /* ============================================================
@@ -88,13 +92,21 @@ function stateTone(key: number | null | undefined) {
 
 export default function TestDashboardPage() {
   const [data, setData] = useState<TestSessionListResponse | null>(null);
+  // Kartalar va grafik uchun server tomonda viloyat qamrovida hisoblangan
+  // ko'rsatkichlar — sessiya ro'yxatidan hosil qilib bo'lmaydi.
+  const [overview, setOverview] =
+    useState<TestDashboardOverviewResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
   useEffect(() => {
-    getTestSessionsApi({ page: 1, per_page: 100 })
-      .then(setData)
-      .finally(() => setLoading(false));
+    Promise.all([
+      getTestSessionsApi({ page: 1, per_page: 100 }).then(setData),
+      // Ruxsat yetmasa sahifa yiqilmasin — kartalar "—" bo'lib qoladi
+      getTestDashboardOverviewApi()
+        .then(setOverview)
+        .catch(() => setOverview(null)),
+    ]).finally(() => setLoading(false));
   }, []);
 
   const sessions = useMemo(() => data?.items ?? [], [data]);
@@ -151,23 +163,6 @@ export default function TestDashboardPage() {
     [sessions],
   );
 
-  // Holat (state) bo'yicha guruhlash
-  const stateGroups = useMemo(() => {
-    const map = new Map<
-      string,
-      { name: string; key: number | null; count: number; students: number }
-    >();
-    sessions.forEach((s) => {
-      const name = s.test_state?.name || "Noma'lum";
-      const key = s.test_state?.key ?? null;
-      const cur = map.get(name) || { name, key, count: 0, students: 0 };
-      cur.count += 1;
-      cur.students += s.count_total_student;
-      map.set(name, cur);
-    });
-    return [...map.values()].sort((a, b) => b.count - a.count);
-  }, [sessions]);
-
   // Testlar bo'yicha guruhlash (sessiyalar soni + talabgorlar)
   const testGroups = useMemo(() => {
     const map = new Map<string, { name: string; count: number; students: number }>();
@@ -180,15 +175,6 @@ export default function TestDashboardPage() {
     });
     return [...map.values()].sort((a, b) => b.students - a.students);
   }, [sessions]);
-
-  // Eng katta sessiyalar (talabgorlar soni bo'yicha)
-  const topSessions = useMemo(
-    () =>
-      [...sessions]
-        .sort((a, b) => b.count_total_student - a.count_total_student)
-        .slice(0, 5),
-    [sessions],
-  );
 
   // Faol va kelayotgan sessiyalar
   const upcomingSessions = useMemo(() => {
@@ -214,6 +200,10 @@ export default function TestDashboardPage() {
           <h2 className="section-title">Test Dashboard</h2>
           <p className="section-subtitle">
             Test sessiyalari bo'yicha umumiy va tahliliy statistika
+            {overview &&
+              (overview.region_name
+                ? ` — ${overview.region_name}`
+                : " — barcha viloyatlar")}
           </p>
         </div>
         <button
@@ -225,66 +215,44 @@ export default function TestDashboardPage() {
         </button>
       </div>
 
-      {/* KPI kartalar */}
+      {/* KPI kartalar — barchasi foydalanuvchi viloyati qamrovida */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3.5 mb-3 sm:mb-3.5">
         <StatCard
-          title="Jami sessiyalar"
-          value={metrics.totalSessions}
-          sub={`${metrics.activeSessions} ta faol`}
+          title="Jami talabgor"
+          value={overview?.total_students ?? 0}
+          sub={overview?.region_name ?? "barcha viloyatlar"}
           color="primary"
-          icon={<CalendarIcon />}
+          icon={<UsersIcon />}
+        />
+        <StatCard
+          title="Chetlatilganlar"
+          value={overview?.total_rejected ?? 0}
+          sub={
+            overview && overview.total_students > 0
+              ? `${((overview.total_rejected / overview.total_students) * 100).toFixed(2)}%`
+              : "—"
+          }
+          color="rose"
+          icon={<BanIcon />}
         />
         <StatCard
           title="Faol sessiyalar"
-          value={metrics.activeSessions}
-          sub={`${metrics.activePct}% faol holatda`}
+          value={overview?.active_sessions ?? 0}
+          sub={`${metrics.totalSessions} ta sessiyadan`}
           color="emerald"
           icon={<CheckCircleIcon />}
         />
         <StatCard
-          title="Jami talabgorlar"
-          value={metrics.totalStudents}
-          sub={`o'rtacha ${metrics.avgStudents.toLocaleString("uz-UZ")}/sessiya`}
+          title="Qatnashishi kerak"
+          value={overview?.active_session_students ?? 0}
+          sub="faol sessiyalarda"
           color="violet"
-          icon={<UsersIcon />}
-        />
-        <StatCard
-          title="Jami smenalar"
-          value={metrics.totalSmenas}
-          sub={`o'rtacha ${metrics.avgSmenas}/sessiya`}
-          color="amber"
-          icon={<ClockIcon />}
+          icon={<CalendarIcon />}
         />
       </div>
 
-      {/* Qo'shimcha ko'rsatkichlar — ixcham strip */}
-      <div className="glass-card px-4 sm:px-5 py-3 mb-5 sm:mb-6 flex flex-wrap items-center gap-x-6 sm:gap-x-9 gap-y-2.5">
-        <Highlight
-          label="Tayyor (jonli)"
-          value={metrics.readyCount}
-          tone="text-emerald-700 dark:text-emerald-300"
-        />
-        <Highlight
-          label="Testlar turi"
-          value={metrics.uniqueTests}
-          tone="text-sky-700 dark:text-sky-300"
-        />
-        <Highlight
-          label="Imtihon kunlari"
-          value={metrics.uniqueDays}
-          tone="text-rose-700 dark:text-rose-300"
-        />
-        <Highlight
-          label="o'rtacha talabgor / sessiya"
-          value={metrics.avgStudents.toLocaleString("uz-UZ")}
-          tone="text-violet-700 dark:text-violet-300"
-        />
-        <Highlight
-          label="faollik darajasi"
-          value={`${metrics.activePct}%`}
-          tone="text-amber-700 dark:text-amber-300"
-        />
-      </div>
+      {/* Kunlik kirish dinamikasi */}
+      {overview && <DailyEnteredChart data={overview.daily_entered} />}
 
       {/* Jonli (tayyor) sessiyalar — harakatlanuvchi progress bilan */}
       {readySessions.length > 0 && (
@@ -332,76 +300,8 @@ export default function TestDashboardPage() {
         </div>
       )}
 
-      {/* Holat + Testlar taqsimoti */}
+      {/* Testlar taqsimoti + kelayotgan sessiyalar */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5 sm:gap-4 mb-5 sm:mb-6">
-        {/* Holat bo'yicha taqsimot */}
-        <SectionCard
-          title="Holat bo'yicha taqsimot"
-          subtitle={`${metrics.totalSessions} ta sessiya`}
-        >
-          {stateGroups.length > 0 ? (
-            <>
-              {/* Stacked umumiy bar */}
-              <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-gray-100 dark:bg-slate-700/50 mb-4">
-                {stateGroups.map((g) => {
-                  const pct =
-                    metrics.totalSessions > 0
-                      ? (g.count / metrics.totalSessions) * 100
-                      : 0;
-                  return (
-                    <div
-                      key={g.name}
-                      className={`h-full ${stateTone(g.key).bar} transition-[width] duration-700`}
-                      style={{ width: `${pct}%` }}
-                      title={`${g.name}: ${g.count}`}
-                    />
-                  );
-                })}
-              </div>
-              <div className="space-y-3">
-                {stateGroups.map((g) => {
-                  const pct =
-                    metrics.totalSessions > 0
-                      ? Math.round((g.count / metrics.totalSessions) * 100)
-                      : 0;
-                  return (
-                    <div key={g.name}>
-                      <div className="flex items-center justify-between mb-1 gap-2">
-                        <span className="inline-flex items-center gap-2 min-w-0">
-                          <span
-                            className={`w-2.5 h-2.5 rounded-full shrink-0 ${stateTone(g.key).dot}`}
-                          />
-                          <span className="text-[13px] text-gray-600 dark:text-slate-300 truncate">
-                            {g.name}
-                          </span>
-                        </span>
-                        <span className="text-[12px] shrink-0 tabular-nums text-gray-400 dark:text-slate-500">
-                          <span className="font-bold text-gray-900 dark:text-white">
-                            {g.count}
-                          </span>{" "}
-                          sessiya ·{" "}
-                          <span className="font-semibold text-gray-600 dark:text-slate-300">
-                            {g.students.toLocaleString("uz-UZ")}
-                          </span>{" "}
-                          talabgor · {pct}%
-                        </span>
-                      </div>
-                      <div className="w-full bg-gray-100 dark:bg-slate-700/50 rounded-full h-2 overflow-hidden">
-                        <div
-                          className={`h-2 rounded-full ${stateTone(g.key).bar} transition-all duration-700`}
-                          style={{ width: `${pct}%` }}
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </>
-          ) : (
-            <EmptyText />
-          )}
-        </SectionCard>
-
         {/* Testlar bo'yicha taqsimot */}
         <SectionCard
           title="Testlar bo'yicha taqsimot"
@@ -432,53 +332,6 @@ export default function TestDashboardPage() {
                             ? "from-primary-400 to-primary-600"
                             : "from-sky-400 to-sky-500"
                         } transition-all duration-700`}
-                        style={{ width: `${pct}%` }}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <EmptyText />
-          )}
-        </SectionCard>
-      </div>
-
-      {/* Eng katta sessiyalar + Kelayotgan sessiyalar */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5 sm:gap-4 mb-5 sm:mb-6">
-        {/* Eng katta sessiyalar */}
-        <SectionCard
-          title="Eng katta sessiyalar"
-          subtitle="talabgorlar soni bo'yicha"
-        >
-          {topSessions.length > 0 ? (
-            <div className="space-y-2.5">
-              {topSessions.map((s, i) => {
-                const max = topSessions[0].count_total_student || 1;
-                const pct = (s.count_total_student / max) * 100;
-                return (
-                  <div
-                    key={s.id}
-                    onClick={() => navigate("/test-sessions")}
-                    className="cursor-pointer group"
-                  >
-                    <div className="flex items-center justify-between mb-1 gap-2">
-                      <span className="inline-flex items-center gap-2 min-w-0">
-                        <span className="inline-flex items-center justify-center w-5 h-5 rounded-md text-[10.5px] font-bold bg-primary-100 text-primary-700 dark:bg-primary-900/40 dark:text-primary-300 shrink-0 tabular-nums">
-                          {i + 1}
-                        </span>
-                        <span className="text-[13px] font-medium text-gray-800 dark:text-slate-100 truncate group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors">
-                          {s.name}
-                        </span>
-                      </span>
-                      <span className="text-[13px] font-bold tabular-nums text-gray-900 dark:text-white shrink-0">
-                        {s.count_total_student.toLocaleString("uz-UZ")}
-                      </span>
-                    </div>
-                    <div className="w-full bg-gray-100 dark:bg-slate-700/50 rounded-full h-2 overflow-hidden">
-                      <div
-                        className="h-2 rounded-full bg-gradient-to-r from-violet-400 to-violet-600 transition-all duration-700"
                         style={{ width: `${pct}%` }}
                       />
                     </div>
@@ -710,31 +563,6 @@ function EmptyText({ label = "Ma'lumot yo'q" }: { label?: string }) {
 }
 
 /** Ixcham ko'rsatkich — strip ichidagi son + label. */
-function Highlight({
-  label,
-  value,
-  tone = "text-gray-900 dark:text-white",
-}: {
-  label: string;
-  value: React.ReactNode;
-  tone?: string;
-}) {
-  return (
-    <div className="flex items-baseline gap-2">
-      <span className={`text-xl font-extrabold tabular-nums leading-none ${tone}`}>
-        {value}
-      </span>
-      <span className="text-[11.5px] text-gray-500 dark:text-slate-400 leading-tight">
-        {label}
-      </span>
-    </div>
-  );
-}
-
-/**
- * Harakatlanuvchi (indeterminate) progress — tayyor/jonli sessiya jarayonini
- * bildiradi. CSS `.live-progress-bar` keyframe'i bilan chapdan o'ngga suriladi.
- */
 function LiveProgress() {
   return (
     <div className="relative h-2 w-full overflow-hidden rounded-full bg-emerald-100/70 dark:bg-emerald-900/30">
@@ -784,14 +612,14 @@ function UsersIcon({ className = "w-5 h-5" }: { className?: string }) {
   );
 }
 
-function ClockIcon({ className = "w-5 h-5" }: { className?: string }) {
+function BanIcon({ className = "w-5 h-5" }: { className?: string }) {
   return (
     <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path
         strokeLinecap="round"
         strokeLinejoin="round"
         strokeWidth={2}
-        d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+        d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"
       />
     </svg>
   );

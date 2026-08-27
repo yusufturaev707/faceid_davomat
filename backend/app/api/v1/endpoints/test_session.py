@@ -367,6 +367,58 @@ def download_passport_template(
 # --- TestSession CRUD ---
 
 
+class DailyEnteredItem(BaseModel):
+    """Bir kun uchun kirgan talabgorlar soni (grafik nuqtasi)."""
+
+    date: str
+    count: int
+
+
+class TestDashboardOverviewResponse(BaseModel):
+    """`/test-dashboard` sahifasi uchun umumiy ko'rsatkichlar."""
+
+    total_students: int
+    total_rejected: int
+    active_sessions: int
+    active_session_students: int
+    daily_entered: list[DailyEnteredItem] = []
+    # Qaysi qamrovda hisoblangani — UI sarlavhada ko'rsatadi
+    region_id: int | None = None
+    region_name: str | None = None
+
+
+@router.get(
+    "/dashboard-overview",
+    response_model=TestDashboardOverviewResponse,
+    summary="Test Dashboard ko'rsatkichlari (viloyat qamrovida)",
+)
+def test_dashboard_overview(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(
+        PermissionChecker(P.DASHBOARD_READ.code, P.TEST_SESSION_READ.code)
+    ),
+):
+    """Dashboard kartalari va oxirgi 30 kunlik kirish grafigi.
+
+    Qamrov `student:all_regions` permissioniga bog'liq: u bor bo'lsa butun
+    tizim, aks holda faqat foydalanuvchining o'z viloyati.
+    """
+    from app.core.region_scope import resolve_region_id
+    from app.services.test_dashboard_overview import get_overview
+
+    region_id = resolve_region_id(current_user)
+    data = get_overview(db, region_id)
+
+    region_name = None
+    if region_id is not None:
+        region = db.get(Region, int(region_id))
+        region_name = region.name if region else None
+
+    return TestDashboardOverviewResponse(
+        **data, region_id=region_id, region_name=region_name
+    )
+
+
 @router.get("/active", response_model=list[ActiveTestSessionResponse])
 def list_active_sessions(
     zone_id: int | None = Query(
@@ -419,7 +471,17 @@ def list_sessions(
         description="SessionState.id bo'yicha filter (Yaratilgan, Yuklab olindi, Embedding, Tayyor, Yakunlangan)",
     ),
     db: Session = Depends(get_db),
-    _: User = Depends(PermissionChecker(P.TEST_SESSION_READ.code)),
+    # Sessiya ro'yxati statistika va talabgorlar sahifalarida FILTR sifatida
+    # ham kerak — ular uchun alohida `test_session:read` talab qilinmaydi
+    # (argumentlar OR bilan tekshiriladi). Sessiya ichidagi ma'lumot esa
+    # o'z endpointlarida alohida himoyalangan.
+    _: User = Depends(
+        PermissionChecker(
+            P.TEST_SESSION_READ.code,
+            P.STATISTICS_READ.code,
+            P.STUDENT_READ.code,
+        )
+    ),
 ):
     """Test sessiyalar ro'yxati (pagination bilan)."""
     items, total = get_test_sessions_paginated(
@@ -546,17 +608,46 @@ class ChangeStateRequest(BaseModel):
     test_state_id: int
 
 
+# Og'ir fon jarayonini boshlaydigan holat o'tishlari uchun qo'shimcha ruxsat.
+#   key=2 (Yuklab olindi) → talabgorlarni tashqi API dan yuklash (Celery)
+#   key=3 (Embedding)     → yuz embeddinglarini hisoblash (Celery)
+_STATE_PROCESS_PERMISSION = {
+    STATE_KEY_LOADING: P.TEST_SESSION_LOAD_STUDENTS,
+    STATE_KEY_EMBEDDING: P.TEST_SESSION_EMBEDDING,
+}
+
+
+def _require_process_permission(user: User, target_state_key: int | None) -> None:
+    """Maqsadli holat fon jarayonini boshlasa — tegishli ruxsatni talab qiladi.
+
+    Admin (role_key=1) `PermissionChecker` dagidek bu yerda ham o'tkaziladi.
+    """
+    perm = _STATE_PROCESS_PERMISSION.get(target_state_key)
+    if perm is None or user.role_key == 1:
+        return
+    if not user.has_perm(perm.code):
+        raise HTTPException(
+            status_code=403,
+            detail=f"Huquq yetarli emas. Kerakli: {perm.code}",
+        )
+
+
 @router.patch("/{session_id}/state", response_model=TestSessionResponse)
 def change_state(
     session_id: int,
     body: ChangeStateRequest,
     db: Session = Depends(get_db),
-    _: User = Depends(PermissionChecker(P.TEST_SESSION_UPDATE.code)),
+    current_user: User = Depends(PermissionChecker(P.TEST_SESSION_UPDATE.code)),
 ):
     """Sessiya holatini o'zgartirish.
 
     - key=2 ga o'tganda tashqi API dan studentlar yuklanadi
+    - key=3 ga o'tganda face embedding chiqariladi
     - key=4 ga o'tganda is_active=True bo'ladi
+
+    Og'ir fon jarayonlarini boshlaydigan o'tishlar (key=2, key=3) qo'shimcha
+    permission talab qiladi — shunda operatorga sessiyani tahrirlash huquqini
+    berib, yuklash/embedding'ni ishga tushirishni taqiqlash mumkin.
 
     Agar tashqi API xatolik bersa, holat eski holatiga qaytariladi.
     """
@@ -565,6 +656,12 @@ def change_state(
     if not old_session:
         raise HTTPException(status_code=404, detail="Sessiya topilmadi")
     previous_state_id = old_session.test_state_id
+
+    # Jarayon boshlanishidan OLDIN tekshiramiz — DB o'zgartirilib, keyin 403
+    # qaytarilib qolmasin.
+    target_state = db.get(SessionState, body.test_state_id)
+    if target_state is not None:
+        _require_process_permission(current_user, target_state.key)
 
     try:
         session = change_session_state(
@@ -890,7 +987,7 @@ def student_load_progress(
 def cancel_student_load(
     session_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(PermissionChecker(P.TEST_SESSION_UPDATE.code)),
+    _: User = Depends(PermissionChecker(P.TEST_SESSION_CANCEL_PROCESS.code)),
 ):
     """Davom etayotgan student yuklashni bekor qilish.
 
@@ -924,7 +1021,7 @@ def cancel_student_load(
 def reload_student_load(
     session_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(PermissionChecker(P.TEST_SESSION_UPDATE.code)),
+    _: User = Depends(PermissionChecker(P.TEST_SESSION_LOAD_STUDENTS.code)),
 ):
     """Studentlarni QAYTA yuklash (resumable) — faqat tugamagan/xato kunlarni.
 
@@ -1050,7 +1147,7 @@ def export_session_dashboard_stats(
         ),
     ),
     db: Session = Depends(get_db),
-    _: User = Depends(PermissionChecker(P.STATISTICS_READ.code)),
+    _: User = Depends(PermissionChecker(P.STATISTICS_EXPORT.code)),
 ):
     """Tanlangan ko'lam (scope) statistikasini rasmiy "МАЪЛУМОТ" ko'rinishidagi
     Excel (.xlsx) hisobotiga yozib qaytaradi.
@@ -1150,7 +1247,7 @@ def export_session_absentees(
         description="Kun (YYYY-MM-DD) — scope=day uchun majburiy",
     ),
     db: Session = Depends(get_db),
-    _: User = Depends(PermissionChecker(P.STATISTICS_READ.code)),
+    _: User = Depends(PermissionChecker(P.STATISTICS_ABSENTEES.code)),
 ):
     """Tanlangan ko'lam (scope) uchun talabgorlar holati ro'yxatini .xlsx ga eksport.
 
@@ -1434,7 +1531,7 @@ def smena_attendance_by_region(
 def retry_embedding(
     session_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(PermissionChecker(P.TEST_SESSION_UPDATE.code)),
+    _: User = Depends(PermissionChecker(P.TEST_SESSION_EMBEDDING.code)),
 ):
     """Faqat is_ready=False bo'lgan studentlar uchun qayta embedding olish.
 
