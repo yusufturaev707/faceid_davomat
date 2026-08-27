@@ -1134,6 +1134,31 @@ _EXPORT_MAX_XLSX = 100_000
 _EXPORT_MAX_PDF = 10_000
 
 
+# Eksport formatiga mos permission. Ro'yxatni KO'RISH (`student:read`)
+# endpoint darajasida talab qilinadi; bu yerda faqat "faylga chiqarish"
+# huquqi tekshiriladi, shuning uchun operatorga ko'rishni berib, yuklab
+# olishni taqiqlash mumkin.
+_EXPORT_PERMISSION = {
+    "xlsx": P.STUDENT_EXPORT_EXCEL,
+    "pdf": P.STUDENT_EXPORT_PDF,
+}
+
+
+def _require_export_permission(user: User, fmt: str) -> None:
+    """Tanlangan format uchun eksport ruxsatini talab qiladi.
+
+    Admin (`role_key == 1`) `PermissionChecker` dagidek o'tkazib yuboriladi.
+    """
+    perm = _EXPORT_PERMISSION.get(fmt)
+    if perm is None or user.role_key == 1:
+        return
+    if not user.has_perm(perm.code):
+        raise HTTPException(
+            status_code=403,
+            detail=f"Huquq yetarli emas. Kerakli: {perm.code}",
+        )
+
+
 @router.get("/export")
 def export_students(
     fmt: str = Query("xlsx", description="Format: 'xlsx' yoki 'pdf'"),
@@ -1170,6 +1195,8 @@ def export_students(
         raise HTTPException(
             status_code=400, detail="Format 'xlsx' yoki 'pdf' bo'lishi kerak"
         )
+
+    _require_export_permission(current_user, fmt)
 
     cap = _EXPORT_MAX_XLSX if fmt == "xlsx" else _EXPORT_MAX_PDF
     region_id = _scoped_region_id(current_user, region_id)

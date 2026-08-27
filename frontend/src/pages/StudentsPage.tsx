@@ -814,8 +814,8 @@ export default function StudentsPage() {
                 {`Binoni o'zgartirish${data ? ` (${data.total})` : ""}`}
               </button>
             </PermissionGate>
-            <PermissionGate permission={PERM.STUDENT_READ}>
-              <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2">
+              <PermissionGate permission={PERM.STUDENT_EXPORT_EXCEL}>
                 <button
                   onClick={() => handleExport("xlsx")}
                   disabled={!!exporting || !data || data.total === 0}
@@ -831,6 +831,8 @@ export default function StudentsPage() {
                   )}
                   Excel
                 </button>
+              </PermissionGate>
+              <PermissionGate permission={PERM.STUDENT_EXPORT_PDF}>
                 <button
                   onClick={() => handleExport("pdf")}
                   disabled={!!exporting || !data || data.total === 0}
@@ -847,8 +849,8 @@ export default function StudentsPage() {
                   )}
                   PDF
                 </button>
-              </div>
-            </PermissionGate>
+              </PermissionGate>
+            </div>
             {data && (
               <span className="text-xs text-gray-400 dark:text-slate-500 ml-auto self-center">
                 Jami:{" "}

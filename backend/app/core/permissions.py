@@ -115,6 +115,18 @@ class P:
         "GTSP dan rasm va FIO olish",
         "student",
     )
+    # Ro'yxatni fayl qilib chiqarish — ko'rishdan alohida boshqariladi:
+    # eksport ma'lumotni tizimdan tashqariga olib chiqadi.
+    STUDENT_EXPORT_EXCEL = _Perm(
+        "student:export_excel",
+        "Talabgorlar ro'yxatini Excel'ga yuklash",
+        "student",
+    )
+    STUDENT_EXPORT_PDF = _Perm(
+        "student:export_pdf",
+        "Talabgorlar ro'yxatini PDF'ga yuklash",
+        "student",
+    )
 
     # === Student Logs ===
     STUDENT_LOG_READ = _Perm("student_log:read", "Student loglarini ko'rish", "student_log")

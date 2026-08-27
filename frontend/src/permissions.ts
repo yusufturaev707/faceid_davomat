@@ -67,6 +67,9 @@ export const PERM = {
   STUDENT_ALL_REGIONS: "student:all_regions",
   // GTSP tashqi xizmatidan rasm/FIO olish
   STUDENT_FETCH_GTSP: "student:fetch_gtsp",
+  // Ro'yxatni faylga chiqarish — ko'rishdan alohida
+  STUDENT_EXPORT_EXCEL: "student:export_excel",
+  STUDENT_EXPORT_PDF: "student:export_pdf",
 
   // Student loglari
   STUDENT_LOG_READ: "student_log:read",
