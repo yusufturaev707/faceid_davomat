@@ -70,6 +70,7 @@ export interface FailedLoginCount {
 }
 
 // === Permissions (RBAC) ===
+
 export interface PermissionResponse {
   id: number;
   codename: string;
