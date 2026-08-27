@@ -453,6 +453,7 @@ export default function UsersPage() {
                   value={form.region_id != null ? String(form.region_id) : ""}
                   onChange={(v) => handleRegionChange(v ? Number(v) : null)}
                   placeholder="— Tanlanmagan —"
+                  clearable
                   options={regions.map((r) => ({ value: String(r.id), label: r.name }))}
                 />
               </div>
@@ -463,7 +464,10 @@ export default function UsersPage() {
                   value={form.zone_id != null ? String(form.zone_id) : ""}
                   onChange={(v) => setForm({ ...form, zone_id: v ? Number(v) : null })}
                   disabled={!form.region_id}
-                  placeholder={form.region_id ? "— Tanlang —" : "— Avval hududni tanlang —"}
+                  clearable={!!form.region_id}
+                  placeholder={
+                    form.region_id ? "— Tanlanmagan —" : "— Avval hududni tanlang —"
+                  }
                   options={filteredZones.map((z) => ({ value: String(z.id), label: z.name }))}
                 />
               </div>

@@ -1311,3 +1311,17 @@ export async function getTestDashboardOverviewApi(): Promise<
   const res = await apiClient.get("/test-sessions/dashboard-overview");
   return res.data;
 }
+
+/**
+ * Oy kesimida kunlik kirgan talabgorlar. `month` — "YYYY-MM"; bo'sh bo'lsa
+ * server joriy oyni qaytaradi. Kartalardan alohida, chunki oy almashtirilganda
+ * faqat grafik qayta yuklanadi.
+ */
+export async function getDashboardDailyEnteredApi(
+  month?: string,
+): Promise<import("./interfaces").DailyEnteredResponse> {
+  const res = await apiClient.get("/test-sessions/dashboard-daily-entered", {
+    params: month ? { month } : undefined,
+  });
+  return res.data;
+}

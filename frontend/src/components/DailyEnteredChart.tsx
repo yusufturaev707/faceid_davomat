@@ -1,8 +1,9 @@
-import { useState } from "react";
-import type { DailyEnteredItem } from "../interfaces";
+import { useCallback, useEffect, useState } from "react";
+import type { DailyEnteredResponse } from "../interfaces";
+import { getDashboardDailyEnteredApi } from "../api";
 
 /* ============================================================
- * Kunlik kirish grafigi — oxirgi 30 kun.
+ * Kunlik kirish grafigi — oy kesimida, oldinga/orqaga o'tish bilan.
  *
  * Forma: ustunli (column) grafik. Kunlik diskret sanoq va ko'p nol kun
  * bo'lgani uchun chiziq emas — chiziq nol kunlar orasidan yolg'on qiyalik
@@ -15,29 +16,89 @@ import type { DailyEnteredItem } from "../interfaces";
  *
  * Qiymatlar hover'siz ham yetib boradi: cho'qqi to'g'ridan-to'g'ri belgilangan,
  * qolgani jadval ko'rinishida.
+ *
+ * Oy o'tkazgich — chart marki emas, oddiy boshqaruv: sarlavha qatorida o'ngda.
+ * Chegaralarni server aytadi (`min_month` / `max_month`), shuning uchun bo'sh
+ * oylarga cheksiz o'tib ketib bo'lmaydi va kelajakka o'tilmaydi.
  * ========================================================== */
 
-export default function DailyEnteredChart({
-  data,
-}: {
-  data: DailyEnteredItem[];
-}) {
+const MONTHS_UZ = [
+  "Yanvar",
+  "Fevral",
+  "Mart",
+  "Aprel",
+  "May",
+  "Iyun",
+  "Iyul",
+  "Avgust",
+  "Sentabr",
+  "Oktabr",
+  "Noyabr",
+  "Dekabr",
+];
+
+/** "YYYY-MM" ni `delta` oyga suradi (yil chegarasidan o'zi o'tadi). */
+function shiftMonth(month: string, delta: number): string {
+  const [y, m] = month.split("-").map(Number);
+  const d = new Date(y, m - 1 + delta, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function monthLabel(month: string): string {
+  const [y, m] = month.split("-").map(Number);
+  return `${MONTHS_UZ[m - 1] ?? month} ${y}`;
+}
+
+export default function DailyEnteredChart() {
+  // null — hali birinchi javob kelmagan; server joriy oyni o'zi tanlaydi
+  const [month, setMonth] = useState<string | null>(null);
+  const [res, setRes] = useState<DailyEnteredResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [hover, setHover] = useState<number | null>(null);
 
+  const load = useCallback((target: string | null) => {
+    setLoading(true);
+    setError(null);
+    getDashboardDailyEnteredApi(target ?? undefined)
+      .then((r) => {
+        setRes(r);
+        setMonth(r.month);
+      })
+      .catch(() => setError("Ma'lumotni yuklab bo'lmadi"))
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    load(null);
+  }, [load]);
+
+  const go = (delta: number) => {
+    if (!month) return;
+    setHover(null);
+    load(shiftMonth(month, delta));
+  };
+
+  const data = res?.days ?? [];
+  // min_month null bo'lsa qamrovda umuman kirish yo'q — orqaga o'tishning
+  // ma'nosi yo'q, aks holda foydalanuvchi bo'sh oylarga cheksiz ketardi.
+  const canPrev = !!(res && month && res.min_month && month > res.min_month);
+  const canNext = !!(res && month && month < res.max_month);
+
   const max = Math.max(0, ...data.map((d) => d.count));
-  const total = data.reduce((sum, d) => sum + d.count, 0);
+  const total = res?.total ?? 0;
   const peakIndex = max > 0 ? data.findIndex((d) => d.count === max) : -1;
 
   // Y o'qi — toza (yumaloqlangan) qiymatlar
   const niceMax = niceCeil(max);
   const ticks = niceMax > 0 ? [niceMax, Math.round(niceMax / 2), 0] : [0];
 
-  const fmt = (n: number) => n.toLocaleString("uz-UZ");
   // Teng oraliqdagi 5 ta tayanch sana (birinchi va oxirgi shart)
   const axisDates = [0, 0.25, 0.5, 0.75, 1]
     .map((f) => data[Math.round(f * (data.length - 1))]?.date)
     .filter((d): d is string => Boolean(d));
 
+  const fmt = (n: number) => n.toLocaleString("uz-UZ");
   const fmtDay = (iso: string) => {
     const d = new Date(iso);
     return `${d.getDate()}.${String(d.getMonth() + 1).padStart(2, "0")}`;
@@ -45,29 +106,58 @@ export default function DailyEnteredChart({
 
   return (
     <div className="glass-card p-4 sm:p-5 mb-5 sm:mb-6">
-      <div className="flex items-start justify-between gap-3 mb-4">
+      {/* Sarlavha + oy o'tkazgich */}
+      <div className="flex items-start justify-between gap-3 gap-y-2 mb-4 flex-wrap">
         <div className="min-w-0">
           <h3 className="text-[14px] font-bold text-gray-900 dark:text-white leading-tight">
             Kunlik kirgan talabgorlar
           </h3>
           <p className="text-[11.5px] text-gray-500 dark:text-slate-400 mt-0.5">
-            Oxirgi 30 kun · jami {fmt(total)} ta
+            {month ? monthLabel(month) : "—"} · jami {fmt(total)} ta
           </p>
         </div>
-        {max > 0 && (
-          <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300 shrink-0 tabular-nums">
-            eng yuqori {fmt(max)}
+
+        <div className="flex items-center gap-1.5 shrink-0">
+          {max > 0 && (
+            <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300 tabular-nums mr-1">
+              eng yuqori {fmt(max)}
+            </span>
+          )}
+          <NavButton
+            label="Oldingi oy"
+            disabled={!canPrev || loading}
+            onClick={() => go(-1)}
+          >
+            <ChevronIcon className="w-4 h-4" />
+          </NavButton>
+          <span className="text-[12px] font-semibold text-gray-700 dark:text-slate-200 min-w-[96px] text-center select-none">
+            {month ? monthLabel(month) : "…"}
           </span>
-        )}
+          <NavButton
+            label="Keyingi oy"
+            disabled={!canNext || loading}
+            onClick={() => go(1)}
+          >
+            <ChevronIcon className="w-4 h-4 rotate-180" />
+          </NavButton>
+        </div>
       </div>
 
-      {total === 0 ? (
+      {error ? (
+        <div className="h-40 flex items-center justify-center text-[12.5px] text-rose-600 dark:text-rose-400">
+          {error}
+        </div>
+      ) : loading && !res ? (
+        <div className="h-44 rounded-xl bg-gray-100 dark:bg-slate-700/40 animate-pulse" />
+      ) : total === 0 ? (
         <div className="h-40 flex items-center justify-center text-[12.5px] text-gray-400 dark:text-slate-500">
-          Bu davrda kirish qayd etilmagan
+          Bu oyda kirish qayd etilmagan
         </div>
       ) : (
         <>
-          <div className="flex gap-2">
+          <div
+            className={`flex gap-2 transition-opacity ${loading ? "opacity-50" : ""}`}
+          >
             {/* Y o'qi */}
             <div className="w-11 shrink-0 h-44 flex flex-col justify-between items-end pb-5 text-[10.5px] tabular-nums text-gray-400 dark:text-slate-500">
               {ticks.map((t, i) => (
@@ -137,9 +227,12 @@ export default function DailyEnteredChart({
               </div>
 
               {/* Tooltip — qiymat oldinda, sana ikkinchi darajali */}
-              {hover !== null && (
+              {hover !== null && data[hover] && (
                 <div
-                  className={`absolute -top-1 z-10 pointer-events-none rounded-lg bg-gray-900/95 dark:bg-slate-700 px-2.5 py-1.5 shadow-lg ${tipAlign(hover, data.length)}`}
+                  className={`absolute -top-1 z-10 pointer-events-none rounded-lg bg-gray-900/95 dark:bg-slate-700 px-2.5 py-1.5 shadow-lg ${tipAlign(
+                    hover,
+                    data.length,
+                  )}`}
                   style={{ left: `${((hover + 0.5) / data.length) * 100}%` }}
                 >
                   <p className="text-[12px] font-bold text-white tabular-nums leading-tight">
@@ -191,6 +284,49 @@ export default function DailyEnteredChart({
         </>
       )}
     </div>
+  );
+}
+
+function NavButton({
+  label,
+  disabled,
+  onClick,
+  children,
+}: {
+  label: string;
+  disabled: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      title={label}
+      aria-label={label}
+      className="inline-flex items-center justify-center w-7 h-7 rounded-lg text-gray-500 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-700/60 hover:text-gray-700 dark:hover:text-slate-200 disabled:opacity-35 disabled:pointer-events-none transition-colors"
+    >
+      {children}
+    </button>
+  );
+}
+
+function ChevronIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M15 19l-7-7 7-7"
+      />
+    </svg>
   );
 }
 

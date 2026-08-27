@@ -252,7 +252,7 @@ export default function TestDashboardPage() {
       </div>
 
       {/* Kunlik kirish dinamikasi */}
-      {overview && <DailyEnteredChart data={overview.daily_entered} />}
+      <DailyEnteredChart />
 
       {/* Jonli (tayyor) sessiyalar — harakatlanuvchi progress bilan */}
       {readySessions.length > 0 && (

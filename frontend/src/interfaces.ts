@@ -402,12 +402,22 @@ export interface DailyEnteredItem {
   count: number;
 }
 
+export interface DailyEnteredResponse {
+  /** YYYY-MM */
+  month: string;
+  days: DailyEnteredItem[];
+  total: number;
+  /** Kirish qayd etilgan eng eski oy; undan orqaga o'tilmaydi */
+  min_month: string | null;
+  /** Joriy oy; undan oldinga o'tilmaydi */
+  max_month: string;
+}
+
 export interface TestDashboardOverviewResponse {
   total_students: number;
   total_rejected: number;
   active_sessions: number;
   active_session_students: number;
-  daily_entered: DailyEnteredItem[];
   region_id: number | null;
   /** null bo'lsa — barcha viloyatlar qamrovi */
   region_name: string | null;

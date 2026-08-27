@@ -381,7 +381,6 @@ class TestDashboardOverviewResponse(BaseModel):
     total_rejected: int
     active_sessions: int
     active_session_students: int
-    daily_entered: list[DailyEnteredItem] = []
     # Qaysi qamrovda hisoblangani — UI sarlavhada ko'rsatadi
     region_id: int | None = None
     region_name: str | None = None
@@ -416,6 +415,67 @@ def test_dashboard_overview(
 
     return TestDashboardOverviewResponse(
         **data, region_id=region_id, region_name=region_name
+    )
+
+
+class DailyEnteredResponse(BaseModel):
+    """Bir oylik kunlik kirish statistikasi + navigatsiya chegaralari."""
+
+    month: str                      # YYYY-MM
+    days: list[DailyEnteredItem] = []
+    total: int = 0
+    # Navigatsiya chegaralari: undan narisiga o'tishning ma'nosi yo'q
+    min_month: str | None = None    # kirish qayd etilgan eng eski oy
+    max_month: str                  # joriy oy — kelajakka o'tilmaydi
+
+
+@router.get(
+    "/dashboard-daily-entered",
+    response_model=DailyEnteredResponse,
+    summary="Oy kesimida kunlik kirgan talabgorlar (viloyat qamrovida)",
+)
+def dashboard_daily_entered(
+    month: str | None = Query(
+        default=None,
+        description="YYYY-MM. Bo'sh bo'lsa — joriy oy.",
+        pattern=r"^\d{4}-\d{2}$",
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(
+        PermissionChecker(P.DASHBOARD_READ.code, P.TEST_SESSION_READ.code)
+    ),
+):
+    """Tanlangan oyning har bir kuni uchun kirgan talabgorlar soni.
+
+    Kartalardan alohida endpoint — oy almashtirilganda faqat grafik qayta
+    yuklanadi, ko'rsatkichlar qayta hisoblanmaydi.
+    """
+    from app.core.region_scope import resolve_region_id
+    from app.services.test_dashboard_overview import (
+        earliest_entered_month,
+        get_daily_entered,
+    )
+
+    region_id = resolve_region_id(current_user)
+    today = date.today()
+
+    if month:
+        year_str, month_str = month.split("-")
+        try:
+            target = date(int(year_str), int(month_str), 1)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Oy noto'g'ri: 01-12 oralig'ida bo'lsin")
+        # Kelajak oyni so'rashning ma'nosi yo'q — joriy oyga qisqartiramiz.
+        if target > today.replace(day=1):
+            target = today.replace(day=1)
+    else:
+        target = today.replace(day=1)
+
+    data = get_daily_entered(db, region_id, target)
+    return DailyEnteredResponse(
+        **data,
+        min_month=earliest_entered_month(db, region_id),
+        max_month=today.strftime("%Y-%m"),
     )
 
 

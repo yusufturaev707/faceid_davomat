@@ -25,9 +25,6 @@ from app.models.zone import Zone
 
 logger = logging.getLogger(__name__)
 
-# Grafik oynasi — oxirgi 30 kun (bugun ham kiradi).
-CHART_DAYS = 30
-
 
 def _student_scope(region_id: int | None):
     """Talabgorlar uchun umumiy WHERE shartlari."""
@@ -57,7 +54,6 @@ def get_overview(db: Session, region_id: int | None) -> dict:
           "total_rejected": int,          # chetlatilganlar (is_cheating)
           "active_sessions": int,         # faol sessiyalar
           "active_session_students": int, # faol sessiyalarda qatnashishi kerak
-          "daily_entered": [{"date": "YYYY-MM-DD", "count": int}, ...],
         }
     """
     # 1) Jami talabgor
@@ -105,23 +101,33 @@ def get_overview(db: Session, region_id: int | None) -> dict:
         "total_rejected": int(total_rejected),
         "active_sessions": int(active_sessions),
         "active_session_students": int(active_session_students),
-        "daily_entered": get_daily_entered(db, region_id),
     }
 
 
-def get_daily_entered(db: Session, region_id: int | None) -> list[dict]:
-    """Oxirgi `CHART_DAYS` kun uchun kunlik kirgan talabgorlar soni.
+def month_bounds(month: date) -> tuple[date, date]:
+    """Oyning birinchi va oxirgi kunini qaytaradi."""
+    first = month.replace(day=1)
+    if first.month == 12:
+        nxt = first.replace(year=first.year + 1, month=1)
+    else:
+        nxt = first.replace(month=first.month + 1)
+    return first, nxt - timedelta(days=1)
+
+
+def get_daily_entered(db: Session, region_id: int | None, month: date) -> dict:
+    """Berilgan OY uchun kunlik kirgan talabgorlar soni.
 
     Manba — `StudentLog.first_enter_time` (talabgor birinchi marta binoga
     kirgan payt). `Student.is_entered` bayrog'i "kirganmi" degan savolga javob
-    beradi, lekin QACHON kirganini faqat log biladi — grafik sana kesimida
-    bo'lgani uchun log ishlatiladi.
+    beradi, lekin QACHON kirganini faqat log biladi.
 
-    Ma'lumot yo'q kunlar ham `count: 0` bilan qaytariladi — grafikda uzilish
-    bo'lmasligi uchun.
+    Oyning HAR kuni qaytariladi (ma'lumot yo'q kun ham `count: 0`) — grafikda
+    uzilish bo'lmasligi va oy uzunligi ko'rinib turishi uchun.
+
+    Returns:
+        {"month": "YYYY-MM", "days": [{"date", "count"}, ...], "total": int}
     """
-    today = date.today()
-    start = today - timedelta(days=CHART_DAYS - 1)
+    first, last = month_bounds(month)
 
     day_col = cast(StudentLog.first_enter_time, Date).label("day")
     stmt = (
@@ -129,8 +135,8 @@ def get_daily_entered(db: Session, region_id: int | None) -> list[dict]:
         .join(Student, Student.id == StudentLog.student_id)
         .where(
             StudentLog.first_enter_time.is_not(None),
-            day_col >= start,
-            day_col <= today,
+            day_col >= first,
+            day_col <= last,
             Student.is_applied.is_(False),
         )
         .group_by(day_col)
@@ -142,11 +148,36 @@ def get_daily_entered(db: Session, region_id: int | None) -> list[dict]:
         )
 
     counts = {row.day: int(row.cnt) for row in db.execute(stmt).all()}
-
-    return [
+    n_days = (last - first).days + 1
+    days = [
         {
-            "date": (start + timedelta(days=i)).isoformat(),
-            "count": counts.get(start + timedelta(days=i), 0),
+            "date": (first + timedelta(days=i)).isoformat(),
+            "count": counts.get(first + timedelta(days=i), 0),
         }
-        for i in range(CHART_DAYS)
+        for i in range(n_days)
     ]
+    return {
+        "month": first.strftime("%Y-%m"),
+        "days": days,
+        "total": sum(d["count"] for d in days),
+    }
+
+
+def earliest_entered_month(db: Session, region_id: int | None) -> str | None:
+    """Qamrovda kirish qayd etilgan eng eski oy (`YYYY-MM`) yoki None.
+
+    UI "oldingi oy" tugmasini shu chegarada to'xtatadi — foydalanuvchi
+    cheksiz bo'sh oylarga o'tib ketmasin.
+    """
+    stmt = select(func.min(cast(StudentLog.first_enter_time, Date))).join(
+        Student, Student.id == StudentLog.student_id
+    ).where(
+        StudentLog.first_enter_time.is_not(None),
+        Student.is_applied.is_(False),
+    )
+    if region_id is not None:
+        stmt = stmt.join(Zone, Zone.id == Student.zone_id).where(
+            Zone.region_id == int(region_id)
+        )
+    earliest = db.scalar(stmt)
+    return earliest.strftime("%Y-%m") if earliest else None
