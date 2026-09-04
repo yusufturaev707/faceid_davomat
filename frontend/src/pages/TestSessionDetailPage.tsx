@@ -2035,16 +2035,11 @@ export default function TestSessionDetailPage() {
                       <p className="text-[12px] leading-relaxed">
                         <strong>jshshir</strong> bo'yicha shu sessiyadagi talaba topiladi
                         va pasport rasmi (<code className="font-mono">ps_img</code>)
-                        yangilanadi — rasm bazaga odatdagidek BLOB ko'rinishida
-                        saqlanadi. Topilmagan JSHSHIR'lar o'tkazib yuboriladi.
+                        yangilanadi. Topilmagan JSHSHIR'lar o'tkazib yuboriladi.
                       </p>
                     ) : passportMode === "psn" ? (
                       <p className="text-[12px] leading-relaxed">
-                        Faqat <strong>PINFL</strong> ro'yxatini joylashtiring — pasport
-                        seriyasi va raqami <strong>PSN (e-gov)</strong> tizimidan
-                        avtomatik olinadi. Tug'ilgan sana PINFL ning o'zidan
-                        hisoblanadi. Sessiyada topilmagan PINFL uchun tashqi tizimga
-                        so'rov yuborilmaydi.
+                        Faqat <strong>PINFL</strong> ro'yxatini joylashtiring.
                       </p>
                     ) : (
                       <p className="text-[12px] leading-relaxed">
@@ -2054,19 +2049,6 @@ export default function TestSessionDetailPage() {
                       </p>
                     )}
                   </div>
-
-                  {passportMode === "image" && (
-                    <p className="text-[12px] text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 px-3 py-2 rounded-lg flex items-start gap-2">
-                      <svg className="w-4 h-4 mt-px shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                      </svg>
-                      <span>
-                        Rasm almashgani uchun talabaning eski embedding'i tozalanadi va
-                        u <strong>"tayyor emas"</strong> holatiga o'tadi. Yangilagandan
-                        so'ng embedding bosqichini qayta ishga tushiring.
-                      </span>
-                    </p>
-                  )}
 
                   {passportMode === "paste" ? (
                     <div className="space-y-2">
