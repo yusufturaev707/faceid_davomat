@@ -1,10 +1,12 @@
 """Talabalarning passport (ps_ser / ps_num) ma'lumotlarini ommaviy yangilash.
 
 Foydalanish konteksti: ba'zi talabalarning passport seriyasi/raqami
-eskirgan bo'ladi. Operator Excel shablon (`jshshir, ps_ser, ps_num`) yoki
-Excel'dan nusxalab qo'yilgan (paste) qatorlarni yuboradi — biz `jshshir`
-(= `Student.imei`) bo'yicha shu sessiyadagi talabani topib, uning
-`StudentPsData` yozuvidagi `ps_ser`/`ps_num` ni yangilaymiz.
+eskirgan bo'ladi. Operator Excel shablon (`jshshir, ps_ser, ps_num`),
+Excel'dan nusxalab qo'yilgan (paste) qatorlar yoki faqat PINFL ro'yxatini
+yuboradi — oxirgi holatda seriya/raqam e-gov PSN API'dan olinadi
+(`update_session_passports_from_psn`). Har uchala yo'lda ham `jshshir`
+(= `Student.imei`) bo'yicha shu sessiyadagi talaba topilib, uning
+`StudentPsData` yozuvidagi `ps_ser`/`ps_num` yangilanadi.
 
 Bu jarayon yengil (faqat DB UPDATE, yuz/embedding qayta ishlash yo'q),
 shuning uchun sinxron bajariladi — Celery talab qilinmaydi.
@@ -24,6 +26,7 @@ from sqlalchemy.orm import Session
 from app.models.student import Student
 from app.models.student_ps_data import StudentPsData
 from app.models.test_session_smena import TestSessionSmena
+from app.services.egov_psn_client import birth_date_from_pinfl, fetch_documents
 
 logger = logging.getLogger(__name__)
 
@@ -274,6 +277,152 @@ def update_session_passports(
         "updated": updated,
         "not_found": not_found,
         "invalid": invalid,
+    }
+
+
+# ─── PSN (e-gov) orqali passport yangilash ───────────────────────────────
+
+# PINFL aynan 14 xonali bo'lishi shart — PSN so'rovi uchun tug'ilgan sana
+# shu raqamdan hisoblanadi.
+_PINFL_LEN = 14
+
+
+def validate_pinfl(pinfl: str) -> str | None:
+    """PSN so'rovi uchun PINFL ni tekshiradi. Xato bo'lsa — sabab matni."""
+    if not pinfl:
+        return "PINFL bo'sh"
+    if not pinfl.isdigit():
+        return "PINFL faqat raqamlardan iborat bo'lishi kerak"
+    if len(pinfl) != _PINFL_LEN:
+        return f"PINFL {_PINFL_LEN} ta raqamdan iborat bo'lishi kerak"
+    if birth_date_from_pinfl(pinfl) is None:
+        return "PINFL dan tug'ilgan sana aniqlanmadi"
+    return None
+
+
+def _session_student_imeis(
+    db: Session, session_id: int, candidates: list[str]
+) -> set[str]:
+    """`candidates` ichidan shu sessiyada mavjud bo'lgan IMEI (PINFL) larni qaytaradi."""
+    if not candidates:
+        return set()
+    smena_subq = sa_select(TestSessionSmena.id).where(
+        TestSessionSmena.test_session_id == session_id
+    )
+    rows = db.scalars(
+        sa_select(Student.imei).where(
+            Student.session_smena_id.in_(smena_subq),
+            Student.imei.in_(candidates),
+        )
+    ).all()
+    return {imei for imei in rows if imei}
+
+
+def update_session_passports_from_psn(
+    db: Session, session_id: int, pinfls: list[str]
+) -> dict:
+    """PINFL ro'yxati bo'yicha passportni e-gov PSN dan olib, sessiyaga qo'llaydi.
+
+    Bosqichlar:
+      1. PINFL larni tozalash/validatsiya, takrorlarni olib tashlash.
+      2. Sessiyada bor-yo'qligini OLDINDAN tekshirish — sessiyada yo'q talaba
+         uchun tashqi API ga so'rov yubormaymiz (kvota tejaladi, javob tezroq).
+      3. Qolganlari uchun PSN dan `ps_ser`/`ps_num` olish (parallel).
+      4. Olingan qatorlarni `update_session_passports` orqali yozish.
+
+    Qaytaradi: `update_session_passports` summary'si + `failed` —
+    PSN javob bermagan yoki rad etgan PINFL lar `{"pinfl", "error"}` ko'rinishida.
+    """
+    total = len(pinfls)
+    invalid: list[dict] = []
+    failed: list[dict] = []
+
+    # 1) Tozalash + validatsiya. Takror PINFL bir marta so'raladi.
+    candidates: list[str] = []
+    seen: set[str] = set()
+    for idx, raw in enumerate(pinfls, start=1):
+        pinfl = clean_cell(raw)
+        err = validate_pinfl(pinfl)
+        if err:
+            invalid.append({"row": idx, "jshshir": pinfl, "error": err})
+            continue
+        if pinfl in seen:
+            continue
+        seen.add(pinfl)
+        candidates.append(pinfl)
+
+    if not candidates:
+        return {
+            "total": total,
+            "updated": 0,
+            "not_found": [],
+            "invalid": invalid,
+            "failed": failed,
+        }
+
+    # 2) Sessiyada yo'qlarini ajratib olamiz — ular uchun PSN chaqirilmaydi.
+    present = _session_student_imeis(db, session_id, candidates)
+    targets = [p for p in candidates if p in present]
+    not_found = [p for p in candidates if p not in present]
+
+    if not targets:
+        return {
+            "total": total,
+            "updated": 0,
+            "not_found": not_found,
+            "invalid": invalid,
+            "failed": failed,
+        }
+
+    # 3) PSN dan olish (xatolar PINFL kesimida qaytadi — batch to'xtamaydi).
+    documents, errors = fetch_documents(targets)
+    failed.extend(
+        {"pinfl": pinfl, "error": reason} for pinfl, reason in errors.items()
+    )
+
+    # 4) Yozishdan oldin oxirgi validatsiya — DB ustun o'lchamlariga mos kelsin.
+    rows: list[dict] = []
+    for pinfl, doc in documents.items():
+        err = validate_row(pinfl, doc.ps_ser, doc.ps_num)
+        if err:
+            failed.append({"pinfl": pinfl, "error": err})
+            continue
+        rows.append(
+            {"jshshir": pinfl, "ps_ser": doc.ps_ser, "ps_num": doc.ps_num}
+        )
+
+    if not rows:
+        return {
+            "total": total,
+            "updated": 0,
+            "not_found": not_found,
+            "invalid": invalid,
+            "failed": failed,
+        }
+
+    summary = update_session_passports(db, session_id, rows)
+
+    # 2-bosqichdan keyin talaba o'chirilgan bo'lsa — bu yerda ham chiqishi mumkin.
+    not_found.extend(summary["not_found"])
+    # Ichki validatsiya xatolari (kutilmaydi, chunki yuqorida tekshirdik) —
+    # foydalanuvchi kiritgan qator emas, PSN ma'lumoti, shuning uchun `failed` ga.
+    failed.extend(
+        {"pinfl": item["jshshir"], "error": item["error"]}
+        for item in summary["invalid"]
+    )
+
+    logger.info(
+        "PSN passport yangilash: session=%d, total=%d, so'ralgan=%d, "
+        "updated=%d, not_found=%d, invalid=%d, failed=%d",
+        session_id, total, len(targets), summary["updated"],
+        len(not_found), len(invalid), len(failed),
+    )
+    return {
+        "total": total,
+        "updated": summary["updated"],
+        "not_found": not_found,
+        "invalid": invalid,
+        "failed": failed,
     }
 
 

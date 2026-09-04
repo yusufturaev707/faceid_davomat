@@ -32,8 +32,7 @@ import {
   downloadStudentsExcelTemplate,
   updateSessionPassportsApi,
   updateSessionPassportImagesApi,
-  uploadSessionPassportsExcelApi,
-  downloadPassportTemplate,
+  updateSessionPassportsPsnApi,
   fileToBase64,
 } from "../api";
 import Md3Select from "../components/Md3Select";
@@ -124,16 +123,17 @@ export default function TestSessionDetailPage() {
 
   // === Passport (ps_ser/ps_num) ommaviy yangilash ===
   const [showPassportUpdate, setShowPassportUpdate] = useState(false);
-  const [passportMode, setPassportMode] = useState<"paste" | "image" | "excel">("paste");
+  const [passportMode, setPassportMode] = useState<"paste" | "image" | "psn">("paste");
   const [passportPaste, setPassportPaste] = useState("");
-  const [passportFile, setPassportFile] = useState<File | null>(null);
   const [passportSubmitting, setPassportSubmitting] = useState(false);
   const [passportError, setPassportError] = useState<string | null>(null);
   const [passportResult, setPassportResult] = useState<PassportUpdateResult | null>(null);
-  const [passportTplDownloading, setPassportTplDownloading] = useState(false);
-  // Rasm (base64) tab'i: paste matni va bo'lak-bo'lak yuborish progressi
+  // Rasm (base64) tab'i: paste matni
   const [passportImgPaste, setPassportImgPaste] = useState("");
-  const [passportImgSent, setPassportImgSent] = useState(0);
+  // PSN tab'i: faqat PINFL ro'yxati (seriya/raqam e-gov dan olinadi)
+  const [passportPsnPaste, setPassportPsnPaste] = useState("");
+  // Rasm va PSN tab'lari uchun umumiy "bo'lak-bo'lak yuborish" progressi
+  const [passportSent, setPassportSent] = useState(0);
 
   const fetchSession = useCallback(async () => {
     if (!id) return;
@@ -689,23 +689,11 @@ export default function TestSessionDetailPage() {
     setPassportMode("paste");
     setPassportPaste("");
     setPassportImgPaste("");
-    setPassportImgSent(0);
-    setPassportFile(null);
+    setPassportPsnPaste("");
+    setPassportSent(0);
     setPassportError(null);
     setPassportResult(null);
     setShowPassportUpdate(true);
-  };
-
-  const handlePassportTemplate = async () => {
-    setPassportTplDownloading(true);
-    setPassportError(null);
-    try {
-      await downloadPassportTemplate();
-    } catch (err) {
-      setPassportError(extractErrorMessage(err));
-    } finally {
-      setPassportTplDownloading(false);
-    }
   };
 
   const handlePassportSubmit = async () => {
@@ -713,12 +701,37 @@ export default function TestSessionDetailPage() {
     setPassportSubmitting(true);
     setPassportError(null);
     setPassportResult(null);
-    setPassportImgSent(0);
+    setPassportSent(0);
     try {
       let result: PassportUpdateResult;
-      if (passportMode === "excel") {
-        if (!passportFile) return;
-        result = await uploadSessionPassportsExcelApi(session.id, passportFile);
+      if (passportMode === "psn") {
+        const pinfls = parsePastedPinfls(passportPsnPaste);
+        if (pinfls.length === 0) {
+          setPassportError(
+            "PINFL topilmadi. Har bir qatorda bitta PINFL (14 ta raqam) bo'lsin.",
+          );
+          return;
+        }
+        // Har bir PINFL uchun e-gov PSN ga alohida so'rov ketadi — bitta
+        // so'rov juda cho'zilib ketmasligi uchun bo'lak-bo'lak yuboramiz.
+        result = { total: 0, updated: 0, not_found: [], invalid: [], failed: [] };
+        let offset = 0;
+        for (const chunk of chunkPinfls(pinfls)) {
+          const part = await updateSessionPassportsPsnApi(session.id, chunk);
+          result = {
+            total: result.total + part.total,
+            updated: result.updated + part.updated,
+            not_found: [...result.not_found, ...part.not_found],
+            // Bo'lak ichidagi qator raqamini umumiy ro'yxatdagi raqamga keltiramiz
+            invalid: [
+              ...result.invalid,
+              ...part.invalid.map((it) => ({ ...it, row: it.row + offset })),
+            ],
+            failed: [...(result.failed ?? []), ...(part.failed ?? [])],
+          };
+          offset += chunk.length;
+          setPassportSent(offset);
+        }
       } else if (passportMode === "image") {
         const rows = parsePastedPassportImages(passportImgPaste);
         if (rows.length === 0) {
@@ -744,7 +757,7 @@ export default function TestSessionDetailPage() {
             ],
           };
           offset += chunk.length;
-          setPassportImgSent(offset);
+          setPassportSent(offset);
         }
       } else {
         const rows = parsePastedPassports(passportPaste);
@@ -982,7 +995,7 @@ export default function TestSessionDetailPage() {
             <button
               onClick={openPassportUpdate}
               className="btn-secondary text-sm inline-flex items-center gap-1.5"
-              title="Talabalar passport seriyasi/raqamini Excel yoki nusxa orqali yangilash"
+              title="Talabalar passport seriyasi/raqamini nusxa, rasm yoki PSN orqali yangilash"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7a2 2 0 012-2h14a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
@@ -1840,10 +1853,22 @@ export default function TestSessionDetailPage() {
         const invalidImgCount = parsedImgs.filter(
           (r) => validatePassportImageRowClient(r) !== null,
         ).length;
+        const parsedPinfls =
+          passportMode === "psn" ? parsePastedPinfls(passportPsnPaste) : [];
+        const invalidPinflCount = parsedPinfls.filter(
+          (v) => validatePinflClient(v) !== null,
+        ).length;
+        // Yuborilayotgan qatorlar soni — footer'dagi progress uchun.
+        const pendingCount =
+          passportMode === "image"
+            ? parsedImgs.length
+            : passportMode === "psn"
+              ? parsedPinfls.length
+              : 0;
         const canSubmit =
           !passportSubmitting &&
-          (passportMode === "excel"
-            ? !!passportFile
+          (passportMode === "psn"
+            ? parsedPinfls.length > 0 && invalidPinflCount < parsedPinfls.length
             : passportMode === "image"
               ? parsedImgs.length > 0 && invalidImgCount < parsedImgs.length
               : parsed.length > 0 && invalidCount < parsed.length);
@@ -1861,7 +1886,13 @@ export default function TestSessionDetailPage() {
               {/* Natija ko'rsatkichi */}
               {passportResult ? (
                 <div className="space-y-4">
-                  <div className="grid grid-cols-3 gap-3">
+                  <div
+                    className={`grid gap-3 ${
+                      passportResult.failed
+                        ? "grid-cols-2 sm:grid-cols-4"
+                        : "grid-cols-3"
+                    }`}
+                  >
                     <ResultStat
                       value={passportResult.updated}
                       label="Yangilandi"
@@ -1877,6 +1908,13 @@ export default function TestSessionDetailPage() {
                       label="Xato qator"
                       tone="rose"
                     />
+                    {passportResult.failed && (
+                      <ResultStat
+                        value={passportResult.failed.length}
+                        label="PSN javob bermadi"
+                        tone="rose"
+                      />
+                    )}
                   </div>
 
                   {passportResult.not_found.length > 0 && (
@@ -1906,14 +1944,29 @@ export default function TestSessionDetailPage() {
                     </div>
                   )}
 
+                  {passportResult.failed && passportResult.failed.length > 0 && (
+                    <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-900/20 border border-rose-200/60 dark:border-rose-800/40 max-h-32 overflow-y-auto">
+                      <p className="text-[12px] font-semibold text-rose-800 dark:text-rose-200 mb-1">
+                        PSN javob bermagan PINFL'lar ({passportResult.failed.length})
+                      </p>
+                      <ul className="text-[12px] text-rose-700 dark:text-rose-300 space-y-0.5">
+                        {passportResult.failed.slice(0, 50).map((it) => (
+                          <li key={it.pinfl}>
+                            <span className="font-mono">{it.pinfl}</span> — {it.error}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
                   <div className="flex justify-end gap-3 mt-2">
                     <button
                       onClick={() => {
                         setPassportResult(null);
                         setPassportPaste("");
                         setPassportImgPaste("");
-                        setPassportImgSent(0);
-                        setPassportFile(null);
+                        setPassportPsnPaste("");
+                        setPassportSent(0);
                       }}
                       className="btn-secondary"
                     >
@@ -1934,7 +1987,7 @@ export default function TestSessionDetailPage() {
                     {([
                       ["paste", "Nusxa joylash"],
                       ["image", "Rasm (base64)"],
-                      ["excel", "Excel fayl"],
+                      ["psn", "PSN"],
                     ] as const).map(([key, label]) => (
                       <button
                         key={key}
@@ -1966,6 +2019,10 @@ export default function TestSessionDetailPage() {
                           Ustunlar: <code className="font-mono">jshshir</code>,{" "}
                           <code className="font-mono">rasm (base64)</code>
                         </>
+                      ) : passportMode === "psn" ? (
+                        <>
+                          Bitta ustun: <code className="font-mono">pinfl (jshshir)</code>
+                        </>
                       ) : (
                         <>
                           Ustunlar: <code className="font-mono">jshshir</code>,{" "}
@@ -1981,6 +2038,14 @@ export default function TestSessionDetailPage() {
                         yangilanadi — rasm bazaga odatdagidek BLOB ko'rinishida
                         saqlanadi. Topilmagan JSHSHIR'lar o'tkazib yuboriladi.
                       </p>
+                    ) : passportMode === "psn" ? (
+                      <p className="text-[12px] leading-relaxed">
+                        Faqat <strong>PINFL</strong> ro'yxatini joylashtiring — pasport
+                        seriyasi va raqami <strong>PSN (e-gov)</strong> tizimidan
+                        avtomatik olinadi. Tug'ilgan sana PINFL ning o'zidan
+                        hisoblanadi. Sessiyada topilmagan PINFL uchun tashqi tizimga
+                        so'rov yuborilmaydi.
+                      </p>
                     ) : (
                       <p className="text-[12px] leading-relaxed">
                         <strong>jshshir</strong> bo'yicha shu sessiyadagi talaba topiladi
@@ -1990,7 +2055,7 @@ export default function TestSessionDetailPage() {
                     )}
                   </div>
 
-                  {passportMode === "image" ? (
+                  {passportMode === "image" && (
                     <p className="text-[12px] text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 px-3 py-2 rounded-lg flex items-start gap-2">
                       <svg className="w-4 h-4 mt-px shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
@@ -2001,18 +2066,6 @@ export default function TestSessionDetailPage() {
                         so'ng embedding bosqichini qayta ishga tushiring.
                       </span>
                     </p>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={handlePassportTemplate}
-                      disabled={passportTplDownloading || passportSubmitting}
-                      className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-primary-700 dark:text-primary-200 bg-primary-50 dark:bg-primary-900/30 hover:bg-primary-100 dark:hover:bg-primary-900/50 border border-primary-200/70 dark:border-primary-800/40 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V4" />
-                      </svg>
-                      {passportTplDownloading ? "Yuklab olinmoqda..." : "Shablonni yuklab olish (.xlsx)"}
-                    </button>
                   )}
 
                   {passportMode === "paste" ? (
@@ -2174,35 +2227,74 @@ export default function TestSessionDetailPage() {
                       )}
                     </div>
                   ) : (
-                    <Field label="Excel fayl (.xlsx)">
-                      <input
-                        type="file"
-                        accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                        onChange={(e) => {
-                          setPassportFile(e.target.files?.[0] ?? null);
-                          setPassportError(null);
-                        }}
-                        disabled={passportSubmitting}
-                        className="block w-full text-sm text-gray-600 dark:text-slate-300
-                          file:mr-3 file:py-2.5 file:px-4 file:rounded-full file:border-0
-                          file:text-sm file:font-medium file:bg-primary-50 file:text-primary-700
-                          dark:file:bg-primary-900/40 dark:file:text-primary-200
-                          hover:file:bg-primary-100 dark:hover:file:bg-primary-900/60
-                          file:cursor-pointer cursor-pointer
-                          disabled:opacity-50 disabled:cursor-not-allowed"
-                      />
-                      {passportFile && (
-                        <p className="mt-2 text-[12px] text-gray-500 dark:text-slate-400">
-                          Tanlandi:{" "}
-                          <span className="font-medium text-gray-700 dark:text-slate-300">
-                            {passportFile.name}
-                          </span>{" "}
-                          <span className="text-gray-400 dark:text-slate-500">
-                            ({Math.ceil(passportFile.size / 1024)} KB)
-                          </span>
-                        </p>
+                    <div className="space-y-2">
+                      <Field label="PINFL (JShShIR) ro'yxatini joylashtiring — har qatorda bitta">
+                        <textarea
+                          value={passportPsnPaste}
+                          onChange={(e) => {
+                            setPassportPsnPaste(e.target.value);
+                            setPassportError(null);
+                          }}
+                          disabled={passportSubmitting}
+                          rows={6}
+                          placeholder={"32401200012345\n33301200067890"}
+                          className="input-field w-full font-mono text-[13px] resize-y"
+                        />
+                      </Field>
+
+                      {/* Jonli ko'rinish (preview) */}
+                      {parsedPinfls.length > 0 && (
+                        <div className="rounded-xl border border-gray-200 dark:border-slate-700 overflow-hidden">
+                          <div className="flex items-center justify-between px-3 py-2 bg-gray-50 dark:bg-slate-700/40 text-[12px]">
+                            <span className="font-medium text-gray-600 dark:text-slate-300">
+                              {parsedPinfls.length} PINFL aniqlandi
+                            </span>
+                            {invalidPinflCount > 0 && (
+                              <span className="text-rose-600 dark:text-rose-400 font-medium">
+                                {invalidPinflCount} ta xato
+                              </span>
+                            )}
+                          </div>
+                          <div className="max-h-44 overflow-y-auto">
+                            <table className="w-full text-[12px]">
+                              <thead className="sticky top-0 bg-white dark:bg-slate-800">
+                                <tr className="text-left text-gray-400 dark:text-slate-500">
+                                  <th className="px-3 py-1.5 font-medium">#</th>
+                                  <th className="px-3 py-1.5 font-medium">pinfl</th>
+                                  <th className="px-3 py-1.5 font-medium">tug'ilgan sana</th>
+                                </tr>
+                              </thead>
+                              <tbody className="font-mono">
+                                {parsedPinfls.slice(0, 100).map((pinfl, i) => {
+                                  const err = validatePinflClient(pinfl);
+                                  return (
+                                    <tr
+                                      key={`${pinfl}-${i}`}
+                                      className={`border-t border-gray-100 dark:border-slate-700/60 ${
+                                        err ? "bg-rose-50/60 dark:bg-rose-900/10" : ""
+                                      }`}
+                                      title={err ?? ""}
+                                    >
+                                      <td className="px-3 py-1 text-gray-400">{i + 1}</td>
+                                      <td className="px-3 py-1 text-gray-700 dark:text-slate-200">
+                                        {pinfl || <span className="text-rose-500">—</span>}
+                                      </td>
+                                      <td className="px-3 py-1 text-gray-500 dark:text-slate-400">
+                                        {err ? (
+                                          <span className="text-rose-500 font-sans">{err}</span>
+                                        ) : (
+                                          birthDateFromPinfl(pinfl)
+                                        )}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
                       )}
-                    </Field>
+                    </div>
                   )}
                 </>
               )}
@@ -2217,8 +2309,8 @@ export default function TestSessionDetailPage() {
                 confirmText={
                   !passportSubmitting
                     ? "Yangilash"
-                    : passportMode === "image" && parsedImgs.length > 0
-                      ? `Yuborilmoqda... ${passportImgSent}/${parsedImgs.length}`
+                    : pendingCount > 0
+                      ? `Yuborilmoqda... ${passportSent}/${pendingCount}`
                       : "Yangilanmoqda..."
                 }
                 disabled={!canSubmit}
@@ -2489,6 +2581,83 @@ function chunkImageRows(rows: PassportImageRow[]): PassportImageRow[][] {
     chars += row.image.length;
   }
   if (current.length > 0) chunks.push(current);
+  return chunks;
+}
+
+// --- PSN (e-gov) tab'i uchun yordamchilar ---
+
+// Bitta so'rovda yuboriladigan PINFL soni. Har bir PINFL uchun tashqi API ga
+// alohida so'rov ketadi, shuning uchun bo'lak kichik — backend limiti 200.
+const PSN_CHUNK_ROWS = 50;
+
+// PINFL 1-belgisi -> tug'ilgan asr (backend `egov_psn_client` bilan bir xil).
+const PINFL_CENTURY: Record<string, number> = {
+  "1": 1800,
+  "2": 1800,
+  "3": 1900,
+  "4": 1900,
+  "5": 2000,
+  "6": 2000,
+};
+
+/**
+ * PINFL dan tug'ilgan sanani hisoblaydi: "32701966190024" -> "1996-01-27".
+ * Backend so'rovga aynan shu sanani yuboradi — preview'da ham shuni ko'rsatamiz.
+ */
+function birthDateFromPinfl(pinfl: string): string | null {
+  if (!/^\d{14}$/.test(pinfl)) return null;
+  const century = PINFL_CENTURY[pinfl[0]];
+  if (century === undefined) return null;
+  const day = Number(pinfl.slice(1, 3));
+  const month = Number(pinfl.slice(3, 5));
+  const year = century + Number(pinfl.slice(5, 7));
+  // JS Date mavjud bo'lmagan sanani (masalan 31.02) keyingi oyga "sirg'antiradi" —
+  // shuning uchun natijani kiritilgan qiymat bilan solishtiramiz.
+  const d = new Date(Date.UTC(year, month - 1, day));
+  if (
+    d.getUTCFullYear() !== year ||
+    d.getUTCMonth() !== month - 1 ||
+    d.getUTCDate() !== day
+  ) {
+    return null;
+  }
+  const pad = (v: number) => String(v).padStart(2, "0");
+  return `${year}-${pad(month)}-${pad(day)}`;
+}
+
+/**
+ * Paste qilingan matndan PINFL ro'yxatini ajratadi — har qatorda bitta.
+ * Excel'dan bitta ustun nusxalanganda ham ajratgich tushib qolishi mumkin,
+ * shuning uchun faqat birinchi ustun olinadi. Sarlavha qatori o'tkaziladi.
+ */
+function parsePastedPinfls(text: string): string[] {
+  const out: string[] = [];
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    if (/^(pinfl|jshshir|jshshr|imei)\b/i.test(line)) continue; // sarlavha
+    const first = line.split(/\t|;|,|\s+/)[0].trim();
+    if (!first) continue;
+    out.push(first);
+  }
+  return out;
+}
+
+/** Bitta PINFL ni client tomonda tekshiradi (backend bilan bir xil qoidalar). */
+function validatePinflClient(pinfl: string): string | null {
+  if (!pinfl) return "PINFL bo'sh";
+  if (!/^\d+$/.test(pinfl)) return "Faqat raqamlardan iborat bo'lsin";
+  if (pinfl.length !== 14) return "14 ta raqam bo'lishi kerak";
+  if (birthDateFromPinfl(pinfl) === null) return "Tug'ilgan sana aniqlanmadi";
+  return null;
+}
+
+/** PINFL ro'yxatini so'rov bo'laklariga bo'ladi. */
+function chunkPinfls(pinfls: string[]): string[][] {
+  const chunks: string[][] = [];
+  for (let i = 0; i < pinfls.length; i += PSN_CHUNK_ROWS) {
+    chunks.push(pinfls.slice(i, i + PSN_CHUNK_ROWS));
+  }
   return chunks;
 }
 

@@ -165,6 +165,17 @@ class Settings(BaseSettings):
     API_OTM_STUDENTS: str = ""
     API_OTM_STUDENTS_TOKEN: str = ""
 
+    # E-GOV PSN — PINFL bo'yicha joriy pasport (seriya + raqam) olish.
+    # `API_GET_TOKEN_EGOV` ga POST -> Bearer access_token (~1 soat amal qiladi),
+    # so'ng shu token bilan `API_PSN_EGOV` ga POST. Ikkalasi ham bo'sh bo'lsa
+    # "PSN" orqali passport yangilash endpointi 503 qaytaradi.
+    API_GET_TOKEN_EGOV: str = ""
+    API_PSN_EGOV: str = ""
+    # Token endpointi klient autentifikatsiyasini talab qiladi — qiymat
+    # `Authorization` headeriga o'zgartirishsiz qo'yiladi (e-gov bergan holicha).
+    # Bo'sh bo'lsa endpoint 401 `invalid_client` qaytaradi.
+    API_AUTH_TOKEN_EGOV: str = ""
+
     # Statistika bot — tashqi statistika API (qabul ko'rsatkichlari).
     # Bot endi to'g'ridan-to'g'ri emas, shu backend orqali oladi.
     API_STATISTIC_BOT: str = "https://api.uzbmb.uz/site/telegram-bot-statistics"

@@ -609,6 +609,24 @@ export async function updateSessionPassportImagesApi(
   return res.data;
 }
 
+/**
+ * PINFL (JShShIR) ro'yxati bo'yicha passportni e-gov PSN dan olib yangilash.
+ * Seriya/raqam kiritilmaydi — backend PSN API'dan oladi.
+ *
+ * Bitta so'rovda 200 tagacha PINFL qabul qilinadi; har biri uchun tashqi API
+ * ga so'rov ketgani sababli chaqiruvchi katta ro'yxatni bo'lak-bo'lak yuboradi.
+ */
+export async function updateSessionPassportsPsnApi(
+  sessionId: number,
+  pinfls: string[],
+): Promise<import("./interfaces").PassportUpdateResult> {
+  const res = await apiClient.post(
+    `/test-sessions/${sessionId}/passport-update/psn`,
+    { pinfls },
+  );
+  return res.data;
+}
+
 /** Passport yangilash shabloni (.xlsx: jshshir, ps_ser, ps_num) yuklab olish. */
 export async function downloadPassportTemplate(): Promise<void> {
   const res = await apiClient.get("/test-sessions/passport-template", {

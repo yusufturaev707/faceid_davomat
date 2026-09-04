@@ -483,11 +483,19 @@ export interface PassportInvalidItem {
   error: string;
 }
 
+/** PSN (e-gov) so'rovi muvaffaqiyatsiz tugagan bitta PINFL. */
+export interface PassportPsnFailedItem {
+  pinfl: string;
+  error: string;
+}
+
 export interface PassportUpdateResult {
   total: number;
   updated: number;
   not_found: string[];
   invalid: PassportInvalidItem[];
+  /** Faqat PSN orqali yangilashda keladi — tashqi API javob bermagan PINFLlar. */
+  failed?: PassportPsnFailedItem[];
 }
 
 export interface TestSessionCreateRequest {

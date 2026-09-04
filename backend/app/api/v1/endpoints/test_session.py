@@ -41,14 +41,18 @@ from app.models.user import User
 from app.models.zone import Zone
 from app.schemas.student import (
     PassportImageUpdateRequest,
+    PassportPsnUpdateRequest,
+    PassportPsnUpdateResult,
     PassportUpdateRequest,
     PassportUpdateResult,
     StudentResponse,
 )
+from app.services.egov_psn_client import EgovAuthError, EgovNotConfigured
 from app.services.passport_updater import (
     parse_passport_excel,
     update_session_passport_images,
     update_session_passports,
+    update_session_passports_from_psn,
 )
 from app.schemas.test_session import (
     ActiveSmenaResponse,
@@ -1016,6 +1020,38 @@ def update_passport_images(
     _require_session(db, session_id)
     rows = [r.model_dump() for r in payload.rows]
     return update_session_passport_images(db, session_id, rows)
+
+
+@router.post(
+    "/{session_id}/passport-update/psn",
+    response_model=PassportPsnUpdateResult,
+    summary="Passportni PINFL ro'yxati bo'yicha PSN (e-gov) dan yangilash",
+)
+def update_passports_psn(
+    session_id: int,
+    payload: PassportPsnUpdateRequest,
+    db: Session = Depends(get_db),
+    _: User = Depends(PermissionChecker(P.TEST_SESSION_UPDATE.code)),
+):
+    """Faqat PINFL (JShShIR) ro'yxati yuboriladi — seriya/raqam PSN dan olinadi.
+
+    Har bir PINFL uchun e-gov PSN API ga alohida so'rov ketadi (tug'ilgan sana
+    PINFL ning o'zidan hisoblanadi), qaytgan `current_document` seriya va
+    raqamga ajratilib, shu sessiyadagi talabaning `StudentPsData` yozuviga
+    yoziladi. Sessiyada yo'q PINFL uchun tashqi API chaqirilmaydi.
+
+    Jarayon sinxron — tashqi API sekin bo'lishi mumkinligi uchun frontend
+    ro'yxatni bo'lak-bo'lak (bitta so'rovda 200 tagacha) yuboradi.
+    """
+    _require_session(db, session_id)
+    try:
+        return update_session_passports_from_psn(db, session_id, payload.pinfls)
+    except EgovNotConfigured as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except EgovAuthError as exc:
+        raise HTTPException(
+            status_code=502, detail=f"PSN tokenini olib bo'lmadi: {exc}"
+        ) from exc
 
 
 @router.get("/{session_id}/student-load-progress")

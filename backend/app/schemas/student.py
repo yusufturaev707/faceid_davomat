@@ -1,8 +1,9 @@
 """Pydantic schemas for Student, StudentLog, CheatingLog."""
 
 from datetime import date, datetime
+from typing import Annotated
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StringConstraints
 
 
 # --- StudentPsData ---
@@ -100,6 +101,36 @@ class PassportUpdateResult(BaseModel):
     updated: int
     not_found: list[str] = []
     invalid: list[PassportInvalidItem] = []
+
+
+# --- PSN (e-gov) orqali passport yangilash ---
+
+# PINFL — 14 ta raqam; kengroq cheklov qo'yamiz, aniq validatsiya servis qatlamida.
+PinflStr = Annotated[str, StringConstraints(strip_whitespace=True, max_length=20)]
+
+
+class PassportPsnUpdateRequest(BaseModel):
+    """Paste qilingan PINFL ro'yxati bo'yicha passportlarni PSN dan yangilash.
+
+    Har bir PINFL uchun tashqi API ga alohida so'rov ketadi, shuning uchun
+    bitta so'rovdagi qatorlar soni cheklangan — frontend katta ro'yxatni
+    bo'lak-bo'lak yuboradi.
+    """
+
+    pinfls: list[PinflStr] = Field(..., min_length=1, max_length=200)
+
+
+class PassportPsnFailedItem(BaseModel):
+    """PSN so'rovi muvaffaqiyatsiz tugagan bitta PINFL."""
+
+    pinfl: str
+    error: str
+
+
+class PassportPsnUpdateResult(PassportUpdateResult):
+    """PSN orqali yangilash natijasi — `failed` PSN javob bermagan PINFLlar."""
+
+    failed: list[PassportPsnFailedItem] = []
 
 
 class StudentUpdate(BaseModel):
