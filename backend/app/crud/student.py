@@ -200,6 +200,8 @@ def _student_filter_conditions(
     smena_id: int | None = None,
     gender_id: int | None = None,
     gr_n: int | None = None,
+    gr_n_from: int | None = None,
+    gr_n_to: int | None = None,
     e_date_from: str | None = None,
     e_date_to: str | None = None,
     is_entered: bool | None = None,
@@ -232,6 +234,12 @@ def _student_filter_conditions(
         conditions.append(StudentPsData.gender_id == gender_id)
     if gr_n is not None:
         conditions.append(Student.gr_n == gr_n)
+    # Guruh kesmasi (range) — ikki chegara ham INKLYUZIV: 1-34 => 1 <= gr_n <= 34.
+    # Faqat bitta chegara berilsa — ochiq kesma (masalan 10 dan yuqorisi).
+    if gr_n_from is not None:
+        conditions.append(Student.gr_n >= gr_n_from)
+    if gr_n_to is not None:
+        conditions.append(Student.gr_n <= gr_n_to)
     if e_date_from is not None:
         conditions.append(Student.e_date >= e_date_from)
     if e_date_to is not None:
@@ -270,6 +278,8 @@ def get_filtered_student_ids(
     smena_id: int | None = None,
     gender_id: int | None = None,
     gr_n: int | None = None,
+    gr_n_from: int | None = None,
+    gr_n_to: int | None = None,
     e_date_from: str | None = None,
     e_date_to: str | None = None,
     is_entered: bool | None = None,
@@ -293,6 +303,8 @@ def get_filtered_student_ids(
         smena_id=smena_id,
         gender_id=gender_id,
         gr_n=gr_n,
+        gr_n_from=gr_n_from,
+        gr_n_to=gr_n_to,
         e_date_from=e_date_from,
         e_date_to=e_date_to,
         is_entered=is_entered,
@@ -355,6 +367,8 @@ def get_filtered_students(
     smena_id: int | None = None,
     gender_id: int | None = None,
     gr_n: int | None = None,
+    gr_n_from: int | None = None,
+    gr_n_to: int | None = None,
     e_date_from: str | None = None,
     e_date_to: str | None = None,
     is_entered: bool | None = None,
@@ -381,6 +395,8 @@ def get_filtered_students(
         smena_id=smena_id,
         gender_id=gender_id,
         gr_n=gr_n,
+        gr_n_from=gr_n_from,
+        gr_n_to=gr_n_to,
         e_date_from=e_date_from,
         e_date_to=e_date_to,
         is_entered=is_entered,
@@ -432,6 +448,8 @@ def get_students_paginated(
     smena_id: int | None = None,
     gender_id: int | None = None,
     gr_n: int | None = None,
+    gr_n_from: int | None = None,
+    gr_n_to: int | None = None,
     e_date_from: str | None = None,
     e_date_to: str | None = None,
     is_entered: bool | None = None,
@@ -472,6 +490,8 @@ def get_students_paginated(
         smena_id=smena_id,
         gender_id=gender_id,
         gr_n=gr_n,
+        gr_n_from=gr_n_from,
+        gr_n_to=gr_n_to,
         e_date_from=e_date_from,
         e_date_to=e_date_to,
         is_entered=is_entered,

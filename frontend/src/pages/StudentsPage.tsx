@@ -75,6 +75,9 @@ export default function StudentsPage() {
   const [filterGenderId, setFilterGenderId] = useState<string>("");
   const [filterSmenaId, setFilterSmenaId] = useState<string>("");
   const [filterGrN, setFilterGrN] = useState<string>("");
+  // Guruh kesmasi (range) — ikkala chegara ham inklyuziv: "1-34" => 1..34
+  const [filterGrFrom, setFilterGrFrom] = useState<string>("");
+  const [filterGrTo, setFilterGrTo] = useState<string>("");
   const [filterDateFrom, setFilterDateFrom] = useState<string>("");
   const [filterDateTo, setFilterDateTo] = useState<string>("");
   const [filterEntered, setFilterEntered] = useState<string>("");
@@ -183,6 +186,11 @@ export default function StudentsPage() {
       .finally(() => setReassignZonesLoading(false));
   }, [reassignRegionId]);
 
+  // Guruh kesmasi teskari kiritilgan (boshlanish > tugash) — bunda kesma
+  // so'rovga qo'shilmaydi, foydalanuvchiga filtr ostida ogohlantirish chiqadi.
+  const grRangeInvalid =
+    !!filterGrFrom && !!filterGrTo && Number(filterGrFrom) > Number(filterGrTo);
+
   // Joriy qidiruv + filtrlardan so'rov parametrlarini yig'adi (sahifalashsiz).
   // Ham ro'yxat (getStudentsApi), ham GTSP bulk uchun ishlatiladi.
   const buildFilterParams = useCallback(() => {
@@ -194,6 +202,10 @@ export default function StudentsPage() {
     if (filterGenderId) params.gender_id = Number(filterGenderId);
     if (filterSmenaId) params.smena_id = Number(filterSmenaId);
     if (filterGrN) params.gr_n = Number(filterGrN);
+    if (!grRangeInvalid) {
+      if (filterGrFrom) params.gr_n_from = Number(filterGrFrom);
+      if (filterGrTo) params.gr_n_to = Number(filterGrTo);
+    }
     if (filterDateFrom) params.e_date_from = filterDateFrom;
     if (filterDateTo) params.e_date_to = filterDateTo;
     if (filterEntered === "true") params.is_entered = true;
@@ -219,6 +231,9 @@ export default function StudentsPage() {
     filterGenderId,
     filterSmenaId,
     filterGrN,
+    filterGrFrom,
+    filterGrTo,
+    grRangeInvalid,
     filterDateFrom,
     filterDateTo,
     filterEntered,
@@ -357,6 +372,8 @@ export default function StudentsPage() {
     setFilterRegionId("");
     setFilterSmenaId("");
     setFilterGrN("");
+    setFilterGrFrom("");
+    setFilterGrTo("");
     setFilterDateFrom("");
     setFilterDateTo("");
     setFilterZoneId("");
@@ -379,6 +396,8 @@ export default function StudentsPage() {
     filterGenderId ||
     filterSmenaId ||
     filterGrN ||
+    filterGrFrom ||
+    filterGrTo ||
     filterDateFrom ||
     filterDateTo ||
     filterEntered ||
@@ -396,6 +415,7 @@ export default function StudentsPage() {
     filterGenderId,
     filterSmenaId,
     filterGrN,
+    filterGrFrom || filterGrTo,
     filterDateFrom,
     filterDateTo,
     filterEntered,
@@ -947,14 +967,67 @@ export default function StudentsPage() {
                   </label>
                   <input
                     type="number"
+                    min={0}
                     value={filterGrN}
                     onChange={(e) => {
                       setFilterGrN(e.target.value);
+                      // Aniq guruh va kesma birga ishlatilmaydi — kesmani tozalaymiz
+                      if (e.target.value) {
+                        setFilterGrFrom("");
+                        setFilterGrTo("");
+                      }
                       setPage(1);
                     }}
                     placeholder="Raqam"
                     className="input-field !py-1.5 !text-sm w-full"
                   />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-[10px] uppercase tracking-wider text-gray-500 dark:text-slate-400 mb-1 font-semibold">
+                    Range guruh
+                  </label>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="number"
+                      min={0}
+                      value={filterGrFrom}
+                      onChange={(e) => {
+                        setFilterGrFrom(e.target.value);
+                        // Kesma tanlandi — aniq guruh filtri bekor qilinadi
+                        if (e.target.value) setFilterGrN("");
+                        setPage(1);
+                      }}
+                      placeholder="dan"
+                      aria-label="Range guruh: boshlang'ich guruh"
+                      className="input-field !py-1.5 !text-sm w-full"
+                    />
+                    <span className="text-gray-400 dark:text-slate-500 select-none">
+                      &ndash;
+                    </span>
+                    <input
+                      type="number"
+                      min={0}
+                      value={filterGrTo}
+                      onChange={(e) => {
+                        setFilterGrTo(e.target.value);
+                        if (e.target.value) setFilterGrN("");
+                        setPage(1);
+                      }}
+                      placeholder="gacha"
+                      aria-label="Range guruh: oxirgi guruh"
+                      className="input-field !py-1.5 !text-sm w-full"
+                    />
+                  </div>
+                  {grRangeInvalid ? (
+                    <p className="mt-1 text-[10px] text-red-500 dark:text-red-400">
+                      Boshlang'ich guruh oxirgisidan katta &mdash; kesma
+                      qo'llanmadi
+                    </p>
+                  ) : (
+                    <p className="mt-1 text-[10px] text-gray-400 dark:text-slate-500">
+                      Ikkala chegara ham kiradi (masalan 1&ndash;34)
+                    </p>
+                  )}
                 </div>
                 <div>
                   <label className="block text-[10px] uppercase tracking-wider text-gray-500 dark:text-slate-400 mb-1 font-semibold">

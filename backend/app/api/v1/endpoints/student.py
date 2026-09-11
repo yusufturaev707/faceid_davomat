@@ -1089,6 +1089,22 @@ def list_rejected_students(
     )
 
 
+def _validate_gr_n_range(gr_n_from: int | None, gr_n_to: int | None) -> None:
+    """Guruh kesmasi chegaralarini tekshiradi (ikkala chegara ham inklyuziv).
+
+    Faqat bitta chegara berilishi mumkin (ochiq kesma); ikkalasi berilsa
+    boshlang'ich guruh oxirgisidan katta bo'lmasligi kerak.
+    """
+    if gr_n_from is not None and gr_n_to is not None and gr_n_from > gr_n_to:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Guruh kesmasi noto'g'ri: boshlang'ich guruh oxirgi guruhdan "
+                "katta bo'lmasligi kerak"
+            ),
+        )
+
+
 @router.get("", response_model=StudentListResponse)
 def list_students(
     page: int = Query(1, ge=1),
@@ -1100,6 +1116,12 @@ def list_students(
     smena_id: int | None = None,
     gender_id: int | None = None,
     gr_n: int | None = None,
+    gr_n_from: int | None = Query(
+        None, ge=0, description="Guruh kesmasi: boshlang'ich guruh (inklyuziv)"
+    ),
+    gr_n_to: int | None = Query(
+        None, ge=0, description="Guruh kesmasi: oxirgi guruh (inklyuziv)"
+    ),
     e_date_from: str | None = None,
     e_date_to: str | None = None,
     is_entered: bool | None = None,
@@ -1113,6 +1135,7 @@ def list_students(
     db: Session = Depends(get_db),
     current_user: User = Depends(PermissionChecker(P.STUDENT_READ.code)),
 ):
+    _validate_gr_n_range(gr_n_from, gr_n_to)
     region_id = _scoped_region_id(current_user, region_id)
     items, total = get_students_paginated(
         db,
@@ -1125,6 +1148,8 @@ def list_students(
         smena_id=smena_id,
         gender_id=gender_id,
         gr_n=gr_n,
+        gr_n_from=gr_n_from,
+        gr_n_to=gr_n_to,
         e_date_from=e_date_from,
         e_date_to=e_date_to,
         is_entered=is_entered,
@@ -1180,6 +1205,12 @@ def export_students(
     smena_id: int | None = None,
     gender_id: int | None = None,
     gr_n: int | None = None,
+    gr_n_from: int | None = Query(
+        None, ge=0, description="Guruh kesmasi: boshlang'ich guruh (inklyuziv)"
+    ),
+    gr_n_to: int | None = Query(
+        None, ge=0, description="Guruh kesmasi: oxirgi guruh (inklyuziv)"
+    ),
     e_date_from: str | None = None,
     e_date_to: str | None = None,
     is_entered: bool | None = None,
@@ -1210,6 +1241,7 @@ def export_students(
     _require_export_permission(current_user, fmt)
 
     cap = _EXPORT_MAX_XLSX if fmt == "xlsx" else _EXPORT_MAX_PDF
+    _validate_gr_n_range(gr_n_from, gr_n_to)
     region_id = _scoped_region_id(current_user, region_id)
     rows = get_filtered_students(
         db,
@@ -1220,6 +1252,8 @@ def export_students(
         smena_id=smena_id,
         gender_id=gender_id,
         gr_n=gr_n,
+        gr_n_from=gr_n_from,
+        gr_n_to=gr_n_to,
         e_date_from=e_date_from,
         e_date_to=e_date_to,
         is_entered=is_entered,
@@ -1476,6 +1510,12 @@ def fetch_gtsp_bulk(
     smena_id: int | None = None,
     gender_id: int | None = None,
     gr_n: int | None = None,
+    gr_n_from: int | None = Query(
+        None, ge=0, description="Guruh kesmasi: boshlang'ich guruh (inklyuziv)"
+    ),
+    gr_n_to: int | None = Query(
+        None, ge=0, description="Guruh kesmasi: oxirgi guruh (inklyuziv)"
+    ),
     e_date_from: str | None = None,
     e_date_to: str | None = None,
     is_entered: bool | None = None,
@@ -1510,6 +1550,8 @@ def fetch_gtsp_bulk(
         _enrich_one,
     )
 
+    _validate_gr_n_range(gr_n_from, gr_n_to)
+
     student_ids = get_filtered_student_ids(
         db,
         session_smena_id=session_smena_id,
@@ -1519,6 +1561,8 @@ def fetch_gtsp_bulk(
         smena_id=smena_id,
         gender_id=gender_id,
         gr_n=gr_n,
+        gr_n_from=gr_n_from,
+        gr_n_to=gr_n_to,
         e_date_from=e_date_from,
         e_date_to=e_date_to,
         is_entered=is_entered,
@@ -1608,6 +1652,12 @@ def reassign_zone_bulk(
     smena_id: int | None = None,
     gender_id: int | None = None,
     gr_n: int | None = None,
+    gr_n_from: int | None = Query(
+        None, ge=0, description="Guruh kesmasi: boshlang'ich guruh (inklyuziv)"
+    ),
+    gr_n_to: int | None = Query(
+        None, ge=0, description="Guruh kesmasi: oxirgi guruh (inklyuziv)"
+    ),
     e_date_from: str | None = None,
     e_date_to: str | None = None,
     is_entered: bool | None = None,
@@ -1632,6 +1682,8 @@ def reassign_zone_bulk(
     from app.crud.student import get_filtered_student_ids
     from app.models.zone import Zone
 
+    _validate_gr_n_range(gr_n_from, gr_n_to)
+
     target_zone = db.get(Zone, target_zone_id)
     if not target_zone:
         raise HTTPException(status_code=404, detail="Bino topilmadi")
@@ -1648,6 +1700,8 @@ def reassign_zone_bulk(
             smena_id,
             gender_id,
             gr_n,
+            gr_n_from,
+            gr_n_to,
             e_date_from,
             e_date_to,
             is_entered,
@@ -1674,6 +1728,8 @@ def reassign_zone_bulk(
         smena_id=smena_id,
         gender_id=gender_id,
         gr_n=gr_n,
+        gr_n_from=gr_n_from,
+        gr_n_to=gr_n_to,
         e_date_from=e_date_from,
         e_date_to=e_date_to,
         is_entered=is_entered,
