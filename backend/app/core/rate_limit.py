@@ -5,6 +5,8 @@ Identity key:
   Agar DB id bo'lmasa, raw key'ning hash'ining birinchi 16 belgisi (collision-resistant).
 - JWT Bearer bo'lsa — `user:{sub}` (decoded). JWT header'i bir xil bo'lgani uchun
   oddiy slice o'rniga `sub` claim ishlatamiz.
+- Telegram Mini App (`tma <initData>`) bo'lsa — `tg:{user.id}`. Imzo tekshiriladi:
+  aks holda soxta header bilan har so'rovga yangi kalit berib limitdan qochish mumkin.
 - Aks holda — IP.
 """
 
@@ -17,6 +19,7 @@ from slowapi.util import get_remote_address
 from starlette.requests import Request
 
 from app.config import settings
+from app.core.telegram_webapp import InitDataError, validate_init_data
 
 logger = logging.getLogger("faceid.core.rate_limit")
 
@@ -45,6 +48,16 @@ def _identity_key(request: Request) -> str:
                 return f"user:{sub}"
         except JWTError:
             # Yaroqsiz token — IP bo'yicha cheklash
+            pass
+    elif auth[:4].lower() == "tma ":
+        try:
+            tg_user = validate_init_data(
+                auth[4:],
+                settings.DAVOMAT_BOT_TOKEN,
+                max_age_seconds=settings.DAVOMAT_MINIAPP_INIT_DATA_TTL,
+            )
+            return f"tg:{tg_user.id}"
+        except InitDataError:
             pass
 
     return f"ip:{get_remote_address(request)}"

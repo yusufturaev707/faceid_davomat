@@ -5,11 +5,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this is
 
 FaceID / davomat (attendance) platform for national exam sessions: FastAPI + InsightFace backend,
-React/TS admin panel, two aiogram Telegram bots, and PyQt6 desktop clients (separate repo) at the
-exam centers. All UI text, comments and error messages are in **Uzbek** — match that when editing.
+React/TS admin panel, a Telegram Mini App for exam-center staff (davomat), two aiogram Telegram bots,
+and PyQt6 desktop clients (separate repo) at the exam centers. All UI text, comments and error messages are in **Uzbek** — match that when editing.
 
-Repo layout: `backend/` (API + Celery), `frontend/` (Vite/React admin), `davomat_bot/` (attendance
-bot), `statistic_bot/` (admissions-stats bot), `deploy/` (systemd units + frontend deploy script),
+Repo layout: `backend/` (API + Celery), `frontend/` (Vite/React admin + the davomat Mini App as a second
+Vite entry), `davomat_bot/` (launcher for the attendance Mini App), `statistic_bot/` (admissions-stats bot), `deploy/` (systemd units + frontend deploy script),
 `API_DOCS.md` (external `X-API-Key` contract for third-party systems — the root `README.md` is only
 a two-endpoint excerpt of it).
 
@@ -29,7 +29,8 @@ a two-endpoint excerpt of it).
 - Tests: `pytest` · single file `pytest tests/unit/test_permissions_catalog.py` · single test `pytest tests/unit/test_api_key_hashing.py::test_name -x`
 - Local stack: `docker compose up -d` (from `backend/` — postgres 16, redis 7, api, two celery workers)
 
-**Frontend** (`cd frontend`): `npm run dev` (5173, proxies `/api/v1` → `127.0.0.1:8000`), `npm run build`
+**Frontend** (`cd frontend`): `npm run dev` (5173, proxies `/api/v1` → `127.0.0.1:8000`; Mini App at
+`/miniapp/` — open it outside Telegram via the URL from `backend/scripts/miniapp_dev_url.py <telegram_id>`), `npm run build`
 (`tsc -b && vite build`), `npm run test` (vitest), `npm run test:watch`. `npm run lint` is declared but
 **eslint is not in devDependencies** — it fails until installed.
 
@@ -49,7 +50,9 @@ is a deprecated re-export. Many fields have **no default and are required**, and
 the app refuses to start rather than running insecurely. DB defaults to
 `postgresql://postgres:4144@localhost:5432/faceid_db`.
 
-Each bot has its own `.env` next to its `config.py` (`BOT_TOKEN`, `API_BASE_URL`, `API_KEY`).
+Each bot has its own `.env` next to its `config.py` (`BOT_TOKEN`, `API_BASE_URL`, `API_KEY`; davomat bot also
+`WEBAPP_URL`, must be https). The Mini App needs `DAVOMAT_BOT_TOKEN` (same token as the davomat bot) and
+`DAVOMAT_MINIAPP_USER_ID` in `backend/.env`, else its endpoints return 503. Deploy: `deploy/DAVOMAT_MINIAPP.md`.
 
 ## Architecture
 
@@ -103,7 +106,21 @@ generic) and `services/*` (business logic, Excel/PDF export, external HTTP) → 
 `Mapped[]` declarative). Reference tables (regions, zones, tests, smenas, states, reasons, genders,
 blacklist) are all served by `endpoints/lookup.py` with per-table permissions.
 
-**Telegram bots** — both are aiogram 3, long polling, in-memory FSM, and hold **no DB connection**:
+**Davomat Mini App** — the staff UI for attendance. The davomat bot only checks access on `/start` and hands
+out a `web_app` button (plus a global chat menu button); all flows run in `frontend/src/miniapp`
+(stack navigation bound to Telegram BackButton, native MainButton / QR scanner with in-page fallbacks when
+there is no Telegram host) against `endpoints/davomat_miniapp.py` under `/davomat-miniapp`. Auth is
+`Authorization: tma <initData>` — the HMAC is re-validated with the bot token on every request
+(`core/telegram_webapp.py`), then the active `DavomatBot` is loaded; no API key/JWT/CSRF. Because the client is
+untrusted, `face-verify` returns a signed `verify_ticket` (operator, student, smena, region, score, selfie
+SHA-256; `services/davomat_miniapp.py`) and `mark-attendance` accepts only that ticket plus the same selfie.
+Absentee Excel files are pushed into the user's chat via Bot API `sendDocument`; `CheatingLog.user_id` is
+`DAVOMAT_MINIAPP_USER_ID`. Business rules are shared with the X-API-Key bot endpoints through
+`services/davomat_bot_service.py` — change them there, not in either router. Endpoints decorated with
+`@limiter.limit` must not use `from __future__ import annotations` (FastAPI then can't resolve the body model
+through the slowapi wrapper and treats it as a query param).
+
+**Telegram bots** — both are aiogram 3, long polling, and hold **no DB connection**:
 everything goes through the backend over HTTP with one shared `X-API-Key` and a single reused
 `aiohttp.ClientSession` (`davomat_bot/services/api_client.py`, `statistic_bot/services/backend_client.py`).
 That key authenticates the *bot*, not the person — per-request authorization is by `telegram_id` against
@@ -115,13 +132,12 @@ permission codenames; the two tables use deliberately different role models:
   status and 2025 data, enforced bot-side.
 
 Admin CRUD for both lives under `/admin/davomat-bots` and `/admin/statistic-bots`
-(`DavomatBotsPage` / `StatisticBotsPage` in the frontend). The davomat flow — documented in full in the
-`endpoints/davomat_bot.py` module docstring — is `/ready-sessions` → pick day+smena → `/face-verify`
-(ID-card QR decoded with `zxing-cpp` into `ps_ser`/`jshshir`, selfie compared against the GTSP photo,
-plus a DB check that the student really belongs to *that* smena) → `/mark-attendance`
-(`Student.is_entered=True` + `StudentLog` UPSERT, keeping the `bulk_create_student_logs` invariants).
-`/find-by-jshshir` + `/remove-attendance` undo attendance without touching `StudentLog` history;
-`handlers/cheat.py` writes `CheatingLog` rows.
+(`DavomatBotsPage` / `StatisticBotsPage` in the frontend). The davomat flow (same in both routers) is
+sessions → pick day+smena → `face-verify` (ID-card QR = MRZ line, `ps_ser`/`ps_num` at `[5:14]`, JShShIR at
+`[15:29]`, decoded server-side with `zxing-cpp`; selfie compared against the GTSP photo, plus a DB check that the
+student really belongs to *that* smena) → `mark-attendance` (`Student.is_entered=True` + `StudentLog` UPSERT,
+keeping the `bulk_create_student_logs` invariants). `find-by-jshshir` + `remove-attendance` undo attendance
+without touching `StudentLog` history; `cheating` writes `CheatingLog` + `StudentBlacklist` rows.
 
 **Frontend** (React 18 + TS + Tailwind, react-router v6): routes nest `ProtectedRoute` → `Layout` →
 `PermissionRoute`, which takes `permission` / `anyOf` / `allOf` plus a `redirectTo`. `HomeRedirect` in
@@ -143,12 +159,16 @@ paginated, `bulk_insert_mappings`), zones sync from the OTM buildings API (`serv
 - Two alembic directories exist. `alembic.ini` points at **`app/db/migrations`** — that is the live one.
   `backend/alembic/` is a stale leftover; don't add revisions there.
 - `tests/conftest.py` sets required env vars before importing settings and swaps the DB for SQLite
-  (`StaticPool`); tests never touch postgres. Stray empty `tests/unit.py` / `tests/integration.py` files
-  sit next to the real package dirs — the packages are what pytest collects. Coverage is thin (three test
-  files), so most changes are verified by running the stack, not by the suite.
+  (`StaticPool`); tests never touch postgres. `Base.metadata.create_all` fails on SQLite (`student_logs.ip_address`
+  is `INET`), so any test using the `tables`/`client` fixtures errors — test endpoints with `TestClient(app)`
+  (no lifespan) plus dependency overrides/monkeypatching, as `tests/integration/test_davomat_miniapp_api.py`
+  does. Stray empty `tests/unit.py` / `tests/integration.py` files sit next to the real package dirs — the
+  packages are what pytest collects. Coverage is thin, so most changes are verified by running the stack.
 - `davomat_bot/config.py` accepts a tuple of env files and falls back to `.env.example` when `.env` is
   missing — a bot with no `.env` starts anyway on the committed example credentials instead of failing
-  loudly. `statistic_bot/.env` is committed and is what `seed_statistic_bot` reads.
+  loudly. `statistic_bot/.env` is committed and is what `seed_statistic_bot` reads. The davomat bot token is
+  also the Mini App's auth secret (whoever has it can forge `initData` for any user) — never commit or log it;
+  `core/logging.py` redacts `/bot<token>/` from `httpx` request logs.
 - Datetimes are timezone-aware (`TIMESTAMP(timezone=True)`); several migrations exist purely to convert
   naive columns. Keep new datetime columns tz-aware.
 - `StudentLog.first_captured` / `last_captured` are raw BYTEA selfies — `SELECT *` on that table is expensive.

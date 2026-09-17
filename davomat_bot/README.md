@@ -1,39 +1,32 @@
 # Davomat Bot
 
-Telegram bot (aiogram 3) — backend FaceID API ga ulanib davomat statistikasini
-va Face ID tekshiruvini taqdim etadi.
+Telegram bot (aiogram 3) — **Davomat Mini App**'ga kirish nuqtasi. Test
+tadbirlari, statistika, kelmaganlar Excel'i, Face ID, davomatdan olib tashlash
+va chetlatish — barchasi Mini App ichida bajariladi
+(`frontend/src/miniapp`, backend `/api/v1/davomat-miniapp`).
+To'liq arxitektura va deploy: [`deploy/DAVOMAT_MINIAPP.md`](../deploy/DAVOMAT_MINIAPP.md).
 
 ## Struktura
 
 ```
 davomat_bot/
-├── main.py              # entrypoint
-├── config.py            # .env sozlamalari
+├── main.py              # entrypoint: komandalar + «Davomat» menyu tugmasi (WebApp)
+├── config.py            # .env sozlamalari (WEBAPP_URL https shart)
 ├── requirements.txt
 ├── .env.example
 ├── handlers/
-│   ├── common.py        # /start, /menu, bosh menyu
-│   ├── davomat.py       # Davomat olish flow
-│   └── faceid.py        # Face ID flow (manual + QR)
+│   └── common.py        # /start, /menu, eski tugmalar va boshqa xabarlar → ilovaga yo'naltirish
 ├── keyboards/
-│   └── inline.py        # inline tugmalar
-├── states/
-│   └── faceid.py        # FSM (qo'lda kiritish, QR)
-├── services/
-│   └── api_client.py    # backend bilan ishlovchi aiohttp client
-└── utils/
-    ├── callbacks.py     # CallbackData schemalari
-    ├── formatters.py    # material design uslubidagi javob matnlari
-    └── qr_decoder.py    # zxing-cpp — ID card QR o'qish
+│   └── inline.py        # «Davomat ilovasini ochish» (web_app) tugmasi
+└── services/
+    └── api_client.py    # backend: faqat ruxsat tekshiruvi (/davomat-bot/check)
 ```
 
 ## Sozlash
 
-1. Backend tomonida:
-   - migratsiyani ishga tushiring: `alembic upgrade head` (davomat_bots, davomat_bot_regions yaratiladi).
-   - Admin panelda foydalanuvchi yarating va `/api/v1/admin/api-keys` orqali API key oling.
-   - Bot foydalanuvchilarini `davomat_bots` jadvaliga qo'shing (fio, telegram_id, region_id, zone_id).
-     Qo'shimcha regionlar `davomat_bot_regions` orqali biriktiriladi.
+1. Backend: admin panelda bot foydalanuvchilarini (`davomat_bots`) qo'shing,
+   `/api/v1/admin/api-keys` orqali API key oling. `backend/.env` da
+   `DAVOMAT_BOT_TOKEN` (shu botning tokeni) va `DAVOMAT_MINIAPP_USER_ID` bo'lishi shart.
 
 2. Bot:
    ```bash
@@ -47,27 +40,19 @@ davomat_bot/
 ## .env
 
 ```
-BOT_TOKEN=...           # @BotFather'dan
+BOT_TOKEN=...           # @BotFather'dan (backend DAVOMAT_BOT_TOKEN bilan bir xil)
 API_BASE_URL=http://localhost:8000/api/v1
 API_KEY=...             # backend admin paneldan
+WEBAPP_URL=https://face-id.uzbmb.uz/miniapp/
 LOG_LEVEL=INFO
 ```
 
-## Vazifalar
+## Xulq
 
-- `/start` — telegram_id bo'yicha ruxsat tekshiriladi va bosh menyu ko'rsatiladi.
-- **Davomatni olish** → tayyor sessiyalar → kun+smena → biriktirilgan
-  region/zone bo'yicha statistika.
-- **Face ID** → ikkita usul:
-  - Qo'lda kiritish (ps_ser, ps_num, JShShIR) → selfie → backend GTSP'dan rasm
-    olib `compare_two_faces` orqali solishtiradi.
-  - ID Card orqasidagi QR → bot pasport ma'lumotlarini avtomatik o'qiydi →
-    selfie → solishtirish.
-
-## Eslatma
-
-- QR o'qish uchun `zxing-cpp` ishlatilgan — sof Python wheel orqali keladi
-  (`pip install` bilan o'rnatiladi), tizim kutubxonalari kerakmas.
-  Windows/Linux/macOS da bir xil ishlaydi.
-- Aiogram 3 FSM uchun default `MemoryStorage` ishlatilgan — bir nechta worker
-  yoki restart kerak bo'lsa, `RedisStorage` ga o'tkazing.
+- `/start`, `/menu` — telegram_id bo'yicha ruxsat tekshiriladi. Ruxsat bo'lsa —
+  salomlashish va «📱 Davomat ilovasini ochish» tugmasi; bo'lmasa — Telegram ID.
+- Ishga tushganda barcha foydalanuvchilar uchun chat menyusi «Davomat» (Mini App)
+  tugmasiga almashtiriladi.
+- Mini App'dan oldingi xabarlardagi inline tugmalar bosilsa — "eskirgan" ogohlantirishi
+  va ilovani ochish tugmasi.
+- Bot FSM ishlatmaydi va holat saqlamaydi — bir nechta restart xavfsiz.

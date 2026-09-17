@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _BASE_DIR = Path(__file__).resolve().parent
@@ -29,8 +30,21 @@ class Settings(BaseSettings):
     API_BASE_URL: str = "http://localhost:8000/api/v1"
     API_KEY: str
 
+    # Davomat Mini App manzili (frontend build'idagi `/miniapp/`).
+    WEBAPP_URL: str
+
     LOG_LEVEL: str = "INFO"
     REQUEST_TIMEOUT: float = 60.0
+
+    @field_validator("WEBAPP_URL")
+    @classmethod
+    def _require_https(cls, value: str) -> str:
+        # Telegram `web_app` tugmalarini faqat HTTPS manzil bilan qabul qiladi —
+        # aks holda /start javobi yuborilmay qoladi. Ishga tushishda to'xtatamiz.
+        value = value.strip()
+        if not value.startswith("https://"):
+            raise ValueError("WEBAPP_URL https:// bilan boshlanishi shart (Telegram talabi)")
+        return value
 
 
 settings = Settings()

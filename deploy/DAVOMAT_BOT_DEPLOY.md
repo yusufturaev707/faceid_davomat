@@ -3,6 +3,11 @@
 Bu yo'riqnoma `davomat_bot` ni Linux serverda **alohida virtual env** va
 **alohida systemd service** sifatida ishga tushirish bo'yicha.
 
+> Bot barcha amallarni **Davomat Mini App** orqali bajaradi — bot faqat
+> ilovani ochib beradi. Backend `.env`, frontend build va nginx sozlamalari:
+> [`DAVOMAT_MINIAPP.md`](DAVOMAT_MINIAPP.md). Deploy tartibi: backend →
+> frontend → bot.
+
 Bot backend (`/api/v1`) bilan **HTTP orqali** ulanadi va `X-API-Key`
 ishlatadi — ya'ni backend bilan bir xil mashinada ishlashi shart emas,
 lekin xuddi shu serverga qo'yish odatda eng oson va xavfsiz variant.
@@ -14,8 +19,9 @@ lekin xuddi shu serverga qo'yish odatda eng oson va xavfsiz variant.
 - Admin paneldan **bot uchun API key** yaratilgan.
 - `davomat_bots` jadvalida bot foydalanuvchilari qo'shilgan
   (telegram_id + region/zone biriktirilgan).
-- Serverda `python3.11+`, `git` mavjud. QR o'qish uchun `zxing-cpp`
-  ishlatiladi — sof Python wheel orqali keladi, tizim kutubxonasi kerakmas.
+- Mini App deploy qilingan: `https://face-id.uzbmb.uz/miniapp/` ochiladi va
+  backend `.env` da `DAVOMAT_BOT_TOKEN` (shu botning tokeni) bor.
+- Serverda `python3.11+`, `git` mavjud.
 
 ```bash
 sudo apt update
@@ -50,8 +56,8 @@ Natijada quyidagi struktura bo'ladi:
 
 ## 2) Alohida virtual env yaratish
 
-Backend env'i bilan **aralashtirilmaydi** — bot'ning aiogram, aiohttp,
-zxing-cpp bog'liqliklari bekendning insightface/onnxruntime bilan
+Backend env'i bilan **aralashtirilmaydi** — bot'ning aiogram, aiohttp
+bog'liqliklari bekendning insightface/onnxruntime bilan
 to'qnashmasligi va versiyalar bir-biriga zarar bermasligi uchun.
 
 ```bash
@@ -63,7 +69,7 @@ sudo ./venv/bin/pip install -r requirements.txt
 
 Tekshirish:
 ```bash
-./venv/bin/python -c "import aiogram, aiohttp, zxingcpp; print('OK')"
+./venv/bin/python -c "import aiogram, aiohttp; print('OK')"
 ```
 
 ## 3) `.env` faylni sozlash
@@ -81,6 +87,7 @@ BOT_TOKEN=<BotFather'dan olingan token>
 API_BASE_URL=http://127.0.0.1:8000/api/v1
 # yoki:  https://face-id.uzbmb.uz/api/v1
 API_KEY=<admin paneldan olingan X-API-Key>
+WEBAPP_URL=https://face-id.uzbmb.uz/miniapp/
 LOG_LEVEL=INFO
 ```
 
@@ -139,9 +146,9 @@ sudo systemctl restart faceid-davomat-bot.service
 - [ ] `systemctl status faceid-davomat-bot` → `active (running)`.
 - [ ] `journalctl -u faceid-davomat-bot -n 50` da
       "Davomat bot ishga tushdi (long polling)" satri bor.
-- [ ] Telegramda `/start` bosilganda bot javob beradi.
-- [ ] "Faol test tadbirlari" → kun+smena → "Davomatni olish" / "Kelmaganlar
-      ro'yxatini olish" buttonlari ishlaydi va Excel keladi.
+- [ ] Telegramda `/start` bosilganda bot javob beradi va «📱 Davomat ilovasini
+      ochish» tugmasi chiqadi; chat pastida «Davomat» menyusi bor.
+- [ ] Ilova ochiladi → smena → «Kelmaganlar ro'yxati» → Excel chatga keladi.
 
 ## 8) Tez-tez uchraydigan muammolar
 
@@ -150,7 +157,7 @@ sudo systemctl restart faceid-davomat-bot.service
 | `403 Botdan foydalanish ruxsati yo'q` | `davomat_bots` jadvalida shu telegram_id yo'q yoki `is_active=False` | Admin panel orqali qo'shing / aktivlashtiring |
 | `401/403 X-API-Key` | `.env` dagi `API_KEY` xato / muddati o'tgan | Admin panelda yangi key oling va `.env` ga yozing, restart qiling |
 | `aiohttp.ClientConnectorError: Cannot connect to host` | `API_BASE_URL` noto'g'ri yoki backend o'chgan | `curl http://127.0.0.1:8000/api/v1/lookup/...` bilan tekshiring |
-| `ModuleNotFoundError: No module named 'zxingcpp'` | venv'da paket o'rnatilmagan | `./venv/bin/pip install -r requirements.txt` |
+| `WEBAPP_URL https:// bilan boshlanishi shart` | `.env` da `WEBAPP_URL` yo'q yoki http | `WEBAPP_URL=https://face-id.uzbmb.uz/miniapp/` |
 | Bir nechta instans bir vaqtda javob beradi | Eski jarayon qolib ketgan | `ps aux \| grep "davomat_bot/main.py"` → `kill`, keyin systemd orqali ishga tushiring |
 
 ## 9) Nima uchun alohida venv?

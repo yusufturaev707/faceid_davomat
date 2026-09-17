@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import admin, auth, davomat_bot, davomat_bot_admin, embedding, health, lookup, online_users, pasport_info, permission, photo, result_analysis, statistic_bot, statistic_bot_admin, student, test_session
+from app.api.v1.endpoints import admin, auth, davomat_bot, davomat_bot_admin, davomat_miniapp, embedding, health, lookup, online_users, pasport_info, permission, photo, result_analysis, statistic_bot, statistic_bot_admin, student, test_session
 
 api_router = APIRouter()
 # Health-check — desktop tarmoq nazorati shu prefiks (/api/v1) ostida so'rov
@@ -27,6 +27,9 @@ api_router.include_router(
 )
 api_router.include_router(
     davomat_bot.router, prefix="/davomat-bot", tags=["davomat-bot"]
+)
+api_router.include_router(
+    davomat_miniapp.router, prefix="/davomat-miniapp", tags=["davomat-miniapp"]
 )
 api_router.include_router(
     davomat_bot_admin.router,

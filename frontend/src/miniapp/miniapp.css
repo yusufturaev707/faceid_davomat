@@ -1,0 +1,98 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Telegram mavzusi. SDK (telegram-web-app.js) `--tg-theme-*` o'zgaruvchilarini
+ * <html> ga o'zi yozadi va mavzu almashganda yangilaydi. `--fb-*` — Telegram
+ * tashqarisida (lokal ishlab chiqish) ishlatiladigan zaxira qiymatlar.
+ */
+:root {
+  --fb-bg: #ffffff;
+  --fb-secondary-bg: #efeff4;
+  --fb-text: #000000;
+  --fb-hint: #8e8e93;
+  --fb-link: #2481cc;
+  --fb-button: #2481cc;
+  --fb-button-text: #ffffff;
+  --fb-destructive: #e53935;
+
+  --tg-bg: var(--tg-theme-bg-color, var(--fb-bg));
+  --tg-secondary-bg: var(--tg-theme-secondary-bg-color, var(--fb-secondary-bg));
+  --tg-section-bg: var(--tg-theme-section-bg-color, var(--tg-bg));
+  --tg-text: var(--tg-theme-text-color, var(--fb-text));
+  --tg-hint: var(--tg-theme-hint-color, var(--fb-hint));
+  --tg-link: var(--tg-theme-link-color, var(--fb-link));
+  --tg-accent: var(--tg-theme-accent-text-color, var(--tg-link));
+  --tg-button: var(--tg-theme-button-color, var(--fb-button));
+  --tg-button-text: var(--tg-theme-button-text-color, var(--fb-button-text));
+  --tg-section-header: var(--tg-theme-section-header-text-color, var(--tg-hint));
+  --tg-destructive: var(--tg-theme-destructive-text-color, var(--fb-destructive));
+  --tg-separator: var(--tg-theme-section-separator-color, color-mix(in srgb, var(--tg-hint) 25%, transparent));
+  /* Telegram semantik yashil/sariq bermaydi — ikkala mavzuda o'qiladigan tizim ranglari. */
+  --tg-success: #34c759;
+  --tg-warning: #ff9500;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fb-bg: #1c1c1d;
+    --fb-secondary-bg: #000000;
+    --fb-text: #ffffff;
+    --fb-hint: #98989e;
+    --fb-link: #3e88f7;
+    --fb-button: #3e88f7;
+    --fb-destructive: #eb5545;
+  }
+}
+
+html,
+body {
+  background: var(--tg-secondary-bg);
+  color: var(--tg-text);
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  overscroll-behavior-y: none;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+    sans-serif;
+  min-height: var(--tg-viewport-stable-height, 100vh);
+}
+
+@layer components {
+  .tg-tint {
+    background: color-mix(in srgb, var(--tg-button) 12%, transparent);
+  }
+  .tg-tint-success {
+    background: color-mix(in srgb, var(--tg-success) 14%, transparent);
+  }
+  .tg-tint-warning {
+    background: color-mix(in srgb, var(--tg-warning) 16%, transparent);
+  }
+  .tg-tint-destructive {
+    background: color-mix(in srgb, var(--tg-destructive) 12%, transparent);
+  }
+  .tg-pressable {
+    transition: background-color 120ms ease, opacity 120ms ease, transform 120ms ease;
+  }
+  .tg-pressable:active {
+    background: color-mix(in srgb, var(--tg-hint) 14%, transparent);
+  }
+}
+
+@keyframes tg-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.tg-screen {
+  animation: tg-fade-in 180ms ease-out;
+}

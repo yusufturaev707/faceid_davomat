@@ -15,7 +15,7 @@ os.environ.setdefault("SECRET_KEY", "test-secret-key-do-not-use-in-prod")
 os.environ.setdefault("ALGORITHM", "HS256")
 os.environ.setdefault("ACCESS_TOKEN_EXPIRE_MINUTES", "30")
 os.environ.setdefault("REFRESH_TOKEN_EXPIRE_DAYS", "7")
-os.environ.setdefault("API_KEY_PEPPER", "test-pepper-12345")
+os.environ.setdefault("API_KEY_PEPPER", "test-pepper-0123456789abcdef0123456789")
 os.environ.setdefault(
     "DATABASE_URL", f"sqlite:///{tempfile.gettempdir()}/faceid_test.db"
 )

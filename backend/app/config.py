@@ -186,6 +186,24 @@ class Settings(BaseSettings):
     # Faqat ma'lumot bo'sh bo'lganda fallback sifatida ishlatiladi.
     QABUL_YEAR: int = 0
 
+    # Davomat Telegram Mini App (`/api/v1/davomat-miniapp`).
+    # Bot tokeni (davomat_bot/.env dagi BOT_TOKEN bilan bir xil) — Mini App
+    # `initData` imzosini (HMAC) tekshirish va kelmaganlar Excel faylini
+    # foydalanuvchi chatiga yuborish uchun. Bo'sh bo'lsa Mini App 503 qaytaradi.
+    DAVOMAT_BOT_TOKEN: str = ""
+    # Chetlatish yozuvlari (`cheating_logs.user_id`) shu foydalanuvchi nomidan
+    # yoziladi — bot kanalidagi kabi bot API kalitining egasi (`users.id`).
+    # 0 bo'lsa Mini App 503 qaytaradi.
+    DAVOMAT_MINIAPP_USER_ID: int = 0
+    # initData amal qilish muddati (sekund). Telegram initData'ni Mini App
+    # ochilganda bir marta beradi — operator ilovani kun bo'yi ochiq tutadi.
+    DAVOMAT_MINIAPP_INIT_DATA_TTL: int = 86400
+    # Face ID tasdig'i shu muddat ichida "Davomatga qo'shish" bilan
+    # yakunlanishi kerak (sekund).
+    DAVOMAT_MINIAPP_VERIFY_TTL: int = 600
+    # Telegram Bot API manzili (lokal Bot API server/proxy uchun almashtiriladi).
+    TELEGRAM_API_BASE: str = "https://api.telegram.org"
+
     @field_validator("SECRET_KEY", "API_KEY_PEPPER")
     @classmethod
     def _reject_insecure_secrets(cls, v: str, info) -> str:

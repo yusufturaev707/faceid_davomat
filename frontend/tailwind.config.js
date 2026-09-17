@@ -1,6 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 export default {
-  content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"],
+  content: ["./index.html", "./miniapp/index.html", "./src/**/*.{js,ts,jsx,tsx}"],
   darkMode: "class",
   theme: {
     screens: {
@@ -28,6 +28,23 @@ export default {
         surface: {
           DEFAULT: "rgb(var(--color-surface) / <alpha-value>)",
           secondary: "rgb(var(--color-surface-secondary) / <alpha-value>)",
+        },
+        // Telegram Mini App — Telegram mavzusi ranglari (src/miniapp/miniapp.css).
+        tg: {
+          bg: "var(--tg-bg)",
+          secondary: "var(--tg-secondary-bg)",
+          section: "var(--tg-section-bg)",
+          text: "var(--tg-text)",
+          hint: "var(--tg-hint)",
+          link: "var(--tg-link)",
+          accent: "var(--tg-accent)",
+          button: "var(--tg-button)",
+          "button-text": "var(--tg-button-text)",
+          header: "var(--tg-section-header)",
+          destructive: "var(--tg-destructive)",
+          separator: "var(--tg-separator)",
+          success: "var(--tg-success)",
+          warning: "var(--tg-warning)",
         },
       },
       boxShadow: {

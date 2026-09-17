@@ -9,6 +9,7 @@ bu formatter qo'shimcha redaction qilmaydi.
 import json
 import logging
 import os
+import re
 import sys
 from contextvars import ContextVar
 
@@ -22,6 +23,33 @@ class RequestIdFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
         record.request_id = request_id_ctx.get()
         return True
+
+
+_BOT_TOKEN_IN_URL = re.compile(r"/bot\d+:[A-Za-z0-9_-]+")
+
+
+class BotTokenRedactFilter(logging.Filter):
+    """Telegram Bot API URL'idagi tokenni yashiradi (`/bot<token>/` → `/bot***/`).
+
+    `httpx` har so'rovni INFO darajasida to'liq URL bilan log qiladi — bot
+    tokeni (Mini App initData imzosining kaliti) log fayllarga tushmasligi kerak.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        message = record.getMessage()
+        redacted = _BOT_TOKEN_IN_URL.sub("/bot***", message)
+        if redacted != message:
+            record.msg = redacted
+            record.args = ()
+        return True
+
+
+def install_bot_token_redaction() -> None:
+    """`httpx` logger'iga filtr o'rnatish (idempotent). Logger filtri handler'lardan
+    oldin ishlaydi — gunicorn/uvicorn/celery logging sozlamasidan qat'i nazar."""
+    httpx_logger = logging.getLogger("httpx")
+    if not any(isinstance(f, BotTokenRedactFilter) for f in httpx_logger.filters):
+        httpx_logger.addFilter(BotTokenRedactFilter())
 
 
 class JsonFormatter(logging.Formatter):
