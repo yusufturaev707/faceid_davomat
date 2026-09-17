@@ -39,8 +39,9 @@ a two-endpoint excerpt of it).
 
 **Prod**: gunicorn + uvicorn workers over a unix socket (`backend/gunicorn_config.py`), systemd units in
 `deploy/systemd/` (`sudo deploy/systemd/install.sh` installs them; paths are hardcoded to
-`/var/www/faceid_davomat`). Frontend: `sudo bash deploy/frontend-deploy.sh` (git pull → `npm ci` → build →
-rsync into the nginx web root → `nginx -t` + reload).
+`/var/www/faceid_davomat`). Frontend: `sudo bash deploy/frontend-deploy.sh` — nginx serves `frontend/dist` directly, so the script
+builds into `dist.new` (`npm run build -- --outDir …`), checks that both `index.html` and
+`miniapp/index.html` came out, then swaps it in atomically and keeps the previous build as `dist.old`.
 
 ## Configuration
 

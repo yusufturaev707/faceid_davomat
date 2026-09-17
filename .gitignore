@@ -24,6 +24,9 @@ backend/celerybeat-schedule*
 
 frontend/node_modules/
 frontend/dist/
+# deploy/frontend-deploy.sh: yangi build va oldingi versiya
+frontend/dist.new/
+frontend/dist.old/
 # tsc incremental build cache — har buildda o'zgaradi
 frontend/tsconfig.tsbuildinfo
 

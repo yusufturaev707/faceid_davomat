@@ -81,14 +81,26 @@ Server `api.telegram.org` ga chiqa olishi kerak (Excel faylni chatga yuborish).
 sudo bash deploy/frontend-deploy.sh
 ```
 
-Build ikkala ilovani chiqaradi: `web/index.html` (admin) va `web/miniapp/index.html`.
+Build ikkala ilovani chiqaradi: `frontend/dist/index.html` (admin panel) va
+`frontend/dist/miniapp/index.html` (Mini App). Nginx shu papkadan o'qiydi.
+Skript yangi versiyani `dist.new` ga yig'ib, oxirida bir lahzada almashtiradi;
+oldingi versiya `dist.old` bo'lib qoladi:
+
+```bash
+# zarur bo'lsa oldingi versiyaga qaytish
+sudo rm -rf /var/www/faceid_davomat/frontend/dist
+sudo mv /var/www/faceid_davomat/frontend/dist.old /var/www/faceid_davomat/frontend/dist
+```
 
 ### 3. nginx
 
-Mavjud `try_files $uri $uri/ /index.html;` konfiguratsiyasi `/miniapp/` ni
-o'zi topadi. Tekshiring va kerak bo'lsa qo'shing:
+Nginx root `frontend/dist` ga ishlashi kerak va mavjud
+`try_files $uri $uri/ /index.html;` `/miniapp/` ni o'zi topadi. Tekshiring va
+kerak bo'lsa qo'shing:
 
 ```nginx
+# root /var/www/faceid_davomat/frontend/dist;
+
 # Telegram Web (web.telegram.org) Mini App'ni iframe ichida ochadi —
 # /miniapp/ uchun X-Frame-Options DENY yoki frame-ancestors 'none' bo'lmasin.
 location /miniapp/ {
