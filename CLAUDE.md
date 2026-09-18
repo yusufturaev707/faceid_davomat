@@ -120,7 +120,9 @@ Absentee Excel files are pushed into the user's chat via Bot API `sendDocument`;
 (`components/QrCamera.tsx` — `getUserMedia` + `BarcodeDetector` when present, else a shutter that posts the
 frame to `passport-qr` for zxing-cpp), Telegram's native scanner (mobile only) and a plain image upload;
 the camera falls back to a `capture="environment"` file input whenever `getUserMedia` is blocked (http,
-denied permission, camera busy). Business rules are shared with the X-API-Key bot endpoints through
+denied permission, camera busy). Rotation and perspective skew are zxing's own job; the measured failure
+causes are soft focus and a QR too small in frame, so `_QR_ATTEMPTS` re-reads a failed frame sharpened
+(unsharp mask) and 2× upscaled before giving up — only on failure, ~65 ms worst case. Business rules are shared with the X-API-Key bot endpoints through
 `services/davomat_bot_service.py` — change them there, not in either router. Endpoints decorated with
 `@limiter.limit` must not use `from __future__ import annotations` (FastAPI then can't resolve the body model
 through the slowapi wrapper and treats it as a query param).

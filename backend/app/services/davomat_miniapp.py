@@ -24,10 +24,12 @@ import json
 import logging
 import re
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import cv2
 import httpx
+import numpy as np
 
 from app.config import settings
 from app.core.logging import install_bot_token_redaction
@@ -190,30 +192,73 @@ def parse_passport_qr_text(text: str) -> PassportData:
     return data
 
 
-def decode_passport_qr_image(image_b64: str) -> PassportData:
-    """QR rasmidan (base64) pasport ma'lumotlarini o'qish."""
+def _read_qr_texts(gray: np.ndarray) -> list[str]:
+    """Kadrdagi barcha QR matnlari. Dekoder xatosi — bo'sh ro'yxat.
+
+    `import` atayin `try` dan tashqarida: zxing-cpp o'rnatilmagan bo'lsa
+    `ImportError` endpointga chiqib, 503 + tushunarli xabar beradi.
+    """
     import zxingcpp
 
-    from app.services.image_decoder import decode_base64_image
-
-    img_bgr, _size = decode_base64_image(image_b64)
-    gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
     try:
         results = zxingcpp.read_barcodes(gray, formats=zxingcpp.BarcodeFormat.QRCode)
     except Exception:
         logger.exception("zxing-cpp QR o'qishda xatolik")
-        results = []
+        return []
+    return [result.text or "" for result in results]
 
-    last_error: PassportQrError | None = None
-    for result in results:
-        try:
-            return parse_passport_qr_text(result.text or "")
-        except PassportQrError as e:
-            last_error = e
-    if last_error is not None:
-        raise last_error
+
+def _unsharp(gray: np.ndarray, sigma: float, amount: float) -> np.ndarray:
+    """Fokusi ketgan kadrni o'tkirlashtirish (unsharp mask)."""
+    return cv2.addWeighted(gray, 1 + amount, cv2.GaussianBlur(gray, (0, 0), sigma), -amount, 0)
+
+
+# QR o'qish urinishlari. zxing-cpp QR'ni har qanday burchakda va perspektiv
+# qiyshiqlikda o'zi to'g'rilaydi (uchta burchak marker + alignment pattern) —
+# sinovda tiniq kadrda 0–180° burilish va 65° gacha qiyshiqlik 100% o'qildi.
+# Haqiqiy yiqilish sabablari: fokus ketishi va kadrda QR juda kichik bo'lishi.
+# Shu ikkisiga qarshi bosqichlar (tartib va koeffitsientlar o'lchov asosida:
+# har biri faqat oldingisi yiqilganda ishlaydi, eng yomon holat ~65 ms):
+_QR_ATTEMPTS: tuple[tuple[str, Callable[[np.ndarray], np.ndarray]], ...] = (
+    ("asl", lambda gray: gray),
+    ("unsharp-2.5", lambda gray: _unsharp(gray, 2.5, 2.0)),
+    ("unsharp-1.2", lambda gray: _unsharp(gray, 1.2, 1.2)),
+    ("2x", lambda gray: cv2.resize(gray, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)),
+)
+
+
+def decode_passport_qr_image(image_b64: str) -> PassportData:
+    """QR rasmidan (base64) pasport ma'lumotlarini o'qish.
+
+    Kadr xira yoki QR kichik bo'lsa bitta urinish yetmaydi — `_QR_ATTEMPTS`
+    bo'yicha bosqichma-bosqich qayta o'qiladi. Rasmda boshqa QR ham bo'lishi
+    mumkin (plakat, havola), shuning uchun har bir bosqichda topilgan barcha
+    matnlar MRZ sifatida tekshiriladi.
+    """
+    from app.services.image_decoder import decode_base64_image
+
+    img_bgr, _size = decode_base64_image(image_b64)
+    gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
+
+    parse_error: PassportQrError | None = None
+    for name, transform in _QR_ATTEMPTS:
+        for text in _read_qr_texts(transform(gray)):
+            try:
+                data = parse_passport_qr_text(text)
+            except PassportQrError as e:
+                # QR bor, lekin ID-karta MRZ'i emas — keyingi matn/bosqichda
+                # haqiqiy ID-karta topilishi mumkin.
+                parse_error = e
+                continue
+            if name != "asl":
+                logger.info("Pasport QR faqat `%s` bosqichida o'qildi — kadr xira yoki QR kichik", name)
+            return data
+
+    if parse_error is not None:
+        raise parse_error
     raise PassportQrError(
-        "Rasmda QR kod topilmadi. QR kodni yaqinroqdan, yorug' joyda suratga oling."
+        "Rasmda QR kod topilmadi. ID-kartani kadrni to'ldiradigan qilib, "
+        "qimirlatmasdan va yorug' joyda suratga oling."
     )
 
 

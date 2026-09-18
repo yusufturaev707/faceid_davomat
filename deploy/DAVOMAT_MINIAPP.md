@@ -180,5 +180,6 @@ yoki `ngrok http 5173`) — tunnel URL'ini test botning `WEBAPP_URL` iga yozing.
 | QR rasmi: «QR rasmini o'qish serverda sozlanmagan» | backend venv'da `zxing-cpp` yo'q | `pip install -r requirements.txt` |
 | «Kameraga ruxsat berilmadi» | Telegram (yoki brauzer) kameradan foydalanishga ruxsat so'ramagan/rad etilgan | telefon sozlamalarida Telegram'ga kamera ruxsati; zaxira — «Suratga olish (tizim kamerasi)» |
 | «Kamera faqat HTTPS orqali...» | ilova http orqali ochilgan | https (yoki lokalda `localhost`) |
+| «Rasmda QR kod topilmadi» takrorlansa | kadr xira yoki QR juda kichik (burilish/qiyshiqlik sabab emas) | ID-kartani yaqinroq tuting, telefonni qimirlatmang; log'da `Pasport QR faqat ... bosqichida o'qildi` qatori shu muammoni ko'rsatadi |
 | Telegram Web'da oq ekran | nginx `/miniapp/` ga `X-Frame-Options: DENY` qo'shgan | yuqoridagi nginx bo'limi |
 | Deploydan keyin eski ilova ochiladi | WebView keshi | `Cache-Control: no-cache` (nginx) |

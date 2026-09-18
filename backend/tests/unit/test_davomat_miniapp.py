@@ -1,5 +1,6 @@
 """Davomat Mini App yordamchilari: verify ticket, pasport QR, rate-limit kaliti."""
 
+import base64
 import json
 import time
 
@@ -12,6 +13,8 @@ from app.core.telegram_webapp import sign_init_data
 from app.services.davomat_miniapp import (
     PassportQrError,
     TicketError,
+    _read_qr_texts,
+    decode_passport_qr_image,
     issue_verify_ticket,
     parse_passport_qr_text,
     read_verify_ticket,
@@ -19,6 +22,8 @@ from app.services.davomat_miniapp import (
 )
 
 NOW = 1_780_000_000
+# TD1 MRZ 1-qatori: [5:14] seriya+raqam, [15:29] JShShIR.
+MRZ_TEXT = "IUUZBAD12345674123456789012342<<<<"
 
 
 def _ticket(**overrides) -> str:
@@ -95,6 +100,67 @@ def test_passport_qr_mrz_text_is_parsed():
 def test_passport_qr_garbage_is_rejected(text):
     with pytest.raises(PassportQrError):
         parse_passport_qr_text(text)
+
+
+# ── QR rasmidan o'qish ────────────────────────────────────────
+
+
+def _qr_frame(*, rotate_deg: float = 0, blur_sigma: float = 0, qr_px: int = 300) -> str:
+    """ID-karta QR'i tushgan kadr → base64 JPEG (klient yuboradigan ko'rinish)."""
+    cv2 = pytest.importorskip("cv2")
+    zxingcpp = pytest.importorskip("zxingcpp")
+    np = pytest.importorskip("numpy")
+
+    bitmap = np.array(
+        zxingcpp.write_barcode(zxingcpp.BarcodeFormat.QRCode, MRZ_TEXT, quiet_zone=4)
+    )
+    if bitmap.ndim == 3:
+        bitmap = bitmap[:, :, 0]
+    qr = cv2.resize(bitmap, (qr_px, qr_px), interpolation=cv2.INTER_NEAREST)
+
+    frame = np.full((1080, 1920), 150, np.uint8)
+    y0, x0 = (1080 - qr_px) // 2, (1920 - qr_px) // 2
+    frame[y0 : y0 + qr_px, x0 : x0 + qr_px] = qr
+    if rotate_deg:
+        m = cv2.getRotationMatrix2D((960, 540), rotate_deg, 1.0)
+        frame = cv2.warpAffine(frame, m, (1920, 1080), borderValue=150)
+    if blur_sigma:
+        frame = cv2.GaussianBlur(frame, (0, 0), blur_sigma)
+
+    ok, buf = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 92])
+    assert ok
+    return base64.b64encode(buf).decode("ascii")
+
+
+@pytest.mark.parametrize("rotate_deg", [0, 23, 45, 90, 180])
+def test_qr_image_is_read_at_any_rotation(rotate_deg):
+    """QR uchta burchak markeriga tayanadi — burilish dekodlashga xalal bermaydi."""
+    data = decode_passport_qr_image(_qr_frame(rotate_deg=rotate_deg))
+    assert (data.ps_ser, data.ps_num, data.jshshir) == ("AD", "1234567", "12345678901234")
+
+
+def test_blurred_qr_is_recovered_by_sharpening():
+    """Fokusi ketgan kadr: to'g'ridan-to'g'ri o'qib bo'lmaydi, `unsharp` qutqaradi."""
+    cv2 = pytest.importorskip("cv2")
+    np = pytest.importorskip("numpy")
+    frame = _qr_frame(blur_sigma=3.0, qr_px=220)
+
+    raw = cv2.cvtColor(
+        cv2.imdecode(np.frombuffer(base64.b64decode(frame), np.uint8), cv2.IMREAD_COLOR),
+        cv2.COLOR_BGR2GRAY,
+    )
+    assert _read_qr_texts(raw) == [], "kadr birinchi urinishda o'qilmasligi kerak"
+
+    assert decode_passport_qr_image(frame).jshshir == "12345678901234"
+
+
+def test_qr_image_without_barcode_is_rejected():
+    cv2 = pytest.importorskip("cv2")
+    np = pytest.importorskip("numpy")
+    ok, buf = cv2.imencode(".jpg", np.full((400, 400), 200, np.uint8))
+    assert ok
+    with pytest.raises(PassportQrError, match="QR kod topilmadi"):
+        decode_passport_qr_image(base64.b64encode(buf).decode("ascii"))
 
 
 def _request(headers: dict[str, str]) -> Request:

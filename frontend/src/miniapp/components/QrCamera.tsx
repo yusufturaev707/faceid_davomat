@@ -100,11 +100,14 @@ export function QrCamera({
         stream = await navigator.mediaDevices.getUserMedia({
           // ID-karta orqa kamerada o'qiladi; `ideal` — old kamerali
           // noutbukda ham oqim beriladi (`exact` bo'lsa xato qaytardi).
+          // `focusMode` — QR o'qishda eng ko'p uchraydigan yiqilish sababi
+          // fokusning ketishi; `advanced` qo'llab-quvvatlanmasa e'tiborsiz qoladi.
           video: {
             facingMode: { ideal: "environment" },
             width: { ideal: 1920 },
             height: { ideal: 1080 },
-          },
+            advanced: [{ focusMode: "continuous" }],
+          } as unknown as MediaTrackConstraints,
           audio: false,
         });
       } catch (err) {
@@ -211,11 +214,13 @@ export function QrCamera({
     }
   }, [torch.on]);
 
+  // QR har qanday burchakda o'qiladi (zxing markerlar bo'yicha o'zi to'g'rilaydi),
+  // shuning uchun ko'rsatma faqat masofa va tinchlik haqida.
   const hint = busy
     ? "Pasport ma'lumotlari o'qilmoqda..."
     : liveScan
-      ? "QR kodni ramka ichiga joylang — o'zi o'qiladi."
-      : "QR kodni ramka ichiga joylab, «Suratga olish» tugmasini bosing.";
+      ? "QR kodni ramkaga yaqinroq tuting — o'zi o'qiladi."
+      : "QR kod ramkani to'ldirsin, telefonni qimirlatmang, so'ng «Suratga olish».";
 
   return (
     <>
