@@ -116,7 +116,11 @@ there is no Telegram host) against `endpoints/davomat_miniapp.py` under `/davoma
 untrusted, `face-verify` returns a signed `verify_ticket` (operator, student, smena, region, score, selfie
 SHA-256; `services/davomat_miniapp.py`) and `mark-attendance` accepts only that ticket plus the same selfie.
 Absentee Excel files are pushed into the user's chat via Bot API `sendDocument`; `CheatingLog.user_id` is
-`DAVOMAT_MINIAPP_USER_ID`. Business rules are shared with the X-API-Key bot endpoints through
+`DAVOMAT_MINIAPP_USER_ID`. The ID-card QR has three readers, no npm dependency added: the in-app live camera
+(`components/QrCamera.tsx` — `getUserMedia` + `BarcodeDetector` when present, else a shutter that posts the
+frame to `passport-qr` for zxing-cpp), Telegram's native scanner (mobile only) and a plain image upload;
+the camera falls back to a `capture="environment"` file input whenever `getUserMedia` is blocked (http,
+denied permission, camera busy). Business rules are shared with the X-API-Key bot endpoints through
 `services/davomat_bot_service.py` — change them there, not in either router. Endpoints decorated with
 `@limiter.limit` must not use `from __future__ import annotations` (FastAPI then can't resolve the body model
 through the slowapi wrapper and treats it as a query param).

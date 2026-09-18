@@ -142,7 +142,10 @@ tugmasini o'rnatadi. `WEBAPP_URL` https bo'lmasa bot ishga tushmaydi.
 - [ ] Botda `/start` → «📱 Davomat ilovasini ochish» tugmasi; chat pastida «Davomat» menyusi.
 - [ ] Ilova ochiladi, 2+ viloyatli foydalanuvchida viloyat tanlash chiqadi.
 - [ ] Smena → yuqorida jonli davomat kartasi; «Kelmaganlar ro'yxati» → Excel chatga keladi.
-- [ ] Face ID: telefonda «QR kodni skanerlash» native skanerni ochadi; selfi → natija → «Davomatga qo'shish».
+- [ ] Face ID → «ID-karta QR» → «Kamerani ochish»: jonli kamera ochiladi, QR ramkaga tushganda
+      o'zi o'qiladi (Android), iOS'da «Suratga olish» kadrni serverga yuboradi.
+- [ ] Face ID: «Telegram skaneri» (mobil) va «Tayyor rasmni yuklash» ham pasportni o'qiydi;
+      selfi → natija → «Davomatga qo'shish».
 - [ ] Ro'yxatda yo'q foydalanuvchi ilovani ochsa — «Ruxsat berilmagan» va uning Telegram ID'si.
 
 ## Lokal ishlab chiqish
@@ -157,7 +160,9 @@ tugmasini o'rnatadi. `WEBAPP_URL` https bo'lmasa bot ishga tushmaydi.
    ```
 
    Telegram tashqarisida native BackButton/MainButton o'rniga ilova ichidagi
-   zaxira tugmalar chiqadi. Native QR skaner faqat Telegram mobil klientida.
+   zaxira tugmalar chiqadi. Native QR skaner faqat Telegram mobil klientida —
+   ilova ichidagi jonli kamera esa hamma joyda ishlaydi, lekin `getUserMedia`
+   uchun sahifa https yoki `localhost` bo'lishi shart (tunnel URL'ida ham).
 
 Haqiqiy Telegram ichida sinash uchun HTTPS kerak (masalan, `cloudflared tunnel`
 yoki `ngrok http 5173`) — tunnel URL'ini test botning `WEBAPP_URL` iga yozing.
@@ -173,5 +178,7 @@ yoki `ngrok http 5173`) — tunnel URL'ini test botning `WEBAPP_URL` iga yozing.
 | Excel: «Botni oching, /start bosing» | foydalanuvchi botni bloklagan | botda `/start` |
 | Chetlatishda 503 | `DAVOMAT_MINIAPP_USER_ID` `users` jadvalida yo'q | to'g'ri `users.id` |
 | QR rasmi: «QR rasmini o'qish serverda sozlanmagan» | backend venv'da `zxing-cpp` yo'q | `pip install -r requirements.txt` |
+| «Kameraga ruxsat berilmadi» | Telegram (yoki brauzer) kameradan foydalanishga ruxsat so'ramagan/rad etilgan | telefon sozlamalarida Telegram'ga kamera ruxsati; zaxira — «Suratga olish (tizim kamerasi)» |
+| «Kamera faqat HTTPS orqali...» | ilova http orqali ochilgan | https (yoki lokalda `localhost`) |
 | Telegram Web'da oq ekran | nginx `/miniapp/` ga `X-Frame-Options: DENY` qo'shgan | yuqoridagi nginx bo'limi |
 | Deploydan keyin eski ilova ochiladi | WebView keshi | `Cache-Control: no-cache` (nginx) |

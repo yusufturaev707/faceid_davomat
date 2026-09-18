@@ -82,6 +82,45 @@ body {
   }
 }
 
+/*
+ * QR skaner ramkasi: to'rt burchak + jonli dekodlash paytidagi chiziq.
+ * Ramka faqat ko'rsatma — kadr to'liq yuboriladi, QR aynan shu joyda
+ * bo'lishi shart emas.
+ */
+.qr-frame {
+  border-radius: 16px;
+  box-shadow: 0 0 0 100vmax rgb(0 0 0 / 0.35);
+  outline: 2px solid rgb(255 255 255 / 0.9);
+  outline-offset: -2px;
+}
+
+.qr-scanline {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.95), transparent);
+  animation: qr-scan 2.2s ease-in-out infinite;
+}
+
+@keyframes qr-scan {
+  0%,
+  100% {
+    top: 8px;
+  }
+  50% {
+    top: calc(100% - 10px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .qr-scanline {
+    animation: none;
+    top: 50%;
+  }
+}
+
 @keyframes tg-fade-in {
   from {
     opacity: 0;

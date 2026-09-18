@@ -2,7 +2,8 @@
  * Face ID: pasport → selfi → natija → davomatga qo'shish.
  *
  * Bot'dagi oqim bilan bir xil, qo'shimchalar:
- *  - ID-karta QR'i Telegram native skaneri bilan o'qiladi (rasm yuborish shart emas);
+ *  - ID-karta QR'i uch yo'l bilan o'qiladi: ilova ichidagi jonli kamera
+ *    (`components/QrCamera`), Telegram native skaneri va tayyor rasm;
  *  - natijada GTSP pasport rasmi va selfi yonma-yon ko'rinadi — operator ko'z bilan
  *    ham tasdiqlaydi;
  *  - "Keyingi talabgor" — navbatdagi talabgorga bir bosishda o'tish.
@@ -11,6 +12,7 @@
 import { useRef, useState, type ReactElement, type RefObject } from "react";
 import { api, ApiError } from "../api";
 import { Camera, ImageIcon, Pencil, QrCode, ScanFace } from "../components/icons";
+import { QrCamera } from "../components/QrCamera";
 import { StudentSlotSection } from "../components/StudentSlot";
 import {
   Button,
@@ -194,7 +196,10 @@ function PassportStep({
   initial: PassportData | null;
   onResolved: (data: PassportData) => void;
 }) {
-  const [mode, setMode] = useState<PassportMode>(initial || !telegram.canScanQr ? "manual" : "qr");
+  // QR — asosiy yo'l: kamera endi Telegram skaneri yo'q klientlarda ham ishlaydi.
+  // Faqat qaytib kelinganda (`initial`) qo'lda kiritish ochiladi — operator
+  // o'qilgan ma'lumotni tuzatmoqchi.
+  const [mode, setMode] = useState<PassportMode>(initial ? "manual" : "qr");
 
   return (
     <>
@@ -215,21 +220,34 @@ function PassportStep({
   );
 }
 
+/**
+ * ID-karta QR — uchta manba bir ekranda:
+ *   1. ilova ichidagi jonli kamera (`QrCamera`) — avtomatik o'qish yoki surat;
+ *   2. Telegram native skaneri — mobil klientlarda eng tezi;
+ *   3. tayyor rasm — galereyadan yoki tizim kamerasidan (jonli kamera
+ *      ochilmagan qurilmalarda zaxira).
+ */
 function QrPassport({ onResolved }: { onResolved: (data: PassportData) => void }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const fileInput = useRef<HTMLInputElement>(null);
+  const [camera, setCamera] = useState(false);
+  const [cameraBlocked, setCameraBlocked] = useState<string | null>(null);
+  const galleryInput = useRef<HTMLInputElement>(null);
+  const systemCameraInput = useRef<HTMLInputElement>(null);
 
-  const resolve = async (request: () => Promise<PassportData>) => {
+  /** `keepCamera` — kamera ochiq qolsin (xato bo'lsa operator qayta uriniladi). */
+  const resolve = async (request: () => Promise<PassportData>, keepCamera = false) => {
     setLoading(true);
     setError(null);
     try {
       const data = await request();
       telegram.haptic("success");
+      setCamera(false);
       onResolved(data);
     } catch (err) {
       telegram.haptic("error");
       setError((err as Error).message);
+      if (!keepCamera) setCamera(false);
     } finally {
       setLoading(false);
     }
@@ -256,6 +274,31 @@ function QrPassport({ onResolved }: { onResolved: (data: PassportData) => void }
     });
   };
 
+  const openCamera = () => {
+    setError(null);
+    setCameraBlocked(null);
+    setCamera(true);
+  };
+
+  if (camera) {
+    return (
+      <QrCamera
+        busy={loading}
+        notice={error}
+        onQrText={(text) => void resolve(() => api.passportFromQrText(text), true)}
+        onCapture={(image) => void resolve(() => api.passportFromQrImage(image.base64), true)}
+        onUnavailable={(message) => {
+          setCamera(false);
+          setCameraBlocked(message);
+        }}
+        onCancel={() => {
+          setCamera(false);
+          setError(null);
+        }}
+      />
+    );
+  }
+
   return (
     <>
       <Card className="flex flex-col items-center gap-3 py-6 text-center">
@@ -270,24 +313,62 @@ function QrPassport({ onResolved }: { onResolved: (data: PassportData) => void }
       </Card>
 
       {error && <Notice tone="destructive" title="QR o'qilmadi">{error}</Notice>}
+      {cameraBlocked && (
+        <Notice tone="warning" title="Kamera ochilmadi">{cameraBlocked}</Notice>
+      )}
 
+      {/* Kamera bloklangan bo'lsa asosiy amal tizim kamerasiga o'tadi, lekin
+          jonli kamerani qayta ochish imkoni qoladi — ruxsat keyin berilishi mumkin. */}
       <div className="space-y-3">
+        <Button
+          variant={cameraBlocked ? "secondary" : "primary"}
+          onClick={openCamera}
+          disabled={loading}
+          icon={<Camera width={20} height={20} />}
+        >
+          {cameraBlocked ? "Kamerani qayta ochish" : "Kamerani ochish"}
+        </Button>
         {telegram.canScanQr && (
-          <Button onClick={scan} loading={loading} icon={<QrCode width={20} height={20} />}>
-            QR kodni skanerlash
+          <Button
+            variant="secondary"
+            onClick={scan}
+            disabled={loading}
+            icon={<QrCode width={20} height={20} />}
+          >
+            Telegram skaneri
           </Button>
         )}
         <Button
+          variant={cameraBlocked ? "primary" : "secondary"}
+          onClick={() => systemCameraInput.current?.click()}
+          disabled={loading}
+          icon={<Camera width={20} height={20} />}
+        >
+          Suratga olish (tizim kamerasi)
+        </Button>
+        <Button
           variant="secondary"
-          onClick={() => fileInput.current?.click()}
+          onClick={() => galleryInput.current?.click()}
           disabled={loading}
           icon={<ImageIcon width={20} height={20} />}
         >
-          QR rasmini yuklash
+          Tayyor rasmni yuklash
         </Button>
       </div>
+
       <input
-        ref={fileInput}
+        ref={systemCameraInput}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={(e) => {
+          void onFile(e.target.files?.[0]);
+          e.target.value = "";
+        }}
+      />
+      <input
+        ref={galleryInput}
         type="file"
         accept="image/*"
         className="hidden"

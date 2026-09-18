@@ -10,6 +10,7 @@ import {
   sanitizeJshshirInput,
   sanitizePassportInput,
 } from "./passport";
+import { cameraErrorMessage, findIdCardQr } from "./qr-scanner";
 
 describe("passport", () => {
   it("seriya va raqamni bitta qatordan ajratadi", () => {
@@ -44,6 +45,33 @@ describe("passport", () => {
   it("ID-karta QR (MRZ) matnini taniydi", () => {
     expect(looksLikeIdCardQr("IUUZBAD12345674123456789012342<<<<")).toBe(true);
     expect(looksLikeIdCardQr("https://example.com/qr")).toBe(false);
+  });
+});
+
+describe("findIdCardQr", () => {
+  const idCard = "IUUZBAD12345674123456789012342<<<<";
+
+  it("kadrdagi QR'lar orasidan ID-kartanikini tanlaydi", () => {
+    expect(findIdCardQr(["https://t.me/example", idCard])).toBe(idCard);
+    expect(findIdCardQr(["https://t.me/example"])).toBeNull();
+    expect(findIdCardQr([])).toBeNull();
+  });
+
+  it("backend rad etgan QR'ni qayta yubormaydi", () => {
+    expect(findIdCardQr([idCard], new Set([idCard]))).toBeNull();
+  });
+
+  it("bo'sh va bo'shliqli matnlarni tozalaydi", () => {
+    expect(findIdCardQr(["", "   ", ` ${idCard} `])).toBe(idCard);
+  });
+});
+
+describe("cameraErrorMessage", () => {
+  it("ruxsat berilmagan holatni alohida tushuntiradi", () => {
+    expect(cameraErrorMessage({ name: "NotAllowedError" })).toMatch(/ruxsat bering/);
+    expect(cameraErrorMessage({ name: "NotReadableError" })).toMatch(/band/);
+    expect(cameraErrorMessage({ name: "NotFoundError" })).toMatch(/kamera topilmadi/);
+    expect(cameraErrorMessage(new Error("boom"))).toMatch(/Kamerani ochib bo'lmadi/);
   });
 });
 
