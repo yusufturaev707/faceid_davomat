@@ -210,7 +210,7 @@ export default function StatisticsPage() {
   );
   // Excel viloyatlar tartibi — dtm (region raqami, default) | vm (k_number) |
   // iiv (s_number)
-  const [excelOrder, setExcelOrder] = useState<"dtm" | "vm" | "iiv">("vm");
+  const [excelOrder, setExcelOrder] = useState<"dtm" | "vm" | "iiv">("dtm");
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   // Polling qattiqligini oshiruvchi ref'lar:
   //  - inFlightRef: so'rov navbatда — yangi (silent) poll o'tkazib yuboriladi
