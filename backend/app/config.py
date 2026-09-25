@@ -165,6 +165,14 @@ class Settings(BaseSettings):
     API_OTM_STUDENTS: str = ""
     API_OTM_STUDENTS_TOKEN: str = ""
 
+    # Proctoring tizimi — kompyuterlarni biriktirish va nomzodni bron qilish
+    # (`services/proctoring_client.py`). URL — `.../api/v1` gacha, kalit
+    # `X-API-Key` sarlavhasida ketadi. Bo'sh bo'lsa endpointlar 503 qaytaradi,
+    # bron esa jimgina o'tkazib yuboriladi (davomat to'xtamasligi kerak).
+    PROCTORING_API_URL: str = ""
+    PROCTORING_API_KEY: str = ""
+    PROCTORING_TIMEOUT: float = 10.0
+
     # E-GOV PSN — PINFL bo'yicha joriy pasport (seriya + raqam) olish.
     # `API_GET_TOKEN_EGOV` ga POST -> Bearer access_token (~1 soat amal qiladi),
     # so'ng shu token bilan `API_PSN_EGOV` ga POST. Ikkalasi ham bo'sh bo'lsa

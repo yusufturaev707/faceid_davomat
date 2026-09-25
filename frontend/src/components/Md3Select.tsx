@@ -31,6 +31,12 @@ export type Md3Option = {
  *
  * Controlled: `value` (string) + `onChange(value)`. Raqamli qiymatlar uchun
  * chaqiruvchi tomon String()/Number() bilan o'rab beradi. Bo'sh tanlov = "".
+ *
+ * `size="lg"` — forma maydoni (MD3 outlined text field, 56 px): ramkada
+ * `label`, tanlangan qiymat va variantlar IKKI QATORDA (sarlavha + izoh).
+ * Ixcham variantda izoh bir qatorga siqiladi va uzun matn kesiladi —
+ * filtr uchun yetarli, lekin "qaysi sessiyani tanladim?" degan savolga
+ * javob beradigan formada yetmaydi.
  */
 export default function Md3Select({
   value,
@@ -43,6 +49,8 @@ export default function Md3Select({
   ariaLabel,
   className = "",
   buttonClassName = "",
+  size = "md",
+  label,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -54,7 +62,11 @@ export default function Md3Select({
   ariaLabel?: string;
   className?: string;
   buttonClassName?: string;
+  size?: "md" | "lg";
+  /** `lg` da ramka ustidagi yorliq (MD3 outlined label). */
+  label?: string;
 }) {
+  const lg = size === "lg";
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -70,7 +82,7 @@ export default function Md3Select({
     const spaceBelow = window.innerHeight - r.bottom;
     const spaceAbove = r.top;
     const openUp = spaceBelow < 260 && spaceAbove > spaceBelow;
-    const maxHeight = Math.min(288, (openUp ? spaceAbove : spaceBelow) - 12);
+    const maxHeight = Math.min(lg ? 380 : 288, (openUp ? spaceAbove : spaceBelow) - 12);
     setMenuStyle({
       position: "fixed",
       left: Math.round(r.left),
@@ -81,7 +93,7 @@ export default function Md3Select({
         ? { bottom: Math.round(window.innerHeight - r.top + gap) }
         : { top: Math.round(r.bottom + gap) }),
     });
-  }, []);
+  }, [lg]);
 
   // Ochilganda joylashuvni hisoblab, scroll/resize'da qayta hisoblaymiz.
   useLayoutEffect(() => {
@@ -156,7 +168,9 @@ export default function Md3Select({
               disabled={o.disabled}
               title={o.label}
               onClick={() => !o.disabled && pick(o.value)}
-              className={`w-full text-left px-3 py-2 rounded-xl flex items-center gap-2 text-[13px] transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+              className={`w-full text-left rounded-xl flex items-center transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                lg ? "px-4 py-3 gap-3 text-[14px]" : "px-3 py-2 gap-2 text-[13px]"
+              } ${
                 isActive
                   ? "bg-primary-50 dark:bg-primary-900/30"
                   : "hover:bg-gray-100 dark:hover:bg-slate-700/50"
@@ -164,24 +178,44 @@ export default function Md3Select({
             >
               {o.dot && (
                 <span
-                  className={`w-2 h-2 rounded-full shrink-0 ${o.dot}`}
+                  className={`${lg ? "w-2.5 h-2.5" : "w-2 h-2"} rounded-full shrink-0 ${o.dot}`}
                   aria-hidden
                 />
               )}
-              <span
-                className={`truncate ${isActive ? "font-semibold" : "font-medium"}`}
-                style={o.color ? { color: o.color } : undefined}
-              >
-                {o.label}
-              </span>
-              {o.sublabel && (
-                <span className="text-gray-400 dark:text-slate-500 text-[12px] shrink-0">
-                  · {o.sublabel}
+              {lg ? (
+                <span className="min-w-0 flex-1">
+                  <span
+                    className={`block leading-snug text-gray-900 dark:text-white ${
+                      isActive ? "font-semibold" : "font-medium"
+                    }`}
+                    style={o.color ? { color: o.color } : undefined}
+                  >
+                    {o.label}
+                  </span>
+                  {o.sublabel && (
+                    <span className="block mt-0.5 text-[12.5px] leading-snug text-gray-500 dark:text-slate-400">
+                      {o.sublabel}
+                    </span>
+                  )}
                 </span>
+              ) : (
+                <>
+                  <span
+                    className={`truncate ${isActive ? "font-semibold" : "font-medium"}`}
+                    style={o.color ? { color: o.color } : undefined}
+                  >
+                    {o.label}
+                  </span>
+                  {o.sublabel && (
+                    <span className="text-gray-400 dark:text-slate-500 text-[12px] shrink-0">
+                      · {o.sublabel}
+                    </span>
+                  )}
+                </>
               )}
               {isActive && (
                 <svg
-                  className="w-4 h-4 ml-auto shrink-0 text-primary-600 dark:text-primary-400"
+                  className={`${lg ? "w-5 h-5" : "w-4 h-4"} ml-auto shrink-0 text-primary-600 dark:text-primary-400`}
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
@@ -203,6 +237,16 @@ export default function Md3Select({
 
   return (
     <div ref={rootRef} className={`relative w-full ${className}`}>
+      {lg && label && (
+        // MD3 outlined label — ramka chizig'i ustida, fon bilan "kesadi".
+        <span
+          className={`pointer-events-none absolute -top-2 left-3 z-[1] px-1 text-[12px] font-medium leading-none bg-white dark:bg-slate-800 ${
+            open ? "text-primary-600 dark:text-primary-400" : "text-gray-500 dark:text-slate-400"
+          } ${disabled ? "opacity-60" : ""}`}
+        >
+          {label}
+        </span>
+      )}
       <button
         type="button"
         disabled={disabled}
@@ -211,13 +255,33 @@ export default function Md3Select({
         aria-label={ariaLabel}
         title={selected?.label}
         onClick={() => setOpen((o) => !o)}
-        className={`h-9 w-full pl-3 pr-2.5 flex items-center gap-2 rounded-xl border bg-surface dark:bg-slate-800 text-left text-[13px] transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed ${
+        className={`w-full flex items-center border bg-surface dark:bg-slate-800 text-left transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed ${
+          lg
+            ? "min-h-14 pl-4 pr-3 py-2.5 gap-3 rounded-2xl text-[15px]"
+            : "h-9 pl-3 pr-2.5 gap-2 rounded-xl text-[13px]"
+        } ${
           open
             ? "border-primary-500 ring-4 ring-primary-500/15"
             : "border-gray-300 dark:border-slate-600 hover:border-gray-400 dark:hover:border-slate-500"
         } ${buttonClassName}`}
       >
-        {selected ? (
+        {selected && lg ? (
+          <>
+            {selected.dot && (
+              <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${selected.dot}`} aria-hidden />
+            )}
+            <span className="min-w-0 flex-1">
+              <span className="block font-semibold leading-snug text-gray-900 dark:text-white">
+                {selected.label}
+              </span>
+              {selected.sublabel && (
+                <span className="block mt-0.5 text-[12.5px] leading-snug text-gray-500 dark:text-slate-400">
+                  {selected.sublabel}
+                </span>
+              )}
+            </span>
+          </>
+        ) : selected ? (
           <>
             {selected.dot && (
               <span
@@ -247,7 +311,7 @@ export default function Md3Select({
           </span>
         )}
         <ChevronDownIcon
-          className={`w-4 h-4 ml-auto shrink-0 text-gray-400 dark:text-slate-500 transition-transform duration-200 ${
+          className={`${lg ? "w-5 h-5" : "w-4 h-4"} ml-auto shrink-0 text-gray-400 dark:text-slate-500 transition-transform duration-200 ${
             open ? "rotate-180" : ""
           }`}
         />

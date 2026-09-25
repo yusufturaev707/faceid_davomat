@@ -364,6 +364,73 @@ export async function reloadStudentLoadApi(sessionId: number): Promise<{ detail:
   return res.data;
 }
 
+// ─── Kompyuter biriktirish (Proctoring) ───────────────────────────────
+
+export interface ProctoringSchedule {
+  id: number;
+  exam_name: string;
+  exam_date: string;
+  starts_at: string;
+  ends_at: string;
+  /** null — barcha binolar uchun umumiy sessiya */
+  zone: { region_dtm_id: number; zone_number: number; zone_name: string; region_name: string } | null;
+}
+
+export interface SmenaSeatSummary {
+  session_smena_id: number;
+  day: string;
+  smena_name: string;
+  candidates: number;
+  assigned: number;
+  schedule_ids: number[];
+}
+
+export interface SeatZoneReport {
+  zone_id: number;
+  zone_name: string;
+  region_number: number;
+  zone_number: number;
+  candidates: number;
+  computers: number;
+  kept: number;
+  assigned: number;
+  unassigned: number;
+}
+
+export interface SeatAssignmentResult {
+  schedule_id: number;
+  dry_run: boolean;
+  totals: Record<"candidates" | "computers" | "kept" | "assigned" | "unassigned", number>;
+  changed_rows: number;
+  zones: SeatZoneReport[];
+  /** FaceID'da nomzodi bor, Proctoring sessiyasida kompyuteri yo'q binolar — tegilmaydi */
+  missing_zones: SeatZoneReport[];
+}
+
+/** Proctoring'dagi ochiq (tugamagan) test sessiyalari. */
+export async function getProctoringSchedulesApi(): Promise<ProctoringSchedule[]> {
+  const res = await apiClient.get("/proctoring/schedules");
+  return res.data;
+}
+
+/** Kun+smena kesimida: nomzodlar va kompyuter biriktirilganlar soni. */
+export async function getSeatAssignmentSummaryApi(sessionId: number): Promise<SmenaSeatSummary[]> {
+  const res = await apiClient.get(`/test-sessions/${sessionId}/seat-assignment`);
+  return res.data;
+}
+
+/**
+ * Proctoring kompyuterlarini nomzodlarga biriktirish (`sp_n`).
+ * `dry_run=true` — faqat hisobot, hech narsa yozilmaydi.
+ */
+export async function assignSeatsApi(
+  sessionId: number,
+  body: { session_smena_id: number; schedule_id: number; dry_run: boolean },
+): Promise<SeatAssignmentResult> {
+  const res = await apiClient.post(`/test-sessions/${sessionId}/assign-seats`, body);
+  return res.data;
+}
+
 /**
  * Tanlangan ko'lam (scope) uchun dashboard statistikasini olish:
  *  - scope="smena"   — `sessionSmenaId` majburiy (bitta kun + smena)

@@ -69,6 +69,7 @@ from app.schemas.student import (
     StudentResponse,
     StudentUpdate,
 )
+from app.services.proctoring_booking import enqueue_seat_booking
 from app.services.student_export import build_students_pdf, build_students_xlsx
 
 router = APIRouter()
@@ -263,6 +264,16 @@ def bulk_create_student_logs_endpoint(
     """
     results = bulk_create_student_logs(db, payload.items, user_id=current_user.id)
     succeeded = sum(1 for r in results if r.status == "ok")
+    # Face ID'dan o'tganlar — Proctoring'da kompyuterini bron qilish (fon
+    # task'i, javobni kutmaydi). Chetlatilgan nomzodga bron yuborilmaydi.
+    enqueue_seat_booking(
+        db,
+        [
+            item.student_id
+            for item, result in zip(payload.items, results)
+            if result.status == "ok" and not item.is_rejected
+        ],
+    )
     return StudentLogBulkResponse(
         items=results,
         total=len(results),

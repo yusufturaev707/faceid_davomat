@@ -38,6 +38,7 @@ import {
 import Md3Select from "../components/Md3Select";
 import PageLoader from "../components/PageLoader";
 import PermissionGate from "../components/PermissionGate";
+import SeatAssignmentModal from "../components/SeatAssignmentModal";
 import { usePermission } from "../hooks/usePermission";
 import { PERM } from "../permissions";
 import { extractErrorMessage } from "../utils/errorMessage";
@@ -46,6 +47,7 @@ export default function TestSessionDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { hasPermission } = usePermission();
+  const [showSeats, setShowSeats] = useState(false);
 
   const [session, setSession] = useState<TestSessionResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -991,6 +993,18 @@ export default function TestSessionDetailPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <PermissionGate permission={PERM.TEST_SESSION_ASSIGN_SEATS}>
+            <button
+              onClick={() => setShowSeats(true)}
+              className="btn-secondary text-sm inline-flex items-center gap-1.5"
+              title="Proctoring'dagi ishchi kompyuterlarni nomzodlarga o'tirish o'rni sifatida biriktirish"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              </svg>
+              Kompyuterlarni biriktirish
+            </button>
+          </PermissionGate>
           <PermissionGate permission={PERM.TEST_SESSION_UPDATE}>
             <button
               onClick={openPassportUpdate}
@@ -1714,6 +1728,10 @@ export default function TestSessionDetailPage() {
             danger
           />
         </Modal>
+      )}
+
+      {showSeats && (
+        <SeatAssignmentModal sessionId={session.id} onClose={() => setShowSeats(false)} />
       )}
 
       {/* Add Smena Modal */}

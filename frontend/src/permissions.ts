@@ -57,6 +57,8 @@ export const PERM = {
   TEST_SESSION_LOAD_STUDENTS: "test_session:load_students",
   TEST_SESSION_EMBEDDING: "test_session:embedding",
   TEST_SESSION_CANCEL_PROCESS: "test_session:cancel_process",
+  // Proctoring kompyuterlarini nomzodlarga biriktirish (`sp_n`)
+  TEST_SESSION_ASSIGN_SEATS: "test_session:assign_seats",
 
   // Studentlar
   STUDENT_READ: "student:read",

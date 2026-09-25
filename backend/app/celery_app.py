@@ -23,6 +23,7 @@ celery_app = Celery(
         "app.tasks.cleanup_task",
         "app.tasks.student_loader_task",
         "app.tasks.excel_loader_task",
+        "app.tasks.proctoring_task",
     ],
 )
 

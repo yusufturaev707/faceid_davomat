@@ -53,6 +53,7 @@ _DERIVED_PERMISSIONS: dict[str, str] = {
     "test_session:load_students": "test_session:update",
     "test_session:embedding": "test_session:update",
     "test_session:cancel_process": "test_session:update",
+    "test_session:assign_seats": "test_session:update",
     "statistics:export": "statistics:read",
     "statistics:absentees": "statistics:read",
     "student:export_excel": "student:read",

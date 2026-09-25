@@ -668,6 +668,11 @@ def mark_attendance(
         student.id,
         log.id,
     )
+    # Desktop sinxronizatsiyasi bilan bir xil: kirgan nomzodning kompyuteri
+    # Proctoring'da bron qilinadi (commit'dan keyin, fon task'ida).
+    from app.services.proctoring_booking import enqueue_seat_booking
+
+    enqueue_seat_booking(db, [student.id])
     return BotMarkAttendanceResponse(
         status="ok",
         student_id=student.id,

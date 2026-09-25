@@ -161,6 +161,33 @@ paginated, `bulk_insert_mappings`), zones sync from the OTM buildings API (`serv
 `Zone.building_id` is the *external* building id, not `Zone.id`), passport photos come from GTSP
 (`services/gtsp_client.py`). All are driven by `API_*` settings and return 503 when unset.
 
+**Proctoring: kompyuter biriktirish va bron** — test sessiyasi sahifasida «Kompyuterlarni
+biriktirish» (`components/SeatAssignmentModal.tsx`, ruxsat `test_session:assign_seats`): kun+smena va
+Proctoring'dagi ochiq sessiya tanlanadi → «Tekshirish» (`dry_run`) → «Biriktirish»
+(`services/seat_assignment.py`). Proctoring'ning ishchi kompyuterlari har bino ichida guruh+familiya
+tartibida `students.sp_n` ga yoziladi — desktop client uni o'zgarishsiz "JOY" sifatida ko'rsatadi, shuning
+uchun client ma'lumotni biriktirishdan KEYIN yuklab oladi. Yangi jadval yo'q:
+- `students.proctoring_schedule_id` — "`sp_n` endi KOMPYUTER RAQAMI" belgisi va bron qaysi Proctoring
+  sessiyasiga ketishi (sessiya bitta binoga ham tegishli bo'lishi mumkin, shuning uchun smenada emas, qatorda).
+  NULL — `sp_n` loader qiymati. **Loaderlarga tegilmagan**: ular `sp_n` ga manba o'rnini yozaveradi
+  (OTM'da hammasi `1`).
+- Qisman unikal indeks `uq_students_smena_zone_pc` (`WHERE proctoring_schedule_id IS NOT NULL`) — bitta
+  smena+binoda kompyuter bir marta. Oddiy `WHERE sp_n > 0` loaderlarni yiqitardi. Yozish IKKI BOSQICHDA
+  (avval egasiz, keyin yakuniy) — joy almashganda indeks o'rtada urilmasligi uchun.
+- Bir JShShIR smenada bir necha qatorda (turli fan) — kompyuter bitta, raqam hammasida, egalik faqat
+  birinchisida; bron task'i egani JShShIR bo'yicha topadi.
+- Qayta ishga tushirish barqaror: Proctoring'dagi mavjud bron → oldingi to'g'ri biriktiruv → bo'sh joylar.
+  Joysiz nomzodda `sp_n=0` (loader qiymati qolsa kompyuter raqami bo'lib o'qilardi). Proctoring'da yo'q
+  bino tegilmaydi.
+- Bino ikki tizimda `regions.number` + `zone.number` = Proctoring `dtm_id` + `number` bilan bog'lanadi.
+
+Bron: `is_entered` yozadigan ikki yo'l — `POST /students/logs/bulk` (desktop, har nomzoddan keyin darhol
+yuboradi) va `mark_attendance` (Mini App/bot) — commit'dan keyin `services/proctoring_booking.py` ni
+chaqiradi → `tasks.proctoring_book_seat` (`storage` navbati, 8 qayta urinish, 10→300 s). Davomat yo'lida
+HTTP yo'q; chetlatilganga bron yuborilmaydi; 4xx (`seat_unavailable`, `seat_in_use`) — qaror, qayta
+urilmaydi. `services/proctoring_client.py` (`httpx`, `X-API-Key`, `PROCTORING_API_URL/KEY/TIMEOUT`,
+bo'sh bo'lsa endpointlar 503, bron jimgina o'chiq).
+
 ## Gotchas
 
 - Two alembic directories exist. `alembic.ini` points at **`app/db/migrations`** — that is the live one.

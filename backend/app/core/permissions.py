@@ -93,6 +93,13 @@ class P:
         "Yuklash/embedding jarayonini bekor qilish",
         "test_session",
     )
+    # Proctoring kompyuterlarini nomzodlarga biriktirish (`sp_n`) — alohida,
+    # chunki natija imtihon kuni client ekranida va Proctoring bronida.
+    TEST_SESSION_ASSIGN_SEATS = _Perm(
+        "test_session:assign_seats",
+        "Kompyuterlarni nomzodlarga biriktirish (Proctoring)",
+        "test_session",
+    )
 
     # === Students ===
     STUDENT_READ = _Perm("student:read", "Studentlarni ko'rish", "student")
