@@ -116,10 +116,6 @@ def _fetch_absentees(
     Bir nechta smena bo'yicha ham ishlaydi — kun yoki sessiya bo'yicha
     aggregat holatda barcha smenalardagi kelmaganlarni qaytaradi.
 
-    is_applied=True bo'lganlar ham testga kira olmaydigan kategoriya — ularni
-    "kelmagan"lar ro'yxatiga kiritmaymiz (testga umuman kelmasligi
-    rejalashtirilgan).
-
     Tartib (default): kun → smena_number → viloyat → bino → guruh → joy.
     `order_region_first=True` bo'lsa: kun → viloyat → bino → smena → guruh → joy
     (sana, region, zone, smena, guruh bo'yicha — admin statistika eksporti uchun).
@@ -174,7 +170,6 @@ def _fetch_absentees(
             Student.session_smena_id.in_(session_smena_ids),
             Region.id.in_(allowed_region_ids),
             Student.is_entered.is_(False),
-            Student.is_applied.is_(False),
         )
         .order_by(*order_cols)
     ).all()
