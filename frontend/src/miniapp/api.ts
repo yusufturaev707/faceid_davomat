@@ -10,6 +10,7 @@ import { telegram } from "./telegram";
 import type {
   AbsenteesResponse,
   CheatResponse,
+  FaceCheckResponse,
   FaceVerifyResponse,
   FindByJshshirResponse,
   FindForCheatResponse,
@@ -132,6 +133,10 @@ export const api = {
     jshshir: string;
     selfie_b64: string;
   }) => request<FaceVerifyResponse>("POST", "/face-verify", { body }),
+
+  /** Faqat shaxsni tekshirish — test/davomatga bog'lanmagan, hech narsa yozilmaydi. */
+  faceCheck: (body: PassportData & { selfie_b64: string }) =>
+    request<FaceCheckResponse>("POST", "/face-check", { body }),
 
   markAttendance: (verifyTicket: string, selfieB64: string) =>
     request<MarkAttendanceResponse>("POST", "/mark-attendance", {

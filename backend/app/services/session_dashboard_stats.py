@@ -26,7 +26,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import date
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.models.cheating_log import CheatingLog
@@ -35,6 +35,7 @@ from app.models.reason import Reason
 from app.models.reason_type import ReasonType
 from app.models.region import Region
 from app.models.session_state import SessionState
+from app.models.smena import Smena
 from app.models.student import Student
 from app.models.student_ps_data import StudentPsData
 from app.models.test_session import TestSession
@@ -43,9 +44,13 @@ from app.models.zone import Zone
 from app.schemas.dashboard_stats import (
     CheatingStat,
     DashboardStatsResponse,
+    FullGroupItem,
+    FullGroupSmena,
     GenderStat,
+    RegionFullGroupsResponse,
     RegionStatItem,
     StatGroup,
+    ZoneFullGroups,
     ZoneStatItem,
 )
 
@@ -185,24 +190,15 @@ def _tally_to_stat_group(t: _Tally) -> StatGroup:
     )
 
 
-def get_dashboard_stats(
+def _resolve_scope(
     db: Session,
     *,
     session_id: int,
-    session_smena_id: int | None = None,
-    day: date | None = None,
-    scope: str = SCOPE_SMENA,
-) -> DashboardStatsResponse:
-    """(session, scope) uchun dashboard statistikasini qaytarish.
-
-    scope:
-      - ``"smena"``   — bitta kun + smena (`session_smena_id` majburiy)
-      - ``"day"``     — bitta kunning barcha smenalari (`day` majburiy)
-      - ``"overall"`` — sessiyaning barcha kun va smenalari
-
-    Tezlik: scope qanday bo'lishidan qat'i nazar 2 ta asosiy SELECT
-    (studentlar + cheating loglari) — filtr `TestSessionSmena` join orqali
-    qo'yiladi, shuning uchun katta IN-ro'yxatlardan qochiladi.
+    scope: str,
+    session_smena_id: int | None,
+    day: date | None,
+) -> tuple[TestSession, TestSessionSmena | None]:
+    """Scope parametrlarini tekshiradi; (sessiya, smena|None) qaytaradi.
 
     Raises:
         DashboardStatsError: sessiya/smena topilmadi yoki parametr yetishmaydi.
@@ -225,22 +221,71 @@ def get_dashboard_stats(
             raise DashboardStatsError("Tanlangan smena bu sessiyaga tegishli emas")
     elif scope == SCOPE_DAY and day is None:
         raise DashboardStatsError("day majburiy (scope=day)")
+    return session, smena
+
+
+def _apply_scope_filter(
+    stmt,
+    *,
+    session_id: int,
+    scope: str,
+    session_smena_id: int | None,
+    day: date | None,
+):
+    """Tanlangan ko'lam (scope) bo'yicha WHERE filtrlarini qo'shadi.
+
+    `stmt` allaqachon `Student` va `TestSessionSmena` ni join qilgan
+    bo'lishi shart.
+    """
+    stmt = stmt.where(TestSessionSmena.test_session_id == session_id)
+    if scope == SCOPE_SMENA:
+        stmt = stmt.where(Student.session_smena_id == session_smena_id)
+    elif scope == SCOPE_DAY:
+        stmt = stmt.where(TestSessionSmena.day == day)
+    return stmt
+
+
+def get_dashboard_stats(
+    db: Session,
+    *,
+    session_id: int,
+    session_smena_id: int | None = None,
+    day: date | None = None,
+    scope: str = SCOPE_SMENA,
+) -> DashboardStatsResponse:
+    """(session, scope) uchun dashboard statistikasini qaytarish.
+
+    scope:
+      - ``"smena"``   — bitta kun + smena (`session_smena_id` majburiy)
+      - ``"day"``     — bitta kunning barcha smenalari (`day` majburiy)
+      - ``"overall"`` — sessiyaning barcha kun va smenalari
+
+    Tezlik: scope qanday bo'lishidan qat'i nazar 2 ta asosiy SELECT
+    (studentlar + cheating loglari) — filtr `TestSessionSmena` join orqali
+    qo'yiladi, shuning uchun katta IN-ro'yxatlardan qochiladi.
+
+    Raises:
+        DashboardStatsError: sessiya/smena topilmadi yoki parametr yetishmaydi.
+    """
+    session, smena = _resolve_scope(
+        db,
+        session_id=session_id,
+        scope=scope,
+        session_smena_id=session_smena_id,
+        day=day,
+    )
 
     state = db.get(SessionState, session.test_state_id) if session.test_state_id else None
     state_key = int(state.key) if state else 0
 
     def _apply_scope(stmt):
-        """Tanlangan ko'lam (scope) bo'yicha WHERE filtrlarini qo'shadi.
-
-        `stmt` allaqachon `Student` va `TestSessionSmena` ni join qilgan
-        bo'lishi shart.
-        """
-        stmt = stmt.where(TestSessionSmena.test_session_id == session_id)
-        if scope == SCOPE_SMENA:
-            stmt = stmt.where(Student.session_smena_id == session_smena_id)
-        elif scope == SCOPE_DAY:
-            stmt = stmt.where(TestSessionSmena.day == day)
-        return stmt
+        return _apply_scope_filter(
+            stmt,
+            session_id=session_id,
+            scope=scope,
+            session_smena_id=session_smena_id,
+            day=day,
+        )
 
     # 1) Studentlar — region/zone/gender bilan birga
     student_rows = db.execute(
@@ -435,4 +480,137 @@ def get_dashboard_stats(
         is_realtime=(state_key == STATE_KEY_ACTIVE),
         summary=_tally_to_stat_group(summary),
         regions=regions,
+    )
+
+
+def collect_full_groups(
+    rows,
+) -> tuple[dict[int, int], dict[int, list[FullGroupItem]]]:
+    """(zone, smena, gr_n) bo'yicha GROUP BY qatorlaridan bino kesimidagi
+    guruhlar soni va 100% kelgan guruhlar.
+
+    Har qatorda: `zone_id, session_smena_id, gr_n, total, attended, cheating`
+    (`attended` = `is_entered OR is_cheating`). Admin dashboard va davomat
+    bot/Mini App statistikasi shu yagona ta'rifdan foydalanadi.
+    """
+    total_groups: dict[int, int] = defaultdict(int)
+    full: dict[int, list[FullGroupItem]] = defaultdict(list)
+    for r in rows:
+        zone_id = int(r.zone_id)
+        total_groups[zone_id] += 1
+        if int(r.attended or 0) >= int(r.total):
+            full[zone_id].append(
+                FullGroupItem(
+                    gr_n=int(r.gr_n),
+                    session_smena_id=int(r.session_smena_id),
+                    total=int(r.total),
+                    cheating=int(r.cheating or 0),
+                )
+            )
+    return total_groups, full
+
+
+def get_region_full_groups(
+    db: Session,
+    *,
+    session_id: int,
+    region_id: int,
+    scope: str = SCOPE_SMENA,
+    session_smena_id: int | None = None,
+    day: date | None = None,
+) -> RegionFullGroupsResponse:
+    """Viloyat binolarida 100% kelgan guruhlar (`Student.gr_n`) ro'yxati.
+
+    Guruh = (smena, bino, gr_n): bir xil `gr_n` turli smenalarda boshqa-boshqa
+    guruh. "Kelgan" ta'rifi dashboard bilan bir xil (`is_entered OR
+    is_cheating`) — guruh to'liq, agar undagi hamma talabgor kelgan bo'lsa.
+    `gr_n <= 0` (loader guruh bermagan) guruh hisoblanmaydi.
+
+    Region modali ochilgandagina chaqiriladi — har 5s keladigan asosiy
+    dashboard javobini kattalashtirmaslik uchun alohida so'rov. Hisob bitta
+    SQL `GROUP BY` da, faqat shu viloyat qatorlari bo'yicha.
+
+    Raises:
+        DashboardStatsError: sessiya/smena topilmadi yoki parametr yetishmaydi.
+    """
+    _resolve_scope(
+        db,
+        session_id=session_id,
+        scope=scope,
+        session_smena_id=session_smena_id,
+        day=day,
+    )
+
+    attended_expr = or_(Student.is_entered.is_(True), Student.is_cheating.is_(True))
+    rows = db.execute(
+        _apply_scope_filter(
+            select(
+                Student.zone_id,
+                Student.session_smena_id,
+                Student.gr_n,
+                func.count().label("total"),
+                func.count().filter(attended_expr).label("attended"),
+                func.count().filter(Student.is_cheating.is_(True)).label("cheating"),
+            )
+            .select_from(Student)
+            .join(TestSessionSmena, TestSessionSmena.id == Student.session_smena_id)
+            .join(Zone, Zone.id == Student.zone_id)
+            .where(Zone.region_id == region_id, Student.gr_n > 0)
+            .group_by(Student.zone_id, Student.session_smena_id, Student.gr_n),
+            session_id=session_id,
+            scope=scope,
+            session_smena_id=session_smena_id,
+            day=day,
+        )
+    ).all()
+
+    total_groups, full = collect_full_groups(rows)
+    smena_ids = {g.session_smena_id for groups in full.values() for g in groups}
+
+    # Smena tartibi: kun → smena raqami. Guruhlar shu tartibda, smena
+    # ichida gr_n bo'yicha.
+    smenas: list[FullGroupSmena] = []
+    if smena_ids:
+        smena_rows = db.execute(
+            select(
+                TestSessionSmena.id,
+                TestSessionSmena.day,
+                Smena.number,
+                Smena.name,
+            )
+            .select_from(TestSessionSmena)
+            .outerjoin(Smena, Smena.id == TestSessionSmena.test_smena_id)
+            .where(TestSessionSmena.id.in_(smena_ids))
+        ).all()
+        smenas = sorted(
+            (
+                FullGroupSmena(
+                    session_smena_id=int(s.id),
+                    day=s.day,
+                    smena_number=int(s.number) if s.number is not None else None,
+                    smena_name=s.name,
+                )
+                for s in smena_rows
+            ),
+            key=lambda s: (s.day, s.smena_number or 0, s.session_smena_id),
+        )
+    smena_order = {s.session_smena_id: i for i, s in enumerate(smenas)}
+
+    zones = [
+        ZoneFullGroups(
+            zone_id=zone_id,
+            total_groups=count,
+            full_groups=sorted(
+                full.get(zone_id, []),
+                key=lambda g: (smena_order.get(g.session_smena_id, 0), g.gr_n),
+            ),
+        )
+        for zone_id, count in total_groups.items()
+    ]
+    return RegionFullGroupsResponse(
+        session_id=session_id,
+        region_id=region_id,
+        scope=scope,
+        smenas=smenas,
+        zones=zones,
     )

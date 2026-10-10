@@ -68,9 +68,15 @@ from app.schemas.test_session import (
     TestSessionUpdate,
 )
 from app.models.test_session_smena import TestSessionSmena
-from app.schemas.dashboard_stats import DashboardStatsResponse
+from app.schemas.dashboard_stats import (
+    DashboardStatsResponse,
+    RegionFullGroupsResponse,
+)
 from app.services.embedding_extractor import get_embedding_progress
-from app.services.dashboard_stats_cache import get_dashboard_stats_cached
+from app.services.dashboard_stats_cache import (
+    get_dashboard_stats_cached,
+    get_region_full_groups_cached,
+)
 from app.services.session_dashboard_stats import (
     DashboardStatsError,
     get_dashboard_stats,
@@ -1197,6 +1203,48 @@ def session_dashboard_stats(
         return get_dashboard_stats_cached(
             db,
             session_id=session_id,
+            scope=scope,
+            session_smena_id=session_smena_id,
+            day=day,
+        )
+    except DashboardStatsError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get(
+    "/{session_id}/dashboard-stats/regions/{region_id}/full-groups",
+    response_model=RegionFullGroupsResponse,
+    summary="Viloyat binolarida 100% kelgan guruhlar",
+)
+def session_region_full_groups(
+    session_id: int,
+    region_id: int,
+    scope: str = Query(
+        "smena",
+        description="Statistika ko'lami: smena | day | overall",
+    ),
+    session_smena_id: int | None = Query(
+        None,
+        description="TestSessionSmena.id — scope=smena uchun majburiy (kun+smena)",
+    ),
+    day: date | None = Query(
+        None,
+        description="Kun (YYYY-MM-DD) — scope=day uchun majburiy",
+    ),
+    db: Session = Depends(get_db),
+    _: User = Depends(PermissionChecker(P.STATISTICS_READ.code)),
+):
+    """Viloyatning har bir binosi uchun hamma talabgori kelgan guruhlar
+    (`gr_n`) ro'yxati — guruh raqami bo'yicha tartiblangan.
+
+    Parametrlar `/dashboard-stats` bilan bir xil. Region modali ochilganda
+    chaqiriladi (real-time'da modal ochiq turganda polling qilinadi).
+    """
+    try:
+        return get_region_full_groups_cached(
+            db,
+            session_id=session_id,
+            region_id=region_id,
             scope=scope,
             session_smena_id=session_smena_id,
             day=day,

@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 /**
  * Modal hayot-sikli yordamchisi:
@@ -42,19 +50,23 @@ function useModalClose(onClose: () => void) {
 }
 import type {
   DashboardStatsResponse,
+  FullGroupItem,
   GenderStat,
+  RegionFullGroupsResponse,
   RegionStatItem,
   SessionStateResponse,
   StatGroup,
   StatsScope,
   TestSessionResponse,
   TestSessionSmenaResponse,
+  ZoneFullGroups,
   ZoneStatItem,
 } from "../interfaces";
 import {
   exportSessionAbsenteesApi,
   exportSessionDashboardStatsApi,
   getOnlineUsersApi,
+  getRegionFullGroupsApi,
   getSessionDashboardStatsApi,
   getSessionStatesLookupApi,
   getTestSessionApi,
@@ -923,9 +935,11 @@ export default function StatisticsPage() {
       )}
 
       {/* Region zone breakdown modali */}
-      {openedRegion && (
+      {openedRegion && stats && (
         <RegionZonesModal
           region={openedRegion}
+          stats={stats}
+          refreshKey={lastUpdated?.getTime() ?? 0}
           orderKey={excelOrder}
           onClose={() => setOpenedRegionId(null)}
         />
@@ -2117,15 +2131,32 @@ function MiniCheating({
  */
 function RegionZonesModal({
   region,
+  stats,
+  refreshKey,
   onClose,
   orderKey = "dtm",
 }: {
   region: RegionStatItem;
+  /** Joriy dashboard javobi — 100% guruhlar shu ko'lam bo'yicha so'raladi. */
+  stats: DashboardStatsResponse;
+  /** Stats har yangilanganda o'zgaradi — guruhlar ham shu bilan birga yangilanadi. */
+  refreshKey: number;
   onClose: () => void;
   orderKey?: "dtm" | "vm" | "iiv";
 }) {
   const { closing, close } = useModalClose(onClose);
   const displayNumber = regionDisplayNumber(region, orderKey);
+  const fullGroups = useRegionFullGroups(stats, region.region_id, refreshKey);
+  const regionFull = useMemo(() => {
+    if (!fullGroups.data) return null;
+    let full = 0;
+    let total = 0;
+    for (const z of fullGroups.data.zones) {
+      full += z.full_groups.length;
+      total += z.total_groups;
+    }
+    return { full, total };
+  }, [fullGroups.data]);
 
   const total = region.stats.total.total;
   const attended = region.stats.attended.total;
@@ -2170,9 +2201,22 @@ function RegionZonesModal({
                 <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white truncate leading-tight">
                   {region.region_name || `Region #${region.region_number}`}
                 </h3>
-                <p className="text-[11px] text-gray-500 dark:text-slate-400 leading-none mt-1">
-                  Binolar bo'yicha taqsimot · {region.zones.length} ta bino
-                </p>
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1">
+                  <p className="text-[11px] text-gray-500 dark:text-slate-400 leading-none">
+                    Binolar bo'yicha taqsimot · {region.zones.length} ta bino
+                  </p>
+                  {regionFull && regionFull.total > 0 && (
+                    <span
+                      className="inline-flex items-center gap-1 px-1.5 h-5 rounded-full text-[10.5px] font-semibold bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/70 dark:bg-emerald-900/30 dark:text-emerald-300 dark:ring-emerald-800/50"
+                      title="Hamma talabgori kelgan guruhlar / barcha guruhlar"
+                    >
+                      <BadgeCheckIcon className="w-3 h-3" />
+                      <span className="tabular-nums">
+                        100%: {regionFull.full} / {regionFull.total} guruh
+                      </span>
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -2252,6 +2296,7 @@ function RegionZonesModal({
 
         {/* Body: zonalar — bo'limli viloyatda (is_have_part) is_part bo'yicha
             ikki guruhga ajraladi, har biri birlashgan davomati bilan. */}
+        <FullGroupsContext.Provider value={fullGroups.ctx}>
         <div className="overflow-y-auto px-3 sm:px-4 py-3 sm:py-4">
           {region.zones.length === 0 ? (
             <div className="py-12 text-center text-gray-500 dark:text-slate-400 text-sm">
@@ -2283,6 +2328,7 @@ function RegionZonesModal({
             </div>
           )}
         </div>
+        </FullGroupsContext.Provider>
       </div>
     </div>
   );
@@ -2572,10 +2618,38 @@ function ZoneCard({
   const pctText = compact ? "text-sm" : "text-base";
   const miniSize: MiniSize = compact ? "sm" : "md";
 
+  // 100% kelgan guruhlar — faqat region modali ichida (context bor bo'lsa).
+  const fg = useContext(FullGroupsContext);
+  const zoneGroups = fg?.byZone.get(item.zone_id);
+  const fullCount = zoneGroups?.full_groups.length ?? 0;
+  // Ochish ma'noga ega bo'lsa: preview'ga sig'maydi yoki smenalarga bo'linadi
+  const expandable =
+    !!fg && (fg.multiSmena ? fullCount > 0 : fullCount > FULL_GROUPS_PREVIEW);
+  const expanded = expandable && !!fg?.expanded.has(item.zone_id);
+  const toggle = () => fg?.toggle(item.zone_id);
+
   return (
     <article
-      className={`rounded-2xl bg-white dark:bg-slate-800/70 ring-1 ring-gray-100 dark:ring-slate-700/60 hover:ring-primary-200 dark:hover:ring-primary-700/50 hover:shadow-sm transition-all duration-200 ${pad}`}
+      className={`rounded-2xl bg-white dark:bg-slate-800/70 ring-1 ring-gray-100 dark:ring-slate-700/60 hover:ring-primary-200 dark:hover:ring-primary-700/50 hover:shadow-sm transition-all duration-200 ${pad} ${
+        expandable
+          ? "cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400"
+          : ""
+      } ${expanded ? "md:col-span-2" : ""}`}
       aria-label={`Bino ${item.zone_number}: ${item.zone_name}`}
+      {...(expandable
+        ? {
+            role: "button",
+            tabIndex: 0,
+            "aria-expanded": expanded,
+            onClick: toggle,
+            onKeyDown: (e: React.KeyboardEvent) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                toggle();
+              }
+            },
+          }
+        : {})}
     >
       <header className="flex items-center justify-between gap-2.5 mb-2.5">
         <div className="flex items-center gap-2.5 min-w-0">
@@ -2644,7 +2718,279 @@ function ZoneCard({
           size={miniSize}        />
         <MiniCheating cheating={item.stats.cheating} size={miniSize} />
       </div>
+
+      {fg && (
+        <ZoneFullGroupsPanel
+          groups={zoneGroups}
+          ctx={fg}
+          expandable={expandable}
+          expanded={expanded}
+        />
+      )}
     </article>
+  );
+}
+
+/* ============== 100% kelgan guruhlar ============== */
+
+/** Yig'iq holatda ko'rinadigan guruh chiplari soni. */
+const FULL_GROUPS_PREVIEW = 16;
+
+type FullGroupsCtx = {
+  byZone: Map<number, ZoneFullGroups>;
+  /** session_smena_id → "2026-10-10 · 1-smena" */
+  smenaLabel: Map<number, string>;
+  /** Kunlik/umumiy ko'lam — guruhlar smenalar bo'yicha ajratiladi. */
+  multiSmena: boolean;
+  /** Birinchi javob hali kelmagan. */
+  loading: boolean;
+  error: string | null;
+  expanded: Set<number>;
+  toggle: (zoneId: number) => void;
+};
+
+const FullGroupsContext = createContext<FullGroupsCtx | null>(null);
+
+/**
+ * Region modali uchun 100% kelgan guruhlar. Asosiy stats har yangilanganda
+ * (`refreshKey`) qayta so'raladi — shuning uchun polling, tab fonga o'tganda
+ * to'xtash va real-time/oxirgi holat mantiqi dashboard bilan bir xil.
+ * Oldingi so'rov hali tugamagan bo'lsa yangi tick o'tkazib yuboriladi.
+ */
+function useRegionFullGroups(
+  stats: DashboardStatsResponse,
+  regionId: number,
+  refreshKey: number,
+): { data: RegionFullGroupsResponse | null; ctx: FullGroupsCtx } {
+  const { session_id, scope, session_smena_id, day } = stats;
+  // So'rov kaliti — ko'lam o'zgarsa eski javob ko'rsatilmaydi.
+  const key = `${session_id}|${regionId}|${scope}|${session_smena_id ?? ""}|${day ?? ""}`;
+
+  const [result, setResult] = useState<{
+    key: string;
+    data: RegionFullGroupsResponse;
+  } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<Set<number>>(() => new Set());
+  const inFlightRef = useRef<{ key: string; ctrl: AbortController } | null>(
+    null,
+  );
+
+  useEffect(() => {
+    if (inFlightRef.current?.key === key) return; // overlap guard
+    inFlightRef.current?.ctrl.abort();
+    const ctrl = new AbortController();
+    inFlightRef.current = { key, ctrl };
+    getRegionFullGroupsApi(
+      session_id,
+      regionId,
+      { scope, sessionSmenaId: session_smena_id, day },
+      ctrl.signal,
+    )
+      .then((data) => {
+        setResult({ key, data });
+        setError(null);
+      })
+      .catch((err) => {
+        if (!isAbortError(err)) setError(extractErrorMessage(err));
+      })
+      .finally(() => {
+        if (inFlightRef.current?.ctrl === ctrl) inFlightRef.current = null;
+      });
+  }, [key, refreshKey, session_id, regionId, scope, session_smena_id, day]);
+
+  // Unmount'da osilib qolgan so'rovni bekor qilamiz.
+  useEffect(() => () => inFlightRef.current?.ctrl.abort(), []);
+
+  const data = result?.key === key ? result.data : null;
+
+  const toggle = useCallback((zoneId: number) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(zoneId)) next.delete(zoneId);
+      else next.add(zoneId);
+      return next;
+    });
+  }, []);
+
+  const ctx = useMemo<FullGroupsCtx>(() => {
+    const byZone = new Map<number, ZoneFullGroups>();
+    const smenaLabel = new Map<number, string>();
+    for (const z of data?.zones ?? []) byZone.set(z.zone_id, z);
+    for (const sm of data?.smenas ?? []) {
+      const name =
+        sm.smena_name ||
+        (sm.smena_number != null ? `${sm.smena_number}-smena` : "smena");
+      smenaLabel.set(sm.session_smena_id, `${sm.day} · ${name}`);
+    }
+    return {
+      byZone,
+      smenaLabel,
+      multiSmena: scope !== "smena",
+      loading: !data && !error,
+      error: data ? null : error,
+      expanded,
+      toggle,
+    };
+  }, [data, error, scope, expanded, toggle]);
+
+  return { data, ctx };
+}
+
+/** Guruh raqami chipi — tooltip'da talabgorlar soni va smena. */
+function GroupChip({
+  group,
+  smenaLabel,
+}: {
+  group: FullGroupItem;
+  smenaLabel?: string;
+}) {
+  const title =
+    `${group.gr_n}-guruh · ${group.total} ta talabgor — hammasi kelgan` +
+    (group.cheating > 0 ? ` (${group.cheating} tasi chetlatilgan)` : "") +
+    (smenaLabel ? `\n${smenaLabel}` : "");
+  return (
+    <span
+      title={title}
+      className="relative inline-flex items-center justify-center min-w-[2rem] h-6 px-1.5 rounded-md text-[11.5px] font-bold tabular-nums leading-none bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/70 dark:bg-emerald-900/30 dark:text-emerald-300 dark:ring-emerald-800/50"
+    >
+      {group.gr_n}
+      {group.cheating > 0 && (
+        <span
+          className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-red-500 ring-1 ring-white dark:ring-slate-800"
+          aria-hidden
+        />
+      )}
+    </span>
+  );
+}
+
+/**
+ * Bino kartasining pastki qismi — hamma talabgori kelgan guruhlar (gr_n
+ * bo'yicha). Yig'iq holatda birinchi `FULL_GROUPS_PREVIEW` ta chip (kunlik/
+ * umumiy ko'lamda — smenalar bo'yicha soni); karta bosilganda to'liq ro'yxat.
+ */
+function ZoneFullGroupsPanel({
+  groups,
+  ctx,
+  expandable,
+  expanded,
+}: {
+  groups: ZoneFullGroups | undefined;
+  ctx: FullGroupsCtx;
+  expandable: boolean;
+  expanded: boolean;
+}) {
+  const full = useMemo(() => groups?.full_groups ?? [], [groups]);
+  const totalGroups = groups?.total_groups ?? 0;
+
+  // Smenalar bo'yicha bo'lish (backend allaqachon smena → gr_n tartibida)
+  const bySmena = useMemo(() => {
+    const m = new Map<number, FullGroupItem[]>();
+    for (const g of full) {
+      const list = m.get(g.session_smena_id);
+      if (list) list.push(g);
+      else m.set(g.session_smena_id, [g]);
+    }
+    return [...m.entries()];
+  }, [full]);
+
+  let body: React.ReactNode;
+  if (ctx.loading) {
+    body = (
+      <div className="flex gap-1.5" aria-hidden>
+        {[0, 1, 2, 3].map((i) => (
+          <span
+            key={i}
+            className="w-8 h-6 rounded-md bg-gray-100 dark:bg-slate-700/50 animate-pulse"
+          />
+        ))}
+      </div>
+    );
+  } else if (ctx.error) {
+    body = (
+      <p className="text-[11px] text-red-600 dark:text-red-400">{ctx.error}</p>
+    );
+  } else if (totalGroups === 0) {
+    body = (
+      <p className="text-[11px] text-gray-400 dark:text-slate-500">
+        Guruh ma'lumoti yo'q
+      </p>
+    );
+  } else if (full.length === 0) {
+    body = (
+      <p className="text-[11px] text-gray-400 dark:text-slate-500">
+        Hozircha to'liq kelgan guruh yo'q
+      </p>
+    );
+  } else if (ctx.multiSmena) {
+    body = (
+      <div className="space-y-1.5">
+        {bySmena.map(([smenaId, list]) => (
+          <div key={smenaId}>
+            <p className="flex items-center justify-between gap-2 text-[10.5px] font-semibold text-gray-500 dark:text-slate-400">
+              <span className="truncate">
+                {ctx.smenaLabel.get(smenaId) ?? `Smena #${smenaId}`}
+              </span>
+              <span className="tabular-nums shrink-0">{list.length} ta</span>
+            </p>
+            {expanded && (
+              <div className="flex flex-wrap gap-1 mt-1">
+                {list.map((g) => (
+                  <GroupChip
+                    key={g.gr_n}
+                    group={g}
+                    smenaLabel={ctx.smenaLabel.get(smenaId)}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    );
+  } else {
+    const shown = expanded ? full : full.slice(0, FULL_GROUPS_PREVIEW);
+    const hidden = full.length - shown.length;
+    body = (
+      <div className="flex flex-wrap gap-1">
+        {shown.map((g) => (
+          <GroupChip key={g.gr_n} group={g} />
+        ))}
+        {hidden > 0 && (
+          <span className="inline-flex items-center h-6 px-1.5 rounded-md text-[11px] font-semibold text-primary-700 dark:text-primary-300 bg-primary-50 dark:bg-primary-900/30">
+            +{hidden}
+          </span>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-2.5 pt-2.5 border-t border-dashed border-gray-200 dark:border-slate-700/70">
+      <div className="flex items-center justify-between gap-2 mb-1.5">
+        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">
+          <BadgeCheckIcon className="w-3.5 h-3.5" />
+          100% kelgan guruhlar
+        </span>
+        <span className="inline-flex items-center gap-1 text-[11px] text-gray-500 dark:text-slate-400">
+          {!ctx.loading && totalGroups > 0 && (
+            <span className="tabular-nums font-semibold">
+              <span className="text-emerald-700 dark:text-emerald-300">
+                {full.length}
+              </span>{" "}
+              / {totalGroups}
+            </span>
+          )}
+          {expandable && (
+            <ChevronDownIcon
+              className={`w-3.5 h-3.5 transition-transform duration-200 ${expanded ? "rotate-180" : ""}`}
+            />
+          )}
+        </span>
+      </div>
+      {body}
+    </div>
   );
 }
 
@@ -3230,6 +3576,44 @@ function LayersIcon({ className = "w-4 h-4" }: { className?: string }) {
         strokeLinejoin="round"
         strokeWidth={2}
         d="M12 3l9 5-9 5-9-5 9-5zM3 12l9 5 9-5M3 17l9 5 9-5"
+      />
+    </svg>
+  );
+}
+
+function BadgeCheckIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+      aria-hidden
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"
+      />
+    </svg>
+  );
+}
+
+function ChevronDownIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+      aria-hidden
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M19 9l-7 7-7-7"
       />
     </svg>
   );

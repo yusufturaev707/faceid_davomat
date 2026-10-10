@@ -32,6 +32,7 @@ from app.schemas.davomat_bot import (
     BotSessionStatsResponse,
     BotZoneStat,
 )
+from app.services.session_dashboard_stats import collect_full_groups
 
 
 class BotStatsError(Exception):
@@ -215,6 +216,40 @@ def compute_bot_stats(
                 "cheating": int(row.cheating or 0),
             }
 
+    # 100% kelgan guruhlar — guruh = (smena, bino, gr_n); ta'rif admin
+    # dashboard bilan umumiy (`collect_full_groups`).
+    total_groups: dict[int, int] = {}
+    full_groups: dict[int, list] = {}
+    if zone_ids and smena_ids:
+        group_rows = db.execute(
+            select(
+                Student.zone_id,
+                Student.session_smena_id,
+                Student.gr_n,
+                func.count(Student.id).label("total"),
+                func.sum(
+                    case(
+                        (
+                            (Student.is_entered.is_(True))
+                            | (Student.is_cheating.is_(True)),
+                            1,
+                        ),
+                        else_=0,
+                    )
+                ).label("attended"),
+                func.sum(
+                    case((Student.is_cheating.is_(True), 1), else_=0)
+                ).label("cheating"),
+            )
+            .where(
+                Student.session_smena_id.in_(smena_ids),
+                Student.zone_id.in_(zone_ids),
+                Student.gr_n > 0,
+            )
+            .group_by(Student.zone_id, Student.session_smena_id, Student.gr_n)
+        ).all()
+        total_groups, full_groups = collect_full_groups(group_rows)
+
     regions_payload: list[BotRegionStat] = []
     for region_id, (region_name, region_number) in sorted(
         region_meta.items(), key=lambda kv: kv[1][1]
@@ -236,6 +271,11 @@ def compute_bot_stats(
                     entered=entered,
                     not_entered=max(0, total - entered),
                     cheating=cheating,
+                    total_groups=total_groups.get(int(z.id), 0),
+                    full_groups=sorted(
+                        full_groups.get(int(z.id), []),
+                        key=lambda g: (g.session_smena_id, g.gr_n),
+                    ),
                 )
             )
             r_total += total

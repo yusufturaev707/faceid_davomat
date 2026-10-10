@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { api } from "../api";
 import { AttendanceSummary } from "../components/AttendanceSummary";
-import { Ban, BarChart, FileDown, ScanFace, UserMinus } from "../components/icons";
+import { Ban, BarChart, FileDown, ScanFace, UserCheck, UserMinus } from "../components/icons";
 import { Card, ErrorState, LoadingState, Row, Screen, Section } from "../components/ui";
 import { useApp } from "../context";
 import { useAsync, useSendAbsentees } from "../hooks";
@@ -45,6 +45,13 @@ export function SmenaScreen({ session, smena }: { session: ReadySession; smena: 
           title="Face ID"
           subtitle="Pasport + selfi tekshiruvi va davomatga qo'shish"
           onClick={() => nav.push({ name: "faceid", session, smena })}
+        />
+        <Row
+          icon={<UserCheck />}
+          tone="neutral"
+          title="Faqat tekshirish"
+          subtitle="Pasport + selfi, testga bog'lanmagan — davomatga yozilmaydi"
+          onClick={() => nav.push({ name: "facecheck" })}
         />
         <Row
           icon={<UserMinus />}

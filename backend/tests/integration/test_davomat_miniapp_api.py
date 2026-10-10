@@ -274,3 +274,68 @@ def test_absentees_region_outside_assignment_is_forbidden(api, operator, monkeyp
         json={"region_id": 99},
     )
     assert r.status_code == 403
+
+
+def _face_check(api, **overrides):
+    body = {
+        "ps_ser": "АD",  # kirillcha А — lotinga o'giriladi
+        "ps_num": "1234567",
+        "jshshir": "12345678901234",
+        "selfie_b64": SELFIE_B64,
+    }
+    body.update(overrides)
+    return api.post("/api/v1/davomat-miniapp/face-check", headers=_auth(), json=body)
+
+
+def test_face_check_compares_passport_photo_without_session(api, operator, monkeypatch):
+    from app.services import face_service
+
+    calls = {}
+
+    def fake_gtsp(ps_value, imei_value):
+        calls["gtsp"] = (ps_value, imei_value)
+        return {"photo": "cGhvdG8=", "sname": "Aliyev", "fname": "Ali"}, None
+
+    monkeypatch.setattr(endpoint.svc, "_call_gtsp", fake_gtsp)
+    monkeypatch.setattr(endpoint.svc, "_lookup_student_in_session", pytest.fail)
+    monkeypatch.setattr(
+        face_service,
+        "compare_two_faces",
+        lambda _p, _s: (
+            SimpleNamespace(verified=True, score=0.834, thresh_score=0.5, message="Mos"),
+            None,
+            None,
+        ),
+    )
+
+    r = _face_check(api)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert calls["gtsp"] == ("AD1234567", "12345678901234")
+    assert (body["status"], body["verified"], body["score"], body["threshold"]) == ("ok", True, 83, 50)
+    assert body["fio"] == "Aliyev Ali"
+    assert body["photo_b64"] == "cGhvdG8="
+    assert "verify_ticket" not in body
+
+
+def test_face_check_reports_wrong_passport(api, operator, monkeypatch):
+    monkeypatch.setattr(endpoint.svc, "_call_gtsp", lambda *_a: (None, "GTSP: topilmadi"))
+    r = _face_check(api)
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "wrong_passport"
+    assert "GTSP: topilmadi" in r.json()["message"]
+
+
+def test_face_check_validates_jshshir(api, operator, monkeypatch):
+    monkeypatch.setattr(endpoint.svc, "face_check", pytest.fail)
+    assert _face_check(api, jshshir="123").status_code == 422
+
+
+def test_face_check_requires_registered_operator(api, operator, monkeypatch):
+    monkeypatch.setattr(endpoint.svc, "face_check", pytest.fail)
+    r = api.post(
+        "/api/v1/davomat-miniapp/face-check",
+        headers=_auth(telegram_id=999),
+        json={"ps_ser": "AD", "ps_num": "1", "jshshir": "12345678901234", "selfie_b64": "x"},
+    )
+    assert r.status_code == 403

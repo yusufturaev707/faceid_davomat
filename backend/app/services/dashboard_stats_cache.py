@@ -26,20 +26,28 @@ from __future__ import annotations
 
 import threading
 import time
+from collections.abc import Callable
 from datetime import date
+from typing import TypeVar
 
 from sqlalchemy.orm import Session
 
-from app.schemas.dashboard_stats import DashboardStatsResponse
-from app.services.session_dashboard_stats import get_dashboard_stats
+from app.schemas.dashboard_stats import DashboardStatsResponse, RegionFullGroupsResponse
+from app.services.session_dashboard_stats import (
+    get_dashboard_stats,
+    get_region_full_groups,
+)
 
 # Kesh yashash muddati (sekund). Frontend polling ~5s; 4s TTL bir polling
 # oynasidagi barcha bir vaqtli so'rovlarni bitta hisobga yig'adi, staleness
 # esa <= 4s bo'lib qoladi.
 _TTL_SECONDS = 4.0
 
-# key -> (expiry_monotonic, DashboardStatsResponse)
-_cache: dict[tuple, tuple[float, DashboardStatsResponse]] = {}
+T = TypeVar("T")
+
+# key -> (expiry_monotonic, natija). Kalitning birinchi elementi — natija turi
+# ("stats" | "full_groups"), shuning uchun turli endpointlar to'qnashmaydi.
+_cache: dict[tuple, tuple[float, object]] = {}
 # Kesh dict va _key_locks ni himoya qiluvchi yengil, qisqa ushlab turiladigan qulf.
 _cache_lock = threading.Lock()
 # Har kalit uchun single-flight qulfi (bir kalitni bir vaqtda faqat bitta
@@ -48,16 +56,20 @@ _key_locks: dict[tuple, threading.Lock] = {}
 
 
 def _make_key(
+    kind: str,
     session_id: int,
     scope: str,
     session_smena_id: int | None,
     day: date | None,
+    *extra: int,
 ) -> tuple:
     return (
+        kind,
         int(session_id),
         str(scope),
         int(session_smena_id) if session_smena_id is not None else None,
         day.isoformat() if day is not None else None,
+        *extra,
     )
 
 
@@ -70,7 +82,7 @@ def _get_key_lock(key: tuple) -> threading.Lock:
         return lk
 
 
-def _read_fresh(key: tuple, now: float) -> DashboardStatsResponse | None:
+def _read_fresh(key: tuple, now: float) -> object | None:
     with _cache_lock:
         hit = _cache.get(key)
         if hit is not None and hit[0] > now:
@@ -78,7 +90,7 @@ def _read_fresh(key: tuple, now: float) -> DashboardStatsResponse | None:
     return None
 
 
-def _store(key: tuple, value: DashboardStatsResponse) -> None:
+def _store(key: tuple, value: object) -> None:
     now = time.monotonic()
     with _cache_lock:
         _cache[key] = (now + _TTL_SECONDS, value)
@@ -88,6 +100,30 @@ def _store(key: tuple, value: DashboardStatsResponse) -> None:
             expired = [k for k, (exp, _) in _cache.items() if exp <= now]
             for k in expired:
                 _cache.pop(k, None)
+
+
+def _get_or_compute(key: tuple, compute: Callable[[], T]) -> T:
+    """Kesh + single-flight: yangi kesh bo'lsa uni, aks holda bitta thread
+    `compute()` ni hisoblaydi, qolganlari o'sha natijani oladi."""
+    # 1) Tez yo'l — yangi kesh bo'lsa, darhol qaytaramiz (DB'ga tegmaymiz).
+    fresh = _read_fresh(key, time.monotonic())
+    if fresh is not None:
+        return fresh  # type: ignore[return-value]
+
+    # 2) Kesh yo'q/eskirgan — single-flight: bu kalit uchun faqat bitta thread
+    #    hisoblaydi, qolganlari qulfda kutib, natijani qayta o'qiydi.
+    lock = _get_key_lock(key)
+    with lock:
+        # Qulfni kutib turgan vaqtda boshqa thread hisoblab qo'ygan bo'lishi
+        # mumkin — qayta tekshiramiz.
+        fresh = _read_fresh(key, time.monotonic())
+        if fresh is not None:
+            return fresh  # type: ignore[return-value]
+
+        # Faqat bitta thread shu yergacha yetadi — DB'dan bir marta hisoblaydi.
+        result = compute()
+        _store(key, result)
+        return result
 
 
 def get_dashboard_stats_cached(
@@ -103,33 +139,44 @@ def get_dashboard_stats_cached(
     Real-time polling endpointi shu funksiyani chaqiradi. Argumentlar va
     qaytish qiymati `get_dashboard_stats` bilan bir xil.
     """
-    key = _make_key(session_id, scope, session_smena_id, day)
-
-    # 1) Tez yo'l — yangi kesh bo'lsa, darhol qaytaramiz (DB'ga tegmaymiz).
-    fresh = _read_fresh(key, time.monotonic())
-    if fresh is not None:
-        return fresh
-
-    # 2) Kesh yo'q/eskirgan — single-flight: bu kalit uchun faqat bitta thread
-    #    hisoblaydi, qolganlari qulfda kutib, natijani qayta o'qiydi.
-    lock = _get_key_lock(key)
-    with lock:
-        # Qulfni kutib turgan vaqtda boshqa thread hisoblab qo'ygan bo'lishi
-        # mumkin — qayta tekshiramiz.
-        fresh = _read_fresh(key, time.monotonic())
-        if fresh is not None:
-            return fresh
-
-        # Faqat bitta thread shu yergacha yetadi — DB'dan bir marta hisoblaydi.
-        result = get_dashboard_stats(
+    key = _make_key("stats", session_id, scope, session_smena_id, day)
+    return _get_or_compute(
+        key,
+        lambda: get_dashboard_stats(
             db,
             session_id=session_id,
             scope=scope,
             session_smena_id=session_smena_id,
             day=day,
-        )
-        _store(key, result)
-        return result
+        ),
+    )
+
+
+def get_region_full_groups_cached(
+    db: Session,
+    *,
+    session_id: int,
+    region_id: int,
+    scope: str,
+    session_smena_id: int | None = None,
+    day: date | None = None,
+) -> RegionFullGroupsResponse:
+    """`get_region_full_groups` ning keshli + single-flight varianti —
+    region modali ochiq turganda frontend uni ham har 5s so'raydi."""
+    key = _make_key(
+        "full_groups", session_id, scope, session_smena_id, day, int(region_id)
+    )
+    return _get_or_compute(
+        key,
+        lambda: get_region_full_groups(
+            db,
+            session_id=session_id,
+            region_id=region_id,
+            scope=scope,
+            session_smena_id=session_smena_id,
+            day=day,
+        ),
+    )
 
 
 def invalidate_dashboard_stats() -> None:

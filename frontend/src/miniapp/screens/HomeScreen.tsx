@@ -1,5 +1,5 @@
 import { api } from "../api";
-import { Calendar, MapPin, User } from "../components/icons";
+import { Calendar, MapPin, ScanFace, User } from "../components/icons";
 import { EmptyState, ErrorState, IconButton, LoadingState, Row, Screen, Section } from "../components/ui";
 import { useApp } from "../context";
 import { useAsync } from "../hooks";
@@ -30,6 +30,15 @@ export function HomeScreen() {
           title={region.name}
           subtitle={canChangeRegion ? "Joriy viloyat • almashtirish uchun bosing" : "Joriy viloyat"}
           onClick={canChangeRegion ? () => nav.push({ name: "regions" }) : undefined}
+        />
+      </Section>
+
+      <Section title="Face ID" footer="Natija davomatga yozilmaydi va test tadbiriga bog'lanmaydi.">
+        <Row
+          icon={<ScanFace />}
+          title="Shaxsni tekshirish"
+          subtitle="Faqat pasport + selfi tekshiruvi"
+          onClick={() => nav.push({ name: "facecheck" })}
         />
       </Section>
 

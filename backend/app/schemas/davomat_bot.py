@@ -7,6 +7,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
+from app.schemas.dashboard_stats import FullGroupItem
+
 
 # === Access check / profile ===
 
@@ -89,6 +91,10 @@ class BotZoneStat(BaseModel):
     entered: int
     not_entered: int
     cheating: int
+    # Binodagi guruhlar (`gr_n > 0`, smena+gr_n) soni va hamma talabgori
+    # kelgan guruhlar — (session_smena_id, gr_n) tartibida.
+    total_groups: int = 0
+    full_groups: list[FullGroupItem] = Field(default_factory=list)
 
 
 class BotRegionStat(BaseModel):

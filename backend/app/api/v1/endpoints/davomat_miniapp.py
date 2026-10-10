@@ -21,6 +21,7 @@ Flow:
   4. `POST /sessions/{id}/absentees/send`      — kelmaganlar Excel → Telegram chat.
   5. `POST /passport-qr`                       — QR → ps_ser/ps_num/jshshir.
   6. `POST /face-verify` → `POST /mark-attendance`.
+     `POST /face-check` — faqat shaxsni tekshirish (testga bog'lanmagan).
   7. `POST /find-by-jshshir` → `POST /remove-attendance`.
   8. `GET  /reason-types`, `GET /reasons`, `POST /find-for-cheat` → `POST /cheating`.
 
@@ -63,6 +64,8 @@ from app.schemas.davomat_miniapp import (
     MiniAppAbsenteesRequest,
     MiniAppAbsenteesResponse,
     MiniAppCheatRequest,
+    MiniAppFaceCheckRequest,
+    MiniAppFaceCheckResponse,
     MiniAppFaceVerifyRequest,
     MiniAppFaceVerifyResponse,
     MiniAppFindByJshshirRequest,
@@ -362,6 +365,40 @@ def face_verify(
     return MiniAppFaceVerifyResponse(
         **result.model_dump(exclude={"selfie_b64"}),
         verify_ticket=ticket,
+    )
+
+
+@router.post("/face-check", response_model=MiniAppFaceCheckResponse)
+@limiter.limit("30/minute")
+def face_check(
+    request: Request,
+    body: MiniAppFaceCheckRequest,
+    op: MiniAppOperator = Depends(get_operator),
+    db: Session = Depends(get_db),
+):
+    """Faqat shaxsni tekshirish: pasport (GTSP) rasmi ↔ selfie.
+
+    Test sessiyasi/smenaga bog'lanmagan — talabgor bazada qidirilmaydi, davomat
+    chiptasi berilmaydi va hech narsa yozilmaydi.
+    """
+    # Operator aniqlandi — GTSP (30s gacha) va inference davomida pool
+    # ulanishini band qilib turmaymiz.
+    db.rollback()
+    match = svc.face_check(
+        op.bot,
+        ps_ser=body.ps_ser,
+        ps_num=body.ps_num,
+        jshshir=body.jshshir,
+        selfie_b64=body.selfie_b64,
+    )
+    return MiniAppFaceCheckResponse(
+        status=match.status,
+        verified=match.verified,
+        score=match.score,
+        threshold=match.threshold,
+        fio=match.gtsp_fio or None,
+        photo_b64=match.photo_b64,
+        message=match.message,
     )
 
 

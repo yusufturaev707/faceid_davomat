@@ -102,6 +102,29 @@ class MiniAppFaceVerifyResponse(BaseModel):
     verify_ticket: str | None = None
 
 
+class MiniAppFaceCheckRequest(BaseModel):
+    """Faqat shaxsni tekshirish — test sessiyasiga bog'lanmagan."""
+
+    ps_ser: str = Field(..., min_length=1, max_length=5)
+    ps_num: str = Field(..., min_length=1, max_length=10)
+    jshshir: str = Field(..., pattern=r"^\d{14}$")
+    selfie_b64: str = Field(..., min_length=1)
+
+
+class MiniAppFaceCheckResponse(BaseModel):
+    """`ok` — solishtirildi (natija `verified`/`score` da); qolganlari
+    `MiniAppFaceVerifyResponse` dagi bilan bir xil ma'noda. `fio` — GTSP
+    bo'yicha. Davomat chiptasi yo'q: bu natija bilan davomatga qo'shilmaydi."""
+
+    status: Literal["ok", "wrong_passport", "no_face", "error"]
+    verified: bool = False
+    score: int = 0
+    threshold: int = 0
+    fio: str | None = None
+    photo_b64: str | None = None
+    message: str = ""
+
+
 class MiniAppMarkAttendanceRequest(BaseModel):
     """Davomatga qo'shish — talabgor, smena, region va ball chiptadan olinadi.
 

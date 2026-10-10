@@ -97,6 +97,8 @@ function renderRoute(route: Route) {
       return <StatsScreen session={route.session} scope={route.scope} />;
     case "faceid":
       return <FaceIdScreen session={route.session} smena={route.smena} />;
+    case "facecheck":
+      return <FaceIdScreen />;
     case "remove":
       return <RemoveScreen smena={route.smena} />;
     case "cheat":

@@ -49,10 +49,23 @@ export interface AttendanceCounts {
   cheating: number;
 }
 
+/** Hamma talabgori kelgan guruh (chetlatilganlar ham "kelgan"). */
+export interface FullGroup {
+  gr_n: number;
+  /** TestSessionSmena.id */
+  session_smena_id: number;
+  total: number;
+  cheating: number;
+}
+
 export interface ZoneStat extends AttendanceCounts {
   zone_id: number;
   zone_name: string;
   zone_number: number;
+  /** Binodagi guruhlar soni (smena+gr_n) */
+  total_groups: number;
+  /** (smena, gr_n) tartibida */
+  full_groups: FullGroup[];
 }
 
 export interface RegionStat extends AttendanceCounts {
@@ -128,6 +141,18 @@ export interface FaceVerifyResponse {
   message: string;
   slot: StudentSlot | null;
   verify_ticket: string | null;
+}
+
+/** Faqat shaxsni tekshirish (testga bog'lanmagan) natijasi. */
+export interface FaceCheckResponse {
+  status: "ok" | "wrong_passport" | "no_face" | "error";
+  verified: boolean;
+  score: number;
+  threshold: number;
+  /** GTSP bo'yicha FIO */
+  fio: string | null;
+  photo_b64: string | null;
+  message: string;
 }
 
 export interface MarkAttendanceResponse {

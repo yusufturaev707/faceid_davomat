@@ -1,6 +1,10 @@
 /**
  * Face ID: pasport → selfi → natija → davomatga qo'shish.
  *
+ * `session`/`smena` berilmasa — "faqat tekshirish" rejimi: pasport (GTSP)
+ * rasmi selfi bilan solishtiriladi, test tadbiriga bog'lanmaydi va davomatga
+ * hech narsa yozilmaydi (`POST /face-check`).
+ *
  * Bot'dagi oqim bilan bir xil, qo'shimchalar:
  *  - ID-karta QR'i uch yo'l bilan o'qiladi: ilova ichidagi jonli kamera
  *    (`components/QrCamera`), Telegram native skaneri va tayyor rasm;
@@ -32,6 +36,7 @@ import { useApp } from "../context";
 import { useBackHandler } from "../navigation";
 import { telegram } from "../telegram";
 import type {
+  FaceCheckResponse,
   FaceVerifyResponse,
   MarkAttendanceResponse,
   PassportData,
@@ -51,7 +56,7 @@ import {
 type Step = "passport" | "selfie" | "result";
 type PassportMode = "qr" | "manual";
 
-export function FaceIdScreen({ session, smena }: { session: ReadySession; smena: SmenaInfo }) {
+export function FaceIdScreen({ session, smena }: { session?: ReadySession; smena?: SmenaInfo }) {
   const { region } = useApp();
   const toast = useToast();
   const [step, setStep] = useState<Step>("passport");
@@ -59,6 +64,7 @@ export function FaceIdScreen({ session, smena }: { session: ReadySession; smena:
   const [selfie, setSelfie] = useState<PreparedImage | null>(null);
   const [verifying, setVerifying] = useState(false);
   const [result, setResult] = useState<FaceVerifyResponse | null>(null);
+  const [check, setCheck] = useState<FaceCheckResponse | null>(null);
   const [marking, setMarking] = useState(false);
   const [attendance, setAttendance] = useState<MarkAttendanceResponse | null>(null);
 
@@ -66,6 +72,7 @@ export function FaceIdScreen({ session, smena }: { session: ReadySession; smena:
     if (verifying || marking) return true;
     if (step === "result" && !attendance) {
       setResult(null);
+      setCheck(null);
       setStep("selfie");
       return true;
     }
@@ -80,6 +87,7 @@ export function FaceIdScreen({ session, smena }: { session: ReadySession; smena:
     setPassport(null);
     setSelfie(null);
     setResult(null);
+    setCheck(null);
     setAttendance(null);
     setStep("passport");
     window.scrollTo(0, 0);
@@ -89,6 +97,20 @@ export function FaceIdScreen({ session, smena }: { session: ReadySession; smena:
     if (!passport || !selfie) return;
     setVerifying(true);
     try {
+      if (!session || !smena) {
+        const response = await api.faceCheck({ ...passport, selfie_b64: selfie.base64 });
+        setCheck(response);
+        setStep("result");
+        telegram.haptic(
+          response.status === "ok" && response.verified
+            ? "success"
+            : response.status === "no_face"
+              ? "warning"
+              : "error",
+        );
+        window.scrollTo(0, 0);
+        return;
+      }
       const response = await api.faceVerify({
         session_id: session.id,
         session_smena_id: smena.id,
@@ -136,8 +158,19 @@ export function FaceIdScreen({ session, smena }: { session: ReadySession; smena:
     }
   };
 
+  const checkOnly = !session || !smena;
+
   return (
-    <Screen title="Face ID" subtitle={`${smena.smena_name} • ${formatDay(smena.day)}`}>
+    <Screen
+      title={checkOnly ? "Shaxsni tekshirish" : "Face ID"}
+      subtitle={checkOnly ? "Faqat pasport + selfi • testga bog'lanmagan" : `${smena.smena_name} • ${formatDay(smena.day)}`}
+    >
+      {step === "passport" && checkOnly && (
+        <Notice tone="accent" title="Faqat tekshirish">
+          Pasport rasmi selfi bilan solishtiriladi. Natija davomatga yozilmaydi va test tadbiriga bog'lanmaydi.
+        </Notice>
+      )}
+
       {step === "passport" && (
         <PassportStep
           initial={passport}
@@ -158,6 +191,24 @@ export function FaceIdScreen({ session, smena }: { session: ReadySession; smena:
           onSelfie={setSelfie}
           onEditPassport={() => setStep("passport")}
           onVerify={verify}
+        />
+      )}
+
+      {step === "result" && check && passport && (
+        <CheckResultStep
+          result={check}
+          passport={passport}
+          selfie={selfie}
+          onRetakeSelfie={() => {
+            setSelfie(null);
+            setCheck(null);
+            setStep("selfie");
+          }}
+          onEditPassport={() => {
+            setCheck(null);
+            setStep("passport");
+          }}
+          onNext={nextStudent}
         />
       )}
 
@@ -554,7 +605,13 @@ function photoSrc(b64: string): string {
   return b64.startsWith("data:") ? b64 : `data:image/jpeg;base64,${b64}`;
 }
 
-function VerifyScore({ result, selfie }: { result: FaceVerifyResponse; selfie: PreparedImage | null }) {
+function VerifyScore({
+  result,
+  selfie,
+}: {
+  result: Pick<FaceVerifyResponse, "photo_b64" | "score" | "threshold" | "verified">;
+  selfie: PreparedImage | null;
+}) {
   return (
     <Card className="space-y-4">
       {(result.photo_b64 || selfie) && (
@@ -593,6 +650,76 @@ function VerifyScore({ result, selfie }: { result: FaceVerifyResponse; selfie: P
         <p className="mt-1.5 text-[12px] text-tg-hint">Tasdiqlash chegarasi: {result.threshold}%</p>
       </div>
     </Card>
+  );
+}
+
+/** "Faqat tekshirish" natijasi — talabgor joyi va davomat amallari yo'q. */
+function CheckResultStep({
+  result,
+  passport,
+  selfie,
+  onRetakeSelfie,
+  onEditPassport,
+  onNext,
+}: {
+  result: FaceCheckResponse;
+  passport: PassportData;
+  selfie: PreparedImage | null;
+  onRetakeSelfie: () => void;
+  onEditPassport: () => void;
+  onNext: () => void;
+}) {
+  const { status, message } = result;
+
+  let notice: ReactElement;
+  switch (status) {
+    case "ok":
+      notice = result.verified ? (
+        <Notice tone="success" title="Shaxs tasdiqlandi">{message}</Notice>
+      ) : (
+        <Notice tone="destructive" title="Shaxs tasdiqlanmadi">{message}</Notice>
+      );
+      break;
+    case "wrong_passport":
+      notice = <Notice tone="destructive" title="Pasport ma'lumotlari xato">{message}</Notice>;
+      break;
+    case "no_face":
+      notice = (
+        <Notice tone="warning" title="Yuz aniqlanmadi">
+          {`${message}\nYorug' joyda, yuzni to'liq ko'rsatib qayta suratga oling.`}
+        </Notice>
+      );
+      break;
+    default:
+      notice = <Notice tone="destructive" title="Xatolik">{message || status}</Notice>;
+  }
+
+  const canRetakeSelfie = status === "ok" || status === "no_face";
+
+  return (
+    <>
+      {notice}
+
+      {status === "ok" && <VerifyScore result={result} selfie={selfie} />}
+
+      <Section title="Shaxs">
+        {status === "ok" && result.fio && <DetailRow label="FIO (GTSP)" value={result.fio} />}
+        <DetailRow label="Seriya va raqam" value={`${passport.ps_ser}${passport.ps_num}`} mono />
+        <DetailRow label="JShShIR" value={passport.jshshir} mono />
+      </Section>
+
+      {(canRetakeSelfie || status === "wrong_passport") && (
+        <Button
+          variant="secondary"
+          onClick={canRetakeSelfie ? onRetakeSelfie : onEditPassport}
+          icon={canRetakeSelfie ? <Camera width={20} height={20} /> : <Pencil width={18} height={18} />}
+        >
+          {canRetakeSelfie ? "Qayta suratga olish" : "Pasportni tuzatish"}
+        </Button>
+      )}
+
+      <MainButton text="Keyingi tekshiruv" onClick={onNext} />
+    </>
   );
 }
 

@@ -28,6 +28,8 @@ export type Route =
   | { name: "smena"; session: ReadySession; smena: SmenaInfo }
   | { name: "stats"; session: ReadySession; scope: StatsScope }
   | { name: "faceid"; session: ReadySession; smena: SmenaInfo }
+  /** Faqat shaxsni tekshirish — test sessiyasiga bog'lanmagan Face ID. */
+  | { name: "facecheck" }
   | { name: "remove"; session: ReadySession; smena: SmenaInfo }
   | { name: "cheat"; session: ReadySession; smena: SmenaInfo };
 

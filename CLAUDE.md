@@ -115,6 +115,11 @@ there is no Telegram host) against `endpoints/davomat_miniapp.py` under `/davoma
 (`core/telegram_webapp.py`), then the active `DavomatBot` is loaded; no API key/JWT/CSRF. Because the client is
 untrusted, `face-verify` returns a signed `verify_ticket` (operator, student, smena, region, score, selfie
 SHA-256; `services/davomat_miniapp.py`) and `mark-attendance` accepts only that ticket plus the same selfie.
+`face-check` is the test-less variant (Home → «Shaxsni tekshirish»): GTSP photo ↔ selfie only, no student lookup,
+no ticket, nothing written — but it is a GTSP lookup for *any* passport, so it is rate-limited and audit-logged.
+"100% kelgan guruhlar" (every student of a smena+zone+`gr_n` attended, cheating counts as attended, `gr_n<=0`
+ignored) is computed once in `session_dashboard_stats.collect_full_groups` and used by both the admin
+`/dashboard-stats/regions/{id}/full-groups` (lazy, per region modal) and the bot/Mini App `BotZoneStat.full_groups`.
 Absentee Excel files are pushed into the user's chat via Bot API `sendDocument`; `CheatingLog.user_id` is
 `DAVOMAT_MINIAPP_USER_ID`. The ID-card QR has three readers, no npm dependency added: the in-app live camera
 (`components/QrCamera.tsx` — `getUserMedia` + `BarcodeDetector` when present, else a shutter that posts the

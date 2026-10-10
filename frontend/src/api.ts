@@ -465,6 +465,35 @@ export async function getSessionDashboardStatsApi(
 }
 
 /**
+ * Viloyat binolarida 100% kelgan guruhlar — region modali ochilganda
+ * so'raladi (asosiy dashboard javobini kattalashtirmaslik uchun alohida).
+ * Ko'lam parametrlari `getSessionDashboardStatsApi` bilan bir xil.
+ */
+export async function getRegionFullGroupsApi(
+  sessionId: number,
+  regionId: number,
+  opts: {
+    scope: import("./interfaces").StatsScope;
+    sessionSmenaId?: number | null;
+    day?: string | null;
+  },
+  signal?: AbortSignal,
+): Promise<import("./interfaces").RegionFullGroupsResponse> {
+  const params: Record<string, string | number> = { scope: opts.scope };
+  if (opts.scope === "smena" && opts.sessionSmenaId != null) {
+    params.session_smena_id = opts.sessionSmenaId;
+  }
+  if (opts.scope === "day" && opts.day) {
+    params.day = opts.day;
+  }
+  const res = await apiClient.get(
+    `/test-sessions/${sessionId}/dashboard-stats/regions/${regionId}/full-groups`,
+    { params, signal, timeout: 20000 },
+  );
+  return res.data;
+}
+
+/**
  * Online foydalanuvchilar — aktiv login sessiyalari va qurilmalar.
  * Har bir foydalanuvchi uchun qurilmalar soni va online holati qaytadi.
  */

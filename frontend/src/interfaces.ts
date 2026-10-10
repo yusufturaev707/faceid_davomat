@@ -395,6 +395,39 @@ export interface DashboardStatsResponse {
   regions: RegionStatItem[];
 }
 
+/** 100% kelgan guruh — undagi hamma talabgor kelgan (chetlatilganlar ham). */
+export interface FullGroupItem {
+  gr_n: number;
+  session_smena_id: number;
+  /** Guruhdagi talabgorlar soni */
+  total: number;
+  /** Shulardan chetlatilganlar */
+  cheating: number;
+}
+
+export interface ZoneFullGroups {
+  zone_id: number;
+  /** Binodagi barcha guruhlar soni (tanlangan ko'lamda) */
+  total_groups: number;
+  /** Tartib: smena (kun → raqam), so'ng gr_n */
+  full_groups: FullGroupItem[];
+}
+
+export interface FullGroupSmena {
+  session_smena_id: number;
+  day: string;
+  smena_number: number | null;
+  smena_name: string | null;
+}
+
+export interface RegionFullGroupsResponse {
+  session_id: number;
+  region_id: number;
+  scope: StatsScope;
+  smenas: FullGroupSmena[];
+  zones: ZoneFullGroups[];
+}
+
 // === Test Dashboard ko'rsatkichlari (viloyat qamrovida) ===
 
 export interface DailyEnteredItem {

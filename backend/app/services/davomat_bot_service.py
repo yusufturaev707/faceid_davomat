@@ -18,7 +18,9 @@ from __future__ import annotations
 
 import base64
 import logging
+from dataclasses import dataclass
 from datetime import datetime, timezone
+from typing import Literal
 
 import httpx
 from fastapi import HTTPException
@@ -384,24 +386,8 @@ def face_verify(
     `can_attend=True` faqat: status=`in_smena`, verified=True, is_applied=False,
     is_entered=False.
     """
-    from app.services.face_service import compare_two_faces
-
     region_filter = ensure_region_assigned(bot, region_id)
-
-    # Cyrillic harflarni Latin'ga normalizatsiya qilamiz — Telegram klaviaturasi
-    # АД (Cyrillic) yuborib qo'ysa, GTSP topa olmaydi.
-    ps_ser_norm = normalize_ps_ser(ps_ser)
-    ps_num_norm = (ps_num or "").strip()
-    ps_value = f"{ps_ser_norm}{ps_num_norm}"
-    imei_value = (jshshir or "").strip()
-
-    if ps_ser_norm != (ps_ser or "").strip().upper():
-        logger.info(
-            "ps_ser normalized: %r → %r (telegram_id=%s)",
-            ps_ser,
-            ps_ser_norm,
-            bot.telegram_id,
-        )
+    ps_value, imei_value = _passport_values(bot, ps_ser, ps_num, jshshir)
 
     logger.info(
         "Bot face-verify: telegram_id=%s, ps=%s, session=%s, smena=%s",
@@ -469,66 +455,142 @@ def face_verify(
     # pool ulanishini band qilib turmaslik uchun o'qish tranzaksiyasini yopamiz.
     db.rollback()
 
-    # ── 3) GTSP chaqiruvi ───────────────────────────────────────────────
+    # ── 3-4) GTSP + yuz solishtirish ────────────────────────────────────
+    match = match_passport_face(ps_value, imei_value, selfie_b64)
+    if match.status != "ok":
+        return BotFaceVerifyResponse(
+            status=match.status,
+            message=match.message,
+            slot=current_slot,
+        )
+
+    return BotFaceVerifyResponse(
+        status="in_smena",
+        verified=match.verified,
+        score=match.score,
+        threshold=match.threshold,
+        can_attend=match.verified and not already_entered,
+        fio=match.gtsp_fio or current_slot.fio,
+        photo_b64=match.photo_b64,
+        selfie_b64=selfie_b64,
+        message=match.message,
+        slot=current_slot,
+    )
+
+
+@dataclass(frozen=True)
+class PassportFaceMatch:
+    """GTSP pasport rasmi bilan selfie solishtiruvi — DB'ga tegmaydi.
+
+    `status`: `ok` (solishtirildi, natija `verified`/`score` da) |
+    `wrong_passport` (GTSP rasm qaytarmadi) | `no_face` | `error`.
+    `score`/`threshold` — 0..100 foiz (`BotFaceVerifyResponse` bilan bir xil).
+    """
+
+    status: Literal["ok", "wrong_passport", "no_face", "error"]
+    message: str
+    verified: bool = False
+    score: int = 0
+    threshold: int = 0
+    gtsp_fio: str = ""
+    photo_b64: str | None = None
+
+
+def _passport_values(
+    bot: DavomatBot, ps_ser: str, ps_num: str, jshshir: str
+) -> tuple[str, str]:
+    """(GTSP uchun `ps_ser+ps_num`, JShShIR) — normalizatsiya qilingan."""
+    # Cyrillic harflarni Latin'ga normalizatsiya qilamiz — Telegram klaviaturasi
+    # АД (Cyrillic) yuborib qo'ysa, GTSP topa olmaydi.
+    ps_ser_norm = normalize_ps_ser(ps_ser)
+    ps_num_norm = (ps_num or "").strip()
+
+    if ps_ser_norm != (ps_ser or "").strip().upper():
+        logger.info(
+            "ps_ser normalized: %r → %r (telegram_id=%s)",
+            ps_ser,
+            ps_ser_norm,
+            bot.telegram_id,
+        )
+    return f"{ps_ser_norm}{ps_num_norm}", (jshshir or "").strip()
+
+
+def match_passport_face(
+    ps_value: str, imei_value: str, selfie_b64: str
+) -> PassportFaceMatch:
+    """GTSP'dan pasport rasmini olib, selfie bilan solishtiradi.
+
+    GTSP 30s gacha kutishi mumkin — chaqiruvchi DB tranzaksiyasini oldindan
+    yopgan bo'lishi kerak.
+    """
+    from app.services.face_service import compare_two_faces
+
     data, err = _call_gtsp(ps_value, imei_value)
     if err is not None or not data:
         # Foydalanuvchiga GTSP'dan kelgan asl xato xabarini ham ko'rsatamiz —
         # shunda u nima notog'ri ekanini bilib oladi (masalan, JShShIR
         # pasport bilan mos kelmasligi va h.k.).
         detail = err or "Noma'lum xatolik"
-        return BotFaceVerifyResponse(
+        return PassportFaceMatch(
             status="wrong_passport",
             message=(
                 "Pasport ma'lumotlari xato kiritildi yoki GTSP'da topilmadi.\n"
                 f"Tafsilot: {detail}"
             ),
-            slot=current_slot,
         )
 
     photo_b64 = data.get("photo")
 
-    # ── 4) Yuz solishtirish ─────────────────────────────────────────────
     try:
         verify_resp, _ps_bgr, _lv_bgr = compare_two_faces(photo_b64, selfie_b64)
     except HTTPException as e:
-        return BotFaceVerifyResponse(
-            status="no_face",
-            message=str(e.detail),
-            slot=current_slot,
-        )
+        return PassportFaceMatch(status="no_face", message=str(e.detail))
     except Exception as e:
         logger.error("compare_two_faces xatolik: %s", e)
-        return BotFaceVerifyResponse(
-            status="error",
-            message=f"Yuz solishtirishda xatolik: {e}",
-            slot=current_slot,
+        return PassportFaceMatch(
+            status="error", message=f"Yuz solishtirishda xatolik: {e}"
         )
 
     sname = data.get("sname") or ""
     fname = data.get("fname") or ""
     mname = data.get("mname") or ""
-    fio_gtsp = (
-        " ".join(p for p in [sname, fname, mname] if p).strip() or current_slot.fio
-    )
 
     # 0..1 oraliqdagi cosine score'ni foydalanuvchi/StudentLog uchun 0..100
     # foiz integer ga yaxlitlaymiz. Threshold ham bir xil shkala uchun
     # foizga konvertatsiya qilinadi.
-    score_pct = max(0, min(100, round(float(verify_resp.score) * 100)))
-    threshold_pct = max(0, min(100, round(float(verify_resp.thresh_score) * 100)))
-
-    return BotFaceVerifyResponse(
-        status="in_smena",
-        verified=bool(verify_resp.verified),
-        score=score_pct,
-        threshold=threshold_pct,
-        can_attend=bool(verify_resp.verified) and not already_entered,
-        fio=fio_gtsp,
-        photo_b64=photo_b64,
-        selfie_b64=selfie_b64,
+    return PassportFaceMatch(
+        status="ok",
         message=verify_resp.message,
-        slot=current_slot,
+        verified=bool(verify_resp.verified),
+        score=max(0, min(100, round(float(verify_resp.score) * 100))),
+        threshold=max(0, min(100, round(float(verify_resp.thresh_score) * 100))),
+        gtsp_fio=" ".join(p for p in [sname, fname, mname] if p).strip(),
+        photo_b64=photo_b64,
     )
+
+
+def face_check(
+    bot: DavomatBot,
+    *,
+    ps_ser: str,
+    ps_num: str,
+    jshshir: str,
+    selfie_b64: str,
+) -> PassportFaceMatch:
+    """Faqat shaxsni tekshirish — test sessiyasi, smena va davomatga bog'lanmagan.
+
+    Pasport (GTSP) rasmi selfie bilan solishtiriladi; talabgor bazada
+    qidirilmaydi, hech narsa yozilmaydi va davomat chiptasi berilmaydi.
+    GTSP'ga har murojaat audit uchun log qilinadi.
+    """
+    ps_value, imei_value = _passport_values(bot, ps_ser, ps_num, jshshir)
+    logger.info(
+        "Face-check (testsiz): telegram_id=%s, ps=%s, imei=***%s",
+        bot.telegram_id,
+        ps_value,
+        imei_value[-4:],
+    )
+    return match_passport_face(ps_value, imei_value, selfie_b64)
 
 
 # ============================================================

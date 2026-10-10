@@ -105,3 +105,39 @@ class DashboardStatsResponse(BaseModel):
     is_realtime: bool
     summary: StatGroup
     regions: list[RegionStatItem]
+
+
+class FullGroupItem(BaseModel):
+    """100% kelgan guruh — undagi hamma talabgor kelgan (`is_entered OR
+    is_cheating`)."""
+
+    gr_n: int
+    session_smena_id: int
+    total: int  # guruhdagi talabgorlar soni
+    cheating: int = 0  # shulardan chetlatilganlar (kelgan hisoblanadi)
+
+
+class ZoneFullGroups(BaseModel):
+    zone_id: int
+    # Binodagi barcha guruhlar soni (tanlangan ko'lamda, gr_n > 0)
+    total_groups: int
+    # Tartib: smena (kun → smena raqami), so'ng gr_n
+    full_groups: list[FullGroupItem] = []
+
+
+class FullGroupSmena(BaseModel):
+    """`full_groups` dagi smenalar — kunlik/umumiy ko'lamda guruhlarni smena
+    bo'yicha ajratib ko'rsatish uchun."""
+
+    session_smena_id: int
+    day: date
+    smena_number: int | None = None
+    smena_name: str | None = None
+
+
+class RegionFullGroupsResponse(BaseModel):
+    session_id: int
+    region_id: int
+    scope: str
+    smenas: list[FullGroupSmena]
+    zones: list[ZoneFullGroups]
