@@ -1,10 +1,10 @@
 import { useMemo } from "react";
 import { api } from "../api";
 import { AttendanceSummary } from "../components/AttendanceSummary";
-import { Ban, BarChart, FileDown, ScanFace, UserCheck, UserMinus } from "../components/icons";
+import { Ban, BarChart, FileDown, ScanFace, Send, UserCheck, UserMinus } from "../components/icons";
 import { Card, ErrorState, LoadingState, Row, Screen, Section } from "../components/ui";
 import { useApp } from "../context";
-import { useAsync, useSendAbsentees } from "../hooks";
+import { useAsync, useSendAbsentees, useSendStatsReport } from "../hooks";
 import { useNavigation } from "../navigation";
 import type { ReadySession, SmenaInfo, StatsScope } from "../types";
 import { formatDay, sumCounts } from "../utils/format";
@@ -16,6 +16,7 @@ export function SmenaScreen({ session, smena }: { session: ReadySession; smena: 
   const scope = useMemo<StatsScope>(() => ({ kind: "smena", smena }), [smena]);
   const stats = useAsync(() => api.stats(session.id, scope, region.id), [session.id, scope, region.id]);
   const absentees = useSendAbsentees(session.id, scope);
+  const report = useSendStatsReport(session.id, scope);
 
   const openStats = () => nav.push({ name: "stats", session, scope });
 
@@ -69,13 +70,24 @@ export function SmenaScreen({ session, smena }: { session: ReadySession; smena: 
         />
       </Section>
 
-      <Section title="Hisobotlar" footer="Excel fayl bot orqali Telegram chatingizga yuboriladi.">
+      <Section
+        title="Hisobotlar"
+        footer="Hisobot va Excel bot orqali Telegram chatingizga keladi — u yerdan guruhga forward qilasiz."
+      >
         <Row
           icon={<BarChart />}
           tone="success"
           title="Davomat statistikasi"
           subtitle="Bino kesimida"
           onClick={openStats}
+        />
+        <Row
+          icon={<Send />}
+          title="Davomatni guruhga yuborish"
+          subtitle="Ayni vaqtdagi holat → Telegram xabar"
+          onClick={report.send}
+          loading={report.sending}
+          chevron={false}
         />
         <Row
           icon={<FileDown />}

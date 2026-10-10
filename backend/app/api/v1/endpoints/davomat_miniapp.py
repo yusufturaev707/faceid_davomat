@@ -12,13 +12,16 @@ Mini App'ga xos qo'shimchalar:
     faqat shu chipta bilan ishlaydi (klient talabgor/ball/selfie'ni
     almashtira olmaydi).
   - `passport-qr` — ID-karta QR matni yoki rasmidan pasport maydonlari.
-  - Kelmaganlar Excel'i foydalanuvchining Telegram chatiga yuboriladi.
+  - Kelmaganlar Excel'i va davomat hisoboti foydalanuvchining Telegram chatiga
+    yuboriladi.
 
 Flow:
   1. `GET  /me`                                — dostup + profil (regionlar).
   2. `GET  /sessions`                          — faol test sessiyalari, kun+smena.
   3. `GET  /sessions/{id}/stats`               — smena / kun / sessiya statistikasi.
   4. `POST /sessions/{id}/absentees/send`      — kelmaganlar Excel → Telegram chat.
+     `POST /sessions/{id}/stats/send`          — davomat hisoboti → Telegram chat
+                                                 (u yerdan guruhga forward).
   5. `POST /passport-qr`                       — QR → ps_ser/ps_num/jshshir.
   6. `POST /face-verify` → `POST /mark-attendance`.
      `POST /face-check` — faqat shaxsni tekshirish (testga bog'lanmagan).
@@ -75,10 +78,13 @@ from app.schemas.davomat_miniapp import (
     MiniAppPassportQrRequest,
     MiniAppPassportResponse,
     MiniAppRemoveAttendanceRequest,
+    MiniAppStatsShareRequest,
+    MiniAppStatsShareResponse,
 )
 from app.services import davomat_bot_service as svc
 from app.services.davomat_bot_absentees import AbsenteesError, build_absentees_excel
 from app.services.davomat_bot_stats import BotStatsError, compute_bot_stats
+from app.services.davomat_stats_message import build_stats_messages
 from app.services.davomat_miniapp import (
     PassportQrError,
     TelegramSendError,
@@ -89,6 +95,7 @@ from app.services.davomat_miniapp import (
     read_verify_ticket,
     selfie_digest,
     send_document_to_chat,
+    send_message_to_chat,
 )
 
 logger = logging.getLogger("faceid.api.davomat_miniapp")
@@ -297,6 +304,73 @@ def send_absentees(
         count=count,
         filename=filename,
         message="Fayl Telegram chatingizga yuborildi.",
+    )
+
+
+@router.post(
+    "/sessions/{session_id}/stats/send",
+    response_model=MiniAppStatsShareResponse,
+)
+@limiter.limit("10/minute")
+def send_stats(
+    request: Request,
+    session_id: int,
+    body: MiniAppStatsShareRequest,
+    op: MiniAppOperator = Depends(get_operator),
+    db: Session = Depends(get_db),
+):
+    """«Davomatni guruhga yuborish»: ayni vaqtdagi statistika HTML xabar bo'lib
+    foydalanuvchi chatiga keladi — u uni guruhga forward qiladi."""
+    allowed = svc.resolve_filter_regions(op.bot, body.region_id)
+    try:
+        messages, total = build_stats_messages(
+            db,
+            session_id=session_id,
+            session_smena_id=body.session_smena_id,
+            test_day=body.test_day,
+            allowed_region_ids=allowed,
+        )
+    except BotStatsError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    if total == 0:
+        return MiniAppStatsShareResponse(
+            status="empty",
+            message="Bu kontekstda talabgorlar yo'q — hisobot yuborilmadi.",
+        )
+
+    # Hisobot tayyor — Telegram'ga yuborish davomida DB ulanishini band qilmaymiz.
+    db.rollback()
+    for index, text in enumerate(messages):
+        try:
+            send_message_to_chat(chat_id=op.telegram_user.id, text=text)
+        except TelegramSendError as e:
+            if index == 0:
+                raise HTTPException(
+                    status_code=409 if e.user_fixable else 502, detail=str(e)
+                )
+            # Hisobotning bir qismi ketdi — to'liq emasligini aytamiz.
+            raise HTTPException(
+                status_code=502,
+                detail=(
+                    f"Hisobotning {index} / {len(messages)} qismi yuborildi, qolgani "
+                    f"yuborilmadi: {e} Qayta yuboring."
+                ),
+            )
+
+    logger.info(
+        "Davomat hisoboti chatga yuborildi: telegram_id=%s, session=%s, smena=%s, "
+        "day=%s, xabarlar=%s",
+        op.telegram_user.id,
+        session_id,
+        body.session_smena_id,
+        body.test_day,
+        len(messages),
+    )
+    return MiniAppStatsShareResponse(
+        status="sent",
+        messages=len(messages),
+        message="Hisobot Telegram chatingizga yuborildi — uni guruhga forward qiling.",
     )
 
 

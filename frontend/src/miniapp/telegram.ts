@@ -40,6 +40,14 @@ export interface TelegramWebApp {
   setBackgroundColor(color: string): void;
   disableVerticalSwipes?: () => void;
   showScanQrPopup(params: { text?: string }, callback?: (text: string) => boolean | void): void;
+  showPopup(
+    params: {
+      title?: string;
+      message: string;
+      buttons?: { id?: string; type?: "default" | "ok" | "close" | "cancel" | "destructive"; text?: string }[];
+    },
+    callback?: (buttonId: string) => void,
+  ): void;
   closeScanQrPopup(): void;
   BackButton: {
     show(): void;
@@ -142,5 +150,29 @@ export const telegram = {
 
   close(): void {
     webApp()?.close();
+  },
+
+  /**
+   * Bot chatiga yuborilgan xabarni ko'rsatish: native popup (6.2+) «Chatga o'tish»
+   * bosilsa ilova yopiladi va foydalanuvchi bot chatiga qaytadi. Popup yo'q
+   * bo'lsa `false` — chaqiruvchi toast bilan cheklanadi.
+   */
+  offerOpenChat(title: string, message: string): boolean {
+    const app = webApp();
+    if (!app || !hasTelegramHost() || !app.isVersionAtLeast("6.2")) return false;
+    app.showPopup(
+      {
+        title,
+        message,
+        buttons: [
+          { id: "chat", type: "default", text: "Chatga o'tish" },
+          { id: "stay", type: "cancel" },
+        ],
+      },
+      (id) => {
+        if (id === "chat") app.close();
+      },
+    );
+    return true;
   },
 };

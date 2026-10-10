@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import { AttendanceSummary } from "../components/AttendanceSummary";
-import { Building, CheckCircle, ChevronRight } from "../components/icons";
+import { Building, CheckCircle, ChevronRight, Send } from "../components/icons";
 import {
   Card,
   EmptyState,
@@ -10,11 +10,12 @@ import {
   LoadingState,
   MainButton,
   ProgressBar,
+  Row,
   Screen,
   Section,
 } from "../components/ui";
 import { useApp } from "../context";
-import { useAsync, useSendAbsentees } from "../hooks";
+import { useAsync, useSendAbsentees, useSendStatsReport } from "../hooks";
 import type { FullGroup, ReadySession, SmenaInfo, StatsScope, ZoneStat } from "../types";
 import { attendancePercent, formatDay, formatNumber, formatTime } from "../utils/format";
 
@@ -175,6 +176,7 @@ export function StatsScreen({ session, scope }: { session: ReadySession; scope: 
   const { region } = useApp();
   const stats = useAsync(() => api.stats(session.id, scope, region.id), [session.id, scope, region.id]);
   const absentees = useSendAbsentees(session.id, scope);
+  const report = useSendStatsReport(session.id, scope);
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   const { title, subtitle } = scopeTitle(scope);
   // Kun/umumiy ko'lamda guruhlar smenalar bo'yicha ajratiladi (bitta smenada — yo'q).
@@ -206,12 +208,24 @@ export function StatsScreen({ session, scope }: { session: ReadySession; scope: 
           <EmptyState icon={<Building width={32} height={32} />} title="Ma'lumot topilmadi" />
         </Card>
       ) : (
-        stats.data.regions.map((regionStat) => {
+        stats.data.regions.map((regionStat, index) => {
           // Shu kontekstda talabgori yo'q binolar (0 / 0) — faqat shovqin.
           const zones = regionStat.zones.filter((zone) => zone.total > 0);
           return (
             <div key={regionStat.region_id} className="space-y-6">
               <AttendanceSummary title={regionStat.region_name} counts={regionStat} />
+              {index === 0 && (
+                <Section footer="Ayni vaqtdagi holat bot chatiga xabar bo'lib keladi — uni guruhga forward qiling.">
+                  <Row
+                    icon={<Send />}
+                    title="Davomatni guruhga yuborish"
+                    subtitle="Viloyat va binolar kesimida"
+                    onClick={report.send}
+                    loading={report.sending}
+                    chevron={false}
+                  />
+                </Section>
+              )}
               {zones.length > 0 && (
                 <Section
                   title={`Binolar (${zones.length})`}

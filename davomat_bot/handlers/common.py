@@ -27,7 +27,9 @@ _APP_HINT = (
     "📱 Davomat, Face ID, davomatdan olib tashlash va chetlatish endi "
     "<b>Davomat ilovasida</b> bajariladi.\n"
     "✅ Statistikada — har bir binoda 100% kelgan guruhlar.\n"
-    "🪪 Shaxsni tekshirish — faqat pasport + selfi, testga bog'lanmagan.\n\n"
+    "🪪 Shaxsni tekshirish — faqat pasport + selfi, testga bog'lanmagan.\n"
+    "📤 Davomatni guruhga yuborish — hisobot shu chatga keladi, uni guruhga "
+    "forward qilasiz.\n\n"
     "Quyidagi tugmani bosing yoki chat pastidagi <b>«Davomat»</b> menyusidan oching."
 )
 

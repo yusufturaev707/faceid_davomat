@@ -99,6 +99,12 @@ export interface AbsenteesResponse {
   message: string;
 }
 
+export interface StatsShareResponse {
+  status: "sent" | "empty";
+  messages: number;
+  message: string;
+}
+
 export interface PassportData {
   ps_ser: string;
   ps_num: string;

@@ -73,3 +73,35 @@ export function useSendAbsentees(sessionId: number, scope: StatsScope) {
 
   return { send, sending };
 }
+
+/** «Davomatni guruhga yuborish»: ayni vaqtdagi hisobot bot chatiga keladi, u yerdan forward qilinadi. */
+export function useSendStatsReport(sessionId: number, scope: StatsScope) {
+  const { region } = useApp();
+  const toast = useToast();
+  const [sending, setSending] = useState(false);
+
+  const send = useCallback(async () => {
+    setSending(true);
+    try {
+      const result = await api.sendStats(sessionId, scope, region.id);
+      if (result.status === "sent") {
+        telegram.haptic("success");
+        const parts = result.messages > 1 ? ` (${result.messages} ta xabar)` : "";
+        const opened = telegram.offerOpenChat(
+          "Hisobot yuborildi",
+          `Davomat hisoboti bot chatiga yuborildi${parts}. Chatga o'tib, xabarni bosib turing → «Forward» → guruhni tanlang.`,
+        );
+        if (!opened) toast("Hisobot chatga yuborildi — uni guruhga forward qiling", "success");
+      } else {
+        toast(result.message || "Talabgorlar yo'q — hisobot yuborilmadi", "neutral");
+      }
+    } catch (err) {
+      telegram.haptic("error");
+      toast((err as Error).message, "destructive");
+    } finally {
+      setSending(false);
+    }
+  }, [sessionId, scope, region.id, toast]);
+
+  return { send, sending };
+}

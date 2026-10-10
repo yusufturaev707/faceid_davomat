@@ -120,7 +120,10 @@ no ticket, nothing written — but it is a GTSP lookup for *any* passport, so it
 "100% kelgan guruhlar" (every student of a smena+zone+`gr_n` attended, cheating counts as attended, `gr_n<=0`
 ignored) is computed once in `session_dashboard_stats.collect_full_groups` and used by both the admin
 `/dashboard-stats/regions/{id}/full-groups` (lazy, per region modal) and the bot/Mini App `BotZoneStat.full_groups`.
-Absentee Excel files are pushed into the user's chat via Bot API `sendDocument`; `CheatingLog.user_id` is
+Absentee Excel files are pushed into the user's chat via Bot API `sendDocument`, and «Davomatni guruhga yuborish»
+(`/sessions/{id}/stats/send`) sends the same stats as a forward-ready HTML message via `sendMessage`
+(`services/davomat_stats_message.py`; split at ~3800 chars into numbered parts, no inline buttons — they would
+be meaningless once forwarded); `CheatingLog.user_id` is
 `DAVOMAT_MINIAPP_USER_ID`. The ID-card QR has three readers, no npm dependency added: the in-app live camera
 (`components/QrCamera.tsx` — `getUserMedia` + `BarcodeDetector` when present, else a shutter that posts the
 frame to `passport-qr` for zxing-cpp), Telegram's native scanner (mobile only) and a plain image upload;

@@ -23,6 +23,7 @@ import type {
   RemoveAttendanceResponse,
   SessionStats,
   StatsScope,
+  StatsShareResponse,
 } from "./types";
 
 const API_BASE = "/api/v1/davomat-miniapp";
@@ -115,6 +116,12 @@ export const api = {
 
   sendAbsentees: (sessionId: number, scope: StatsScope, regionId: number) =>
     request<AbsenteesResponse>("POST", `/sessions/${sessionId}/absentees/send`, {
+      body: { ...scopeParams(scope), region_id: regionId },
+    }),
+
+  /** «Davomatni guruhga yuborish» — hisobot bot chatiga xabar bo'lib keladi. */
+  sendStats: (sessionId: number, scope: StatsScope, regionId: number) =>
+    request<StatsShareResponse>("POST", `/sessions/${sessionId}/stats/send`, {
       body: { ...scopeParams(scope), region_id: regionId },
     }),
 

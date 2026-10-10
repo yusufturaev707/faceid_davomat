@@ -11,8 +11,9 @@ foydalanuvchi qurilmasi, unga ishonib bo'lmaydi. Shuning uchun:
     va Face ID'siz davomatga qo'sha olmaydi.
   - **Pasport QR** — ID-karta orqasidagi QR matnini (Telegram native skaneri)
     yoki QR rasmini (zxing-cpp) pasport maydonlariga ajratish.
-  - **Telegram sendDocument** — kelmaganlar Excel'i foydalanuvchi chatiga
-    yuboriladi (webview ichida fayl yuklab olish platformalarda ishonchsiz).
+  - **Telegram sendDocument / sendMessage** — kelmaganlar Excel'i va davomat
+    hisoboti foydalanuvchi chatiga yuboriladi (webview ichida fayl yuklab olish
+    platformalarda ishonchsiz; xabarni esa u yerdan guruhga forward qiladi).
 """
 
 from __future__ import annotations
@@ -35,7 +36,7 @@ from app.config import settings
 from app.core.logging import install_bot_token_redaction
 
 logger = logging.getLogger("faceid.services.davomat_miniapp")
-# sendDocument URL'ida bot tokeni bor — httpx uni INFO log'ga yozadi.
+# Bot API URL'ida bot tokeni bor — httpx uni INFO log'ga yozadi.
 install_bot_token_redaction()
 
 
@@ -263,7 +264,7 @@ def decode_passport_qr_image(image_b64: str) -> PassportData:
 
 
 # ============================================================
-# Telegram Bot API — fayl yuborish
+# Telegram Bot API — fayl va xabar yuborish
 # ============================================================
 
 
@@ -273,32 +274,29 @@ class TelegramSendError(RuntimeError):
         self.user_fixable = user_fixable
 
 
-def send_document_to_chat(
+def _bot_api_post(
+    method: str,
     *,
     chat_id: int,
-    file_bytes: bytes,
-    filename: str,
-    caption: str,
-    content_type: str,
+    data: dict[str, str],
+    files: dict | None = None,
+    timeout: float = 30,
+    what: str = "Xabarni",
 ) -> None:
-    """Faylni bot nomidan foydalanuvchi chatiga yuborish.
+    """Bot API chaqiruvi + xatolarni foydalanuvchiga tushunarli qilish.
 
     URL tarkibida bot tokeni bor: bu yerda URL ham, httpx istisnosining matni
     ham log qilinmaydi, httpx'ning o'z so'rov logi esa `BotTokenRedactFilter`
     orqali yashiriladi.
     """
-    url = f"{settings.TELEGRAM_API_BASE.rstrip('/')}/bot{settings.DAVOMAT_BOT_TOKEN}/sendDocument"
+    url = f"{settings.TELEGRAM_API_BASE.rstrip('/')}/bot{settings.DAVOMAT_BOT_TOKEN}/{method}"
     try:
-        resp = httpx.post(
-            url,
-            data={"chat_id": str(chat_id), "caption": caption, "parse_mode": "HTML"},
-            files={"document": (filename, file_bytes, content_type)},
-            timeout=60,
-        )
+        resp = httpx.post(url, data=data, files=files, timeout=timeout)
         payload = resp.json()
     except Exception as e:
         logger.error(
-            "Telegram sendDocument ulanish xatoligi: %s (chat_id=%s)",
+            "Telegram %s ulanish xatoligi: %s (chat_id=%s)",
+            method,
             type(e).__name__,
             chat_id,
         )
@@ -310,17 +308,59 @@ def send_document_to_chat(
     code = payload.get("error_code")
     description = str(payload.get("description") or "")
     logger.warning(
-        "Telegram sendDocument rad etildi: code=%s description=%s chat_id=%s",
+        "Telegram %s rad etildi: code=%s description=%s chat_id=%s",
+        method,
         code,
         description,
         chat_id,
     )
-    if code in (400, 403):
+    lowered = description.lower()
+    if code == 403 or (
+        code == 400 and ("chat not found" in lowered or "user not found" in lowered)
+    ):
         # "bot was blocked by the user" / "chat not found" — foydalanuvchi botni
         # to'xtatgan yoki hech qachon /start bosmagan.
         raise TelegramSendError(
-            "Faylni chatga yuborib bo'lmadi. Botni oching, /start bosing va "
+            f"{what} chatga yuborib bo'lmadi. Botni oching, /start bosing va "
             "qayta urinib ko'ring.",
             user_fixable=True,
         )
-    raise TelegramSendError("Telegram faylni qabul qilmadi. Keyinroq urinib ko'ring.")
+    raise TelegramSendError(
+        f"Telegram {what.lower()} qabul qilmadi. Keyinroq urinib ko'ring."
+    )
+
+
+def send_document_to_chat(
+    *,
+    chat_id: int,
+    file_bytes: bytes,
+    filename: str,
+    caption: str,
+    content_type: str,
+) -> None:
+    """Faylni bot nomidan foydalanuvchi chatiga yuborish."""
+    _bot_api_post(
+        "sendDocument",
+        chat_id=chat_id,
+        data={"chat_id": str(chat_id), "caption": caption, "parse_mode": "HTML"},
+        files={"document": (filename, file_bytes, content_type)},
+        timeout=60,
+        what="Faylni",
+    )
+
+
+def send_message_to_chat(*, chat_id: int, text: str) -> None:
+    """HTML matnli xabarni bot nomidan foydalanuvchi chatiga yuborish.
+
+    Havola ko'rinishi o'chiq — hisobot forward qilinganda ortiqcha kartochka chiqmasin.
+    """
+    _bot_api_post(
+        "sendMessage",
+        chat_id=chat_id,
+        data={
+            "chat_id": str(chat_id),
+            "text": text,
+            "parse_mode": "HTML",
+            "link_preview_options": '{"is_disabled": true}',
+        },
+    )

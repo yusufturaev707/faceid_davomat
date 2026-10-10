@@ -45,6 +45,18 @@ class MiniAppAbsenteesResponse(BaseModel):
     message: str = ""
 
 
+class MiniAppStatsShareRequest(MiniAppAbsenteesRequest):
+    """«Davomatni guruhga yuborish» — kontekst kelmaganlar ro'yxatiniki bilan bir xil."""
+
+
+class MiniAppStatsShareResponse(BaseModel):
+    """`sent` — hisobot chatga yuborildi (`messages` ta xabar); `empty` — talabgor yo'q."""
+
+    status: Literal["sent", "empty"]
+    messages: int = 0
+    message: str = ""
+
+
 class MiniAppPassportQrRequest(BaseModel):
     """Telegram native skaner matni (`text`) yoki QR rasmi (`image_b64`)."""
 

@@ -276,6 +276,59 @@ def test_absentees_region_outside_assignment_is_forbidden(api, operator, monkeyp
     assert r.status_code == 403
 
 
+def test_stats_report_is_sent_to_operator_chat(api, operator, monkeypatch):
+    calls = {}
+    sent = []
+
+    def fake_build(_db, **kw):
+        calls.update(kw)
+        return ["1-qism", "2-qism"], 120
+
+    monkeypatch.setattr(endpoint, "build_stats_messages", fake_build)
+    monkeypatch.setattr(endpoint, "send_message_to_chat", lambda **kw: sent.append(kw))
+
+    r = api.post(
+        "/api/v1/davomat-miniapp/sessions/1/stats/send",
+        headers=_auth(),
+        json={"session_smena_id": 5, "region_id": 3},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "sent" and r.json()["messages"] == 2
+    assert calls["session_smena_id"] == 5 and calls["allowed_region_ids"] == {3}
+    assert [m["text"] for m in sent] == ["1-qism", "2-qism"]
+    assert all(m["chat_id"] == TELEGRAM_ID for m in sent)
+
+
+def test_stats_report_without_students_is_not_sent(api, operator, monkeypatch):
+    monkeypatch.setattr(endpoint, "build_stats_messages", lambda *_a, **_k: (["x"], 0))
+    monkeypatch.setattr(endpoint, "send_message_to_chat", pytest.fail)
+    r = api.post("/api/v1/davomat-miniapp/sessions/1/stats/send", headers=_auth(), json={})
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "empty"
+
+
+def test_stats_report_blocked_bot_is_user_fixable(api, operator, monkeypatch):
+    from app.services.davomat_miniapp import TelegramSendError
+
+    def blocked(**_kw):
+        raise TelegramSendError("Xabarni chatga yuborib bo'lmadi.", user_fixable=True)
+
+    monkeypatch.setattr(endpoint, "build_stats_messages", lambda *_a, **_k: (["x"], 5))
+    monkeypatch.setattr(endpoint, "send_message_to_chat", blocked)
+    r = api.post("/api/v1/davomat-miniapp/sessions/1/stats/send", headers=_auth(), json={})
+    assert r.status_code == 409
+
+
+def test_stats_report_region_outside_assignment_is_forbidden(api, operator, monkeypatch):
+    monkeypatch.setattr(endpoint, "build_stats_messages", pytest.fail)
+    r = api.post(
+        "/api/v1/davomat-miniapp/sessions/1/stats/send",
+        headers=_auth(),
+        json={"region_id": 99},
+    )
+    assert r.status_code == 403
+
+
 def _face_check(api, **overrides):
     body = {
         "ps_ser": "АD",  # kirillcha А — lotinga o'giriladi

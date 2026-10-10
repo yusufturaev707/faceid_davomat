@@ -182,3 +182,35 @@ def test_bot_stats_include_full_groups_per_zone(db):
     day = compute_bot_stats(db, session_id=1, test_day=DAY1, allowed_region_ids={1})
     z10 = next(z for z in day.regions[0].zones if z.zone_id == 10)
     assert [(g.session_smena_id, g.gr_n) for g in z10.full_groups] == [(100, 2), (101, 3)]
+
+
+def test_stats_share_message_from_db(db):
+    from datetime import datetime, timezone
+
+    from app.services.davomat_bot_stats import BotStatsError
+    from app.services.davomat_stats_message import build_stats_messages
+
+    add(db, gr_n=1, entered=True)
+    add(db, gr_n=1, entered=True)
+    add(db, gr_n=2)
+    db.commit()
+
+    messages, total = build_stats_messages(
+        db,
+        session_id=1,
+        session_smena_id=100,
+        test_day=None,
+        allowed_region_ids={1},
+        now=datetime(2026, 10, 10, 4, 0, tzinfo=timezone.utc),
+    )
+    assert total == 3
+    [msg] = messages
+    assert "<b>S</b>" in msg and "1-smena" in msg and "soat <b>09:00</b>" in msg
+    assert "Keldi: <b>2</b> / 3" in msg
+    assert "guruhlar" not in msg
+
+    with pytest.raises(BotStatsError):
+        build_stats_messages(
+            db, session_id=999, session_smena_id=None, test_day=None,
+            allowed_region_ids={1},
+        )
