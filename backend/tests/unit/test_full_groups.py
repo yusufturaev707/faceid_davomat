@@ -207,7 +207,7 @@ def test_stats_share_message_from_db(db):
     [msg] = messages
     assert "📝 <b>S</b>" in msg and "1-smena" in msg and "Yuborildi: 10.10.2026 · 09:00" in msg
     # Viloyatda faol bino bitta — faqat viloyat yakuni
-    assert "Keldi: <b>2</b> · ❌ Kelmadi: <b>1</b>" in msg and "1-bino" not in msg
+    assert "✅ Keldi: <b>2</b>\n❌ Kelmadi: <b>1</b>" in msg and "1-bino" not in msg
     assert "guruhlar" not in msg
 
     with pytest.raises(BotStatsError):

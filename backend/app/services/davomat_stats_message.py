@@ -10,7 +10,8 @@ Ko'rinishi:
 
     📊 DAVOMAT HISOBOTI
 
-    📝 Test nomi (to'liq)
+    🗂 Test tadbiri nomi
+    📝 Imtihon nomi (to'liq)
 
     📅 10-oktabr, 2026-yil · Shanba
     🕘 1-smena
@@ -18,7 +19,8 @@ Ko'rinishi:
     📍 BUXORO VILOYATI
     ┃ ▰▰▰▰▰▰▰▰▰▱ 93,4%            (blockquote)
     ┃ 👥 Jami: 3 450
-    ┃ ✅ Keldi: 3 210 · ❌ Kelmadi: 240
+    ┃ ✅ Keldi: 3 210
+    ┃ ❌ Kelmadi: 240
     🏢 Binolar · 2 ta
     ├ 🟢 1-bino
     │    ✅ 196/200 · 98% · ❌ 4
@@ -99,11 +101,11 @@ def _progress_bar(percent: float, width: int = 10) -> str:
 
 
 def _head(stats: BotSessionStatsResponse, test_name: str, session_name: str) -> str:
-    """Test nomi, keyin sana va smena — alohida qatorlarda."""
-    lines = [f"📝 <b>{_esc(test_name)}</b>"]
-    if session_name and session_name.strip().lower() not in test_name.strip().lower():
-        lines.append(f"<i>{_esc(session_name)}</i>")
-    lines.append("")
+    """Test tadbiri nomi, imtihon nomi, keyin sana va smena — har biri alohida qatorda."""
+    lines = []
+    if session_name and session_name.strip().lower() != test_name.strip().lower():
+        lines.append(f"🗂 {_esc(session_name)}")
+    lines += [f"📝 <b>{_esc(test_name)}</b>", ""]
 
     day = stats.test_day
     if stats.scope == "total" or day is None:
@@ -128,7 +130,8 @@ def _region_block(region: BotRegionStat) -> str:
     rows = [
         f"{_progress_bar(percent)}  <b>{_pct(percent)}</b>",
         f"👥 Jami: <b>{_num(region.total)}</b>",
-        f"✅ Keldi: <b>{_num(region.entered)}</b> · ❌ Kelmadi: <b>{_num(region.not_entered)}</b>",
+        f"✅ Keldi: <b>{_num(region.entered)}</b>",
+        f"❌ Kelmadi: <b>{_num(region.not_entered)}</b>",
     ]
     if region.cheating:
         rows.append(f"⛔ Chetlatildi: <b>{_num(region.cheating)}</b>")

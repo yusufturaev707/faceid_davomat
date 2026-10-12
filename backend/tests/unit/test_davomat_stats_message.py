@@ -68,8 +68,8 @@ def test_header_test_name_date_and_smena_on_separate_lines():
     lines = msg.split("\n")
     assert lines[0] == "📊 <b>DAVOMAT HISOBOTI</b>"
     assert lines[1] == ""  # sarlavhadan keyin bo'sh qator
-    assert lines[2] == "📝 <b>Milliy sertifikat imtihoni (matematika)</b>"
-    assert lines[3] == "<i>Oktabr sessiyasi</i>"
+    assert lines[2] == "🗂 Oktabr sessiyasi"
+    assert lines[3] == "📝 <b>Milliy sertifikat imtihoni (matematika)</b>"
     assert "📅 <b>10-oktabr, 2026-yil</b> · Shanba" in lines
     assert "🕘 <b>1-smena</b>" in lines
     # Yuqorida vaqt yo'q, pastda — yuborilgan vaqt; ranglar izohi yo'q
@@ -86,7 +86,7 @@ def test_single_active_zone_shows_only_region():
     assert "📍 BUXORO VILOYATI" in text
     assert "▰▰▰▰▰▰▰▰▰▰  98%" in text
     assert "Jami: 196" not in text and "Jami: 200" in text
-    assert "Keldi: 196 · ❌ Kelmadi: 4" in text and "Chetlatildi: 2" in text
+    assert "✅ Keldi: 196\n❌ Kelmadi: 4\n⛔ Chetlatildi: 2" in text
     assert "Yagona bino" not in text and "Binolar" not in text
     assert "Bo'sh bino" not in text
 
