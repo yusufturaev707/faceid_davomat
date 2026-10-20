@@ -79,6 +79,9 @@ export const PERM = {
   STUDENT_LOG_UPDATE: "student_log:update",
   STUDENT_LOG_DELETE: "student_log:delete",
 
+  // Davomat holati — tashqi tizimlar API'si (X-API-Key)
+  ATTENDANCE_READ: "attendance:read",
+
   // Qoidabuzarlik loglari
   CHEATING_LOG_READ: "cheating_log:read",
   CHEATING_LOG_CREATE: "cheating_log:create",

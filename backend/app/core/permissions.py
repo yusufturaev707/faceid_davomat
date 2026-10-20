@@ -141,6 +141,16 @@ class P:
     STUDENT_LOG_UPDATE = _Perm("student_log:update", "Student logni tahrirlash", "student_log")
     STUDENT_LOG_DELETE = _Perm("student_log:delete", "Student logni o'chirish", "student_log")
 
+    # === Davomat — tashqi tizimlar uchun (X-API-Key) ===
+    # `student:read` dan alohida: u pasport rasmi va embeddinggacha ochadi,
+    # bu esa faqat keldi/kelmadi holati va minimal identifikatorlarni beradi.
+    # Qamrov `student:all_regions` bilan bir xil hal qilinadi.
+    ATTENDANCE_READ = _Perm(
+        "attendance:read",
+        "Davomat holatini olish (tashqi tizimlar API)",
+        "attendance",
+    )
+
     # === Cheating Logs ===
     CHEATING_LOG_READ = _Perm("cheating_log:read", "Qoidabuzarlik loglarini ko'rish", "cheating_log")
     CHEATING_LOG_CREATE = _Perm("cheating_log:create", "Qoidabuzarlik yozish", "cheating_log")
