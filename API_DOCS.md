@@ -284,112 +284,58 @@ X-API-Key: sk-xxxx...
 
 ## 3. Davomat holati (keldi / kelmadi)
 
-Imtihonga nomzod kelgan-kelmaganini olish. Faqat o'qish — tizimda hech narsa
+Nomzodni test turi va tashqi platformadagi ID si bo'yicha topib, imtihonga
+kelgan-kelmaganini qaytaradi. Faqat o'qish — tizimda hech narsa
 o'zgartirilmaydi. Davomat imtihon kuni real vaqtda yoziladi (desktop klient,
-Telegram Mini App), shuning uchun ma'lumotni imtihon davomida ham, tugagandan
-keyin ham olish mumkin.
+Telegram Mini App), shuning uchun holatni imtihon davomida ham, tugagandan
+keyin ham so'rash mumkin.
 
 **API kalitga kerakli ruxsatlar** (admin panel → Rollar):
 
 | Ruxsat | Nima uchun |
 |---|---|
-| `attendance:read` | Shu bo'limdagi barcha endpointlar |
-| `student:all_regions` | Barcha viloyatlar. Bu ruxsat bo'lmasa — faqat API kalit egasiga biriktirilgan viloyat qaytadi (boshqa `region_id` so'ralsa ham), viloyat biriktirilmagan bo'lsa 403 |
+| `attendance:read` | Shu bo'limdagi endpoint |
+| `student:all_regions` | Barcha viloyatlar nomzodlari. Bu ruxsat bo'lmasa — faqat API kalit egasiga biriktirilgan viloyat nomzodlari topiladi (boshqasi uchun 404), viloyat biriktirilmagan bo'lsa 403 |
 
-**Ish tartibi:**
-
-1. `GET /attendance/sessions` — kerakli test sessiyasini va uning kun+smenalarini toping (`test_session_id`, `session_smena_id`).
-2. `GET /attendance/summary` — umumiy sonlar (ixtiyoriy, tekshirish uchun).
-3. `GET /attendance/students` — nomzodlar ro'yxatini sahifama-sahifa oling (`after_id` → `next_after_id`).
-
-### 3.1 Test sessiyalari ro'yxati
+### 3.1 Nomzodni topish
 
 ```
-GET /api/v1/attendance/sessions
+GET /api/v1/attendance/student?test_key={test_key}&s_code={s_code}
 ```
 
-**Query parametrlar** (hammasi ixtiyoriy):
+**Query parametrlar** (ikkalasi ham majburiy):
 
 | Parametr | Tur | Tavsif |
 |---|---|---|
-| `date_from` | date (`YYYY-MM-DD`) | Shu sanada yoki undan keyin tugaydigan sessiyalar |
-| `date_to` | date (`YYYY-MM-DD`) | Shu sanada yoki undan oldin boshlanadigan sessiyalar |
-| `limit` | integer | 1–100, standart 50 |
+| `test_key` | string (1–20 belgi) | Test turi kaliti, masalan `ms`, `cefr`. Katta-kichik harf farqlanadi |
+| `s_code` | integer (≥ 1) | Nomzodning sizning platformangizdagi unikal ID si — nomzodlar ro'yxati FaceID tizimiga yuklanganda shu qiymat saqlangan |
 
-Sessiyalar eng yangisidan boshlab tartiblanadi.
-
-**Response (200):**
-```json
-{
-  "items": [
-    {
-      "test_session_id": 7,
-      "name": "Oktabr 2026",
-      "test_name": "Milliy sertifikat",
-      "start_date": "2026-10-12",
-      "finish_date": "2026-10-13",
-      "state_key": 4,
-      "state_name": "Faol",
-      "smenas": [
-        { "session_smena_id": 70, "day": "2026-10-12", "smena_name": "1-smena", "number": 1 },
-        { "session_smena_id": 71, "day": "2026-10-12", "smena_name": "2-smena", "number": 2 }
-      ]
-    }
-  ],
-  "total": 1
-}
-```
-
-| Field | Tur | Tavsif |
-|---|---|---|
-| `test_session_id` | integer | Test sessiya ID si — keyingi so'rovlarda kerak |
-| `name` | string | Sessiya nomi |
-| `test_name` | string \| null | Test turi |
-| `start_date`, `finish_date` | date | Sessiya boshlanishi va tugashi |
-| `state_key` | integer \| null | Holat: `1` yaratilgan, `2` nomzodlar yuklanmoqda, `3` yuz shablonlari tayyorlanmoqda, `4` faol (imtihon), `5` yakunlangan |
-| `state_name` | string \| null | Holat nomi |
-| `smenas[].session_smena_id` | integer | Kun+smena ID si |
-| `smenas[].day` | date | Imtihon kuni |
-| `smenas[].smena_name` | string \| null | Smena nomi |
-| `smenas[].number` | integer | Smena tartib raqami |
-
-### 3.2 Nomzodlar holati
-
-```
-GET /api/v1/attendance/students
-```
-
-**Query parametrlar:**
-
-| Parametr | Tur | Majburiy | Tavsif |
-|---|---|---|---|
-| `test_session_id` | integer | ha | Test sessiya ID si |
-| `session_smena_id` | integer | yo'q | Faqat shu kun+smena |
-| `exam_date` | date (`YYYY-MM-DD`) | yo'q | Faqat shu imtihon kuni |
-| `region_id` | integer | yo'q | Faqat shu viloyat (qamrov qoidasi yuqorida) |
-| `zone_id` | integer | yo'q | Faqat shu bino |
-| `status` | string | yo'q | `entered`, `cheating` yoki `not_entered` |
-| `jshshir` | string | yo'q | Bitta nomzod — 14 xonali JShShIR |
-| `after_id` | integer | yo'q | Sahifalash: oldingi javobdagi `next_after_id`. Birinchi sahifa — `0` (standart) |
-| `limit` | integer | yo'q | Sahifadagi qatorlar soni, 1–1000, standart 500 |
+Parametrlardan biri berilmasa, `s_code` son bo'lmasa yoki `0` bo'lsa — `422`.
 
 **Misol:**
 ```
-GET /api/v1/attendance/students?test_session_id=7&session_smena_id=70&limit=500&after_id=0
+GET /api/v1/attendance/student?test_key=ms&s_code=845120
 X-API-Key: sk-xxxx...
 ```
 
 **Response (200):**
 ```json
 {
+  "test_key": "ms",
+  "s_code": 845120,
+  "count": 1,
   "items": [
     {
       "student_id": 1520431,
+      "s_code": 845120,
       "jshshir": "31234567890123",
-      "last_name": "Aliyev",
-      "first_name": "Vali",
-      "middle_name": "G'aniyevich",
+      "last_name": "ALIYEV",
+      "first_name": "VALI",
+      "middle_name": "G'ANIYEVICH",
+      "test_key": "ms",
+      "test_name": "Milliy sertifikat",
       "test_session_id": 7,
+      "test_session_name": "Oktabr 2026",
       "session_smena_id": 70,
       "exam_date": "2026-10-12",
       "smena_name": "1-smena",
@@ -407,36 +353,43 @@ X-API-Key: sk-xxxx...
       "entered_at": "2026-10-12T08:15:42+05:00",
       "last_seen_at": "2026-10-12T08:15:42+05:00"
     }
-  ],
-  "count": 1,
-  "has_more": true,
-  "next_after_id": 1520431
+  ]
 }
 ```
 
+**Topilmasa (404):**
+```json
+{ "detail": "Nomzod topilmadi" }
+```
+
+`404` quyidagi hollarda qaytadi: bunday `test_key` + `s_code` juftligi yo'q,
+nomzod hali tizimga yuklanmagan yoki u API kalit qamrovidan tashqaridagi
+viloyatda.
+
 | Field | Tur | Tavsif |
 |---|---|---|
-| `student_id` | integer | Nomzod yozuvining ID si (sessiya ichida yagona) |
-| `jshshir` | string \| null | JShShIR (14 xona) |
-| `last_name`, `first_name`, `middle_name` | string | F.I.Sh. |
-| `test_session_id` | integer | Test sessiya ID si |
-| `session_smena_id` | integer | Kun+smena ID si |
-| `exam_date` | date | Imtihon kuni |
-| `smena_name` | string \| null | Smena nomi |
-| `region_id`, `region_name` | integer, string | Viloyat |
-| `zone_id`, `zone_name` | integer, string | Bino |
-| `gr_n` | integer | Guruh raqami |
-| `sp_n` | integer | O'rin (kompyuter) raqami |
-| `subject_name` | string \| null | Fan |
-| `status` | string | Davomat holati — pastdagi jadvalga qarang |
-| `is_entered` | boolean | Binoga kirgan (chetlatilganlarda ham `true`) |
-| `is_cheating` | boolean | Chetlatilgan |
-| `is_applied` | boolean | Ariza bergan (to'lovni qaytarib olgan) — imtihonga kirmaydi |
-| `entered_at` | datetime \| null | Birinchi Face ID vaqti. Faqat kelganlarda; vaqt zonasi bilan (ISO 8601) |
-| `last_seen_at` | datetime \| null | Oxirgi Face ID vaqti |
-| `count` | integer | Shu sahifadagi qatorlar soni |
-| `has_more` | boolean | Keyingi sahifa bormi |
-| `next_after_id` | integer \| null | Keyingi so'rovdagi `after_id`. Oxirgi sahifada `null` |
+| `test_key`, `s_code` | string, integer | So'rovdagi qiymatlar |
+| `count` | integer | `items` dagi qatorlar soni |
+| `items[].student_id` | integer | Nomzod yozuvining FaceID tizimidagi ID si |
+| `items[].s_code` | integer | Tashqi platformadagi ID |
+| `items[].jshshir` | string \| null | JShShIR (14 xona) |
+| `items[].last_name`, `first_name`, `middle_name` | string | F.I.Sh. |
+| `items[].test_key`, `test_name` | string | Test turi |
+| `items[].test_session_id`, `test_session_name` | integer, string | Test sessiyasi |
+| `items[].session_smena_id` | integer | Kun+smena ID si |
+| `items[].exam_date` | date | Imtihon kuni |
+| `items[].smena_name` | string \| null | Smena nomi |
+| `items[].region_id`, `region_name` | integer, string | Viloyat |
+| `items[].zone_id`, `zone_name` | integer, string | Bino |
+| `items[].gr_n` | integer | Guruh raqami |
+| `items[].sp_n` | integer | O'rin (kompyuter) raqami |
+| `items[].subject_name` | string \| null | Fan |
+| `items[].status` | string | Davomat holati — pastdagi jadvalga qarang |
+| `items[].is_entered` | boolean | Binoga kirgan (chetlatilganlarda ham `true`) |
+| `items[].is_cheating` | boolean | Chetlatilgan |
+| `items[].is_applied` | boolean | Ariza bergan (to'lovni qaytarib olgan) — imtihonga kirmaydi |
+| `items[].entered_at` | datetime \| null | Birinchi Face ID vaqti. Faqat kelganlarda; vaqt zonasi bilan (ISO 8601) |
+| `items[].last_seen_at` | datetime \| null | Oxirgi Face ID vaqti |
 
 **`status` qiymatlari:**
 
@@ -446,63 +399,24 @@ X-API-Key: sk-xxxx...
 | `cheating` | Keldi, lekin qoidabuzarlik uchun chetlatildi |
 | `not_entered` | Kelmadi |
 
-"Kelganlar" jami soni = `entered` + `cheating`.
+Nomzod kelgan hisoblanadi, agar `status` — `entered` yoki `cheating` bo'lsa.
 
-**Sahifalash.** Ro'yxat `student_id` o'sish tartibida qaytadi. Birinchi so'rovda
-`after_id=0`, keyingilarida oldingi javobdagi `next_after_id` yuboriladi va
-`has_more=false` bo'lguncha davom etiladi. Bu usul davomat yozilib turgan
-paytda ham qatorlarni takrorlamaydi va tushirib qoldirmaydi.
+**Nega `items` ro'yxat.** Odatda bitta qator qaytadi. Bir nechta qator
+bo'lishi mumkin, agar shu test turida nomzod bir nechta sessiyaga (masalan,
+qayta topshirish) yoki bir sessiyada bir nechta qatorga yuklangan bo'lsa.
+Qatorlar eng yangi imtihon sanasidan boshlab tartiblanadi — joriy imtihon
+uchun odatda `items[0]` kerak; aniq imtihonni `test_session_id` /
+`exam_date` bo'yicha tanlang. Bitta javobda ko'pi bilan 50 qator.
 
-**Muhim:**
-- Holat o'zgarishi mumkin. Nomzod keyinroq kelishi mumkin, operator xato
-  yozilgan davomatni bekor qilishi mumkin (`entered` → `not_entered`) yoki
-  nomzodni chetlatishi mumkin (`entered` → `cheating`). Yakuniy natija uchun
-  ma'lumotni smena tugagandan keyin qayta oling.
-- Tizimda "oxirgi o'zgarganlar" filtri yo'q. Yangilash uchun kerakli smenani
-  to'liq qayta oling.
-- Bitta JShShIR bir sessiyada bir necha qatorda bo'lishi mumkin (turli fan yoki
-  kun). Har qatorning `student_id` si alohida.
+**Muhim:** holat o'zgarishi mumkin. Nomzod keyinroq kelishi mumkin, operator
+xato yozilgan davomatni bekor qilishi mumkin (`entered` → `not_entered`) yoki
+nomzodni chetlatishi mumkin (`entered` → `cheating`). Yakuniy natija uchun
+smena tugagandan keyin qayta so'rang.
 
-### 3.3 Umumiy sonlar
+### 3.2 So'rov chegarasi
 
-```
-GET /api/v1/attendance/summary
-```
-
-Query parametrlar `/attendance/students` dagi bilan bir xil: `test_session_id`
-(majburiy), `session_smena_id`, `exam_date`, `region_id`, `zone_id`.
-
-**Response (200):**
-```json
-{
-  "test_session_id": 7,
-  "total": 12840,
-  "entered": 11902,
-  "cheating": 14,
-  "not_entered": 924,
-  "applied": 37
-}
-```
-
-| Field | Tavsif |
-|---|---|
-| `total` | Jami nomzodlar |
-| `entered` | Keldi |
-| `cheating` | Keldi va chetlatildi |
-| `not_entered` | Kelmadi |
-| `applied` | Ariza bergan. Ular `not_entered` ichida ham hisoblangan |
-
-`entered + cheating + not_entered = total`.
-
-### 3.4 So'rov chegaralari
-
-| Endpoint | Chegara (bitta API kalit uchun) |
-|---|---|
-| `/attendance/sessions` | 60 so'rov / daqiqa |
-| `/attendance/students` | 300 so'rov / daqiqa |
-| `/attendance/summary` | 120 so'rov / daqiqa |
-
-Chegaradan oshsa `429` qaytadi — biroz kutib qayta urining.
+Bitta API kalit uchun **600 so'rov / daqiqa**. Chegaradan oshsa `429`
+qaytadi — bir necha soniya kutib qayta urining.
 
 ---
 
@@ -526,8 +440,8 @@ Chegaradan oshsa `429` qaytadi — biroz kutib qayta urining.
 | 400 | Noto'g'ri so'rov (yaroqsiz base64, rasm hajmi oshdi) |
 | 401 | API kalit yaroqsiz yoki berilmagan |
 | 403 | Ruxsat yo'q (yoki API kalit egasiga viloyat biriktirilmagan) |
-| 404 | Test sessiya topilmadi |
-| 422 | Validatsiya xatosi (majburiy fieldlar to'ldirilmagan, JShShIR 14 xonali emas) |
+| 404 | Nomzod topilmadi (3-bo'lim) |
+| 422 | Validatsiya xatosi (majburiy fieldlar to'ldirilmagan, `s_code` son emas yoki 0) |
 | 429 | So'rovlar chegarasi oshdi yoki navbat to'la — biroz kutib qayta urining |
 
 ---
@@ -617,28 +531,24 @@ API_URL = "https://your-domain.com/api/v1"
 HEADERS = {"X-API-Key": "sk-xxxx..."}
 
 
-def fetch_attendance(test_session_id: int, session_smena_id: int | None = None) -> list[dict]:
-    """Sessiya (yoki bitta smena) nomzodlarining holatini to'liq olish."""
-    params = {"test_session_id": test_session_id, "limit": 1000, "after_id": 0}
-    if session_smena_id is not None:
-        params["session_smena_id"] = session_smena_id
-
-    items: list[dict] = []
+def get_attendance(test_key: str, s_code: int) -> dict | None:
+    """Nomzodning eng yangi imtihondagi davomati. Topilmasa — None."""
+    params = {"test_key": test_key, "s_code": s_code}
     while True:
-        resp = requests.get(f"{API_URL}/attendance/students", params=params, headers=HEADERS, timeout=60)
+        resp = requests.get(f"{API_URL}/attendance/student", params=params, headers=HEADERS, timeout=15)
         if resp.status_code == 429:
-            time.sleep(int(resp.headers.get("Retry-After", 5)))
+            time.sleep(5)
             continue
+        if resp.status_code == 404:
+            return None
         resp.raise_for_status()
-        data = resp.json()
-        items.extend(data["items"])
-        if not data["has_more"]:
-            return items
-        params["after_id"] = data["next_after_id"]
+        return resp.json()["items"][0]
 
 
-students = fetch_attendance(test_session_id=7, session_smena_id=70)
-came = [s for s in students if s["status"] in ("entered", "cheating")]
-absent = [s for s in students if s["status"] == "not_entered"]
-print(f"Keldi: {len(came)}, kelmadi: {len(absent)}")
+row = get_attendance("ms", 845120)
+if row is None:
+    print("Nomzod topilmadi")
+else:
+    came = row["status"] in ("entered", "cheating")
+    print(f"{row['last_name']} {row['first_name']}: {'keldi' if came else 'kelmadi'}")
 ```

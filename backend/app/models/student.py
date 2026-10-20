@@ -38,7 +38,10 @@ class Student(Base):
     # biriktirish" uni Proctoring'dagi KOMPYUTER RAQAMI bilan almashtiradi
     # (`services/seat_assignment.py`) va `proctoring_schedule_id` ni yozadi.
     sp_n: Mapped[int] = mapped_column(default=0)
-    s_code: Mapped[int] = mapped_column(BigInteger, default=0)
+    # Nomzodning tashqi platformadagi ID si (CEFR/MS: task_id, IIV:
+    # request_id, OTM: id; Excel'dan yuklanganda 0). Davomat API'si
+    # (`/attendance/student`) shu bo'yicha qidiradi.
+    s_code: Mapped[int] = mapped_column(BigInteger, default=0, index=True)
     e_date: Mapped[date] = mapped_column(Date)
 
     # ms

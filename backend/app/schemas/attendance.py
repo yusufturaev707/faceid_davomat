@@ -23,36 +23,17 @@ class AttendanceStatus(str, Enum):
     NOT_ENTERED = "not_entered"
 
 
-class AttendanceSmenaItem(BaseModel):
-    session_smena_id: int
-    day: date
-    smena_name: str | None = None
-    number: int
-
-
-class AttendanceSessionItem(BaseModel):
-    test_session_id: int
-    name: str
-    test_name: str | None = None
-    start_date: date
-    finish_date: date
-    state_key: int | None = None
-    state_name: str | None = None
-    smenas: list[AttendanceSmenaItem]
-
-
-class AttendanceSessionsResponse(BaseModel):
-    items: list[AttendanceSessionItem]
-    total: int
-
-
 class AttendanceStudentItem(BaseModel):
     student_id: int
+    s_code: int
     jshshir: str | None = None
     last_name: str
     first_name: str
     middle_name: str | None = None
+    test_key: str
+    test_name: str | None = None
     test_session_id: int
+    test_session_name: str | None = None
     session_smena_id: int
     exam_date: date
     smena_name: str | None = None
@@ -74,18 +55,10 @@ class AttendanceStudentItem(BaseModel):
     last_seen_at: datetime | None = None
 
 
-class AttendanceStudentsResponse(BaseModel):
-    items: list[AttendanceStudentItem]
+class AttendanceLookupResponse(BaseModel):
+    test_key: str
+    s_code: int
+    # Odatda bitta qator. Bir nechta bo'lishi mumkin — nomzod bir nechta
+    # sessiyaga yuklangan bo'lsa; eng yangi imtihon sanasi birinchi.
     count: int
-    has_more: bool
-    # Keyingi sahifa uchun `after_id` qiymati; oxirgi sahifada `None`.
-    next_after_id: int | None = None
-
-
-class AttendanceSummaryResponse(BaseModel):
-    test_session_id: int
-    total: int
-    entered: int
-    cheating: int
-    not_entered: int
-    applied: int
+    items: list[AttendanceStudentItem]

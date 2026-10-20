@@ -1,9 +1,9 @@
-"""Tashqi tizimlar uchun davomat API'si (`/attendance`).
+"""Tashqi tizimlar uchun davomat API'si (`/attendance/student`).
 
 `Base.metadata.create_all` SQLite'da `student_logs.ip_address` (INET) sababli
 yiqiladi, shuning uchun kerakli jadvallar alohida yaratiladi, `student_logs`
-esa qo'lda (INET o'rniga TEXT). Shunday qilib SQL so'rovlarning o'zi
-(JOIN, `FILTER`, keyset) haqiqiy bazada tekshiriladi.
+esa qo'lda (INET o'rniga TEXT). Shunday qilib SQL so'rovning o'zi (JOIN'lar,
+`tests.key` filtri) haqiqiy bazada tekshiriladi.
 """
 
 from datetime import date, datetime, timezone
@@ -28,7 +28,7 @@ from app.models.test_session import TestSession as ExamSession
 from app.models.test_session_smena import TestSessionSmena as SessionSmena
 from app.models.zone import Zone
 
-URL = "/api/v1/attendance"
+URL = "/api/v1/attendance/student"
 ENTER_TIME = datetime(2026, 10, 12, 8, 15, tzinfo=timezone.utc)
 
 
@@ -80,35 +80,47 @@ def _seed(s):
             Zone(id=20, region_id=2, name="2-bino", number=1),
             Smena(id=1, name="1-smena", number=1),
             ExamTest(id=1, name="Milliy sertifikat", key="ms"),
+            ExamTest(id=2, name="CEFR", key="cefr"),
             SessionState(id=4, name="Faol", key=4),
             ExamSession(
                 id=7, hash_key="h7", test_state_id=4, test_id=1, name="Oktabr",
                 number=7, start_date=date(2026, 10, 12), finish_date=date(2026, 10, 13),
             ),
+            ExamSession(
+                id=8, hash_key="h8", test_state_id=4, test_id=1, name="Noyabr",
+                number=8, start_date=date(2026, 11, 2), finish_date=date(2026, 11, 2),
+            ),
+            ExamSession(
+                id=9, hash_key="h9", test_state_id=4, test_id=2, name="CEFR oktabr",
+                number=9, start_date=date(2026, 10, 12), finish_date=date(2026, 10, 12),
+            ),
             SessionSmena(id=70, test_session_id=7, test_smena_id=1, number=1, day=date(2026, 10, 12)),
-            SessionSmena(id=71, test_session_id=7, test_smena_id=1, number=1, day=date(2026, 10, 13)),
+            SessionSmena(id=80, test_session_id=8, test_smena_id=1, number=1, day=date(2026, 11, 2)),
+            SessionSmena(id=90, test_session_id=9, test_smena_id=1, number=1, day=date(2026, 10, 12)),
         ]
     )
     rows = [
-        # id, smena, zone, entered, cheating, applied
-        (101, 70, 10, True, False, False),
-        (102, 70, 10, False, False, False),
-        (103, 70, 10, True, True, False),
-        (104, 70, 20, False, False, True),
-        (105, 71, 20, True, False, False),
+        # id, s_code, smena, zone, entered, cheating, applied
+        (101, 5001, 70, 10, True, False, False),
+        (102, 5002, 70, 10, False, False, False),  # davomati bekor qilingan
+        (103, 5003, 70, 10, True, True, False),
+        (104, 5004, 70, 20, False, False, True),
+        (105, 5005, 70, 10, False, False, False),
+        (106, 5005, 80, 10, False, False, False),  # o'sha nomzod keyingi sessiyada
+        (107, 5001, 90, 10, False, False, False),  # boshqa test turida xuddi shu s_code
     ]
-    for sid, tss, zone, entered, cheating, applied in rows:
+    for sid, code, tss, zone, entered, cheating, applied in rows:
         s.add(
             Student(
-                id=sid, session_smena_id=tss, zone_id=zone, last_name=f"F{sid}",
-                first_name="I", imei=f"{sid:014d}", gr_n=1, sp_n=sid - 100,
-                e_date=date(2026, 10, 12) if tss == 70 else date(2026, 10, 13),
+                id=sid, s_code=code, session_smena_id=tss, zone_id=zone,
+                last_name=f"F{sid}", first_name="I", imei=f"{sid:014d}", gr_n=1,
+                sp_n=sid - 100,
+                e_date={70: date(2026, 10, 12), 80: date(2026, 11, 2), 90: date(2026, 10, 12)}[tss],
                 is_entered=entered, is_cheating=cheating, is_applied=applied,
             )
         )
     s.flush()
-    # 101 keldi; 102 ning davomati bekor qilingan — log tarix sifatida qolgan.
-    for sid in (101, 102, 103, 105):
+    for sid in (101, 102, 103):
         s.execute(
             text(
                 "INSERT INTO student_logs (student_id, first_enter_time, last_enter_time)"
@@ -128,103 +140,85 @@ def client(db):
     app.dependency_overrides.clear()
 
 
+def _get(c, test_key, s_code):
+    return c.get(URL, params={"test_key": test_key, "s_code": s_code})
+
+
 def test_requires_attendance_permission(client):
     c, state = client
     state["user"] = _user(perms=(P.STUDENT_READ.code,))
-    r = c.get(f"{URL}/students", params={"test_session_id": 7})
-    assert r.status_code == 403
+    assert _get(c, "ms", 5001).status_code == 403
 
 
-def test_sessions_list_smenas(client):
+def test_both_params_required(client):
     c, _ = client
-    r = c.get(f"{URL}/sessions")
+    assert c.get(URL, params={"test_key": "ms"}).status_code == 422
+    assert c.get(URL, params={"s_code": 5001}).status_code == 422
+    assert _get(c, "ms", 0).status_code == 422
+    assert _get(c, "ms", "abc").status_code == 422
+
+
+def test_entered_student(client):
+    c, _ = client
+    r = _get(c, "ms", 5001)
     assert r.status_code == 200
     body = r.json()
-    assert body["total"] == 1
-    session = body["items"][0]
-    assert session["test_session_id"] == 7
-    assert session["test_name"] == "Milliy sertifikat"
-    assert session["state_key"] == 4
-    assert [sm["session_smena_id"] for sm in session["smenas"]] == [70, 71]
+    assert body["test_key"] == "ms"
+    assert body["s_code"] == 5001
+    # cefr'dagi 107 (xuddi shu s_code) qo'shilmaydi.
+    assert body["count"] == 1
+    item = body["items"][0]
+    assert item["student_id"] == 101
+    assert item["status"] == "entered"
+    assert item["entered_at"] is not None
+    assert item["jshshir"] == "00000000000101"
+    assert item["test_key"] == "ms"
+    assert item["test_name"] == "Milliy sertifikat"
+    assert item["test_session_id"] == 7
+    assert item["test_session_name"] == "Oktabr"
+    assert item["region_name"] == "Toshkent"
+    assert item["zone_name"] == "1-bino"
+    assert item["smena_name"] == "1-smena"
 
 
-def test_students_statuses_and_times(client):
+def test_test_key_separates_students(client):
     c, _ = client
-    r = c.get(f"{URL}/students", params={"test_session_id": 7})
-    assert r.status_code == 200
-    items = {i["student_id"]: i for i in r.json()["items"]}
-    assert set(items) == {101, 102, 103, 104, 105}
-    assert items[101]["status"] == "entered"
-    assert items[101]["entered_at"] is not None
-    assert items[103]["status"] == "cheating"
-    assert items[104]["status"] == "not_entered"
-    assert items[104]["is_applied"] is True
+    items = _get(c, "cefr", 5001).json()["items"]
+    assert [i["student_id"] for i in items] == [107]
+    assert items[0]["status"] == "not_entered"
+
+
+def test_statuses(client):
+    c, _ = client
+    assert _get(c, "ms", 5003).json()["items"][0]["status"] == "cheating"
+    applied = _get(c, "ms", 5004).json()["items"][0]
+    assert applied["status"] == "not_entered"
+    assert applied["is_applied"] is True
     # Bekor qilingan davomat: log bor, lekin vaqt ko'rsatilmaydi.
-    assert items[102]["status"] == "not_entered"
-    assert items[102]["entered_at"] is None
-    assert items[101]["jshshir"] == "00000000000101"
-    assert items[101]["region_name"] == "Toshkent"
-    assert items[101]["smena_name"] == "1-smena"
+    cancelled = _get(c, "ms", 5002).json()["items"][0]
+    assert cancelled["status"] == "not_entered"
+    assert cancelled["entered_at"] is None
 
 
-def test_keyset_pagination(client):
+def test_several_sessions_newest_first(client):
     c, _ = client
-    seen, after = [], 0
-    while True:
-        r = c.get(
-            f"{URL}/students",
-            params={"test_session_id": 7, "limit": 2, "after_id": after},
-        )
-        body = r.json()
-        seen += [i["student_id"] for i in body["items"]]
-        if not body["has_more"]:
-            assert body["next_after_id"] is None
-            break
-        after = body["next_after_id"]
-    assert seen == [101, 102, 103, 104, 105]
+    body = _get(c, "ms", 5005).json()
+    assert body["count"] == 2
+    assert [i["test_session_id"] for i in body["items"]] == [8, 7]
 
 
-def test_filters(client):
+def test_not_found(client):
     c, _ = client
-    r = c.get(f"{URL}/students", params={"test_session_id": 7, "status": "entered"})
-    assert [i["student_id"] for i in r.json()["items"]] == [101, 105]
-    r = c.get(f"{URL}/students", params={"test_session_id": 7, "session_smena_id": 71})
-    assert [i["student_id"] for i in r.json()["items"]] == [105]
-    r = c.get(f"{URL}/students", params={"test_session_id": 7, "jshshir": "00000000000103"})
-    assert [i["student_id"] for i in r.json()["items"]] == [103]
-    r = c.get(f"{URL}/students", params={"test_session_id": 7, "jshshir": "123"})
-    assert r.status_code == 422
+    assert _get(c, "ms", 9999).status_code == 404
+    assert _get(c, "yoq", 5001).status_code == 404
 
 
 def test_region_scope_is_forced(client):
     c, state = client
     state["user"] = _user(perms=(P.ATTENDANCE_READ.code,), region_id=2)
-    # Boshqa viloyat so'ralsa ham o'z viloyati qaytadi.
-    r = c.get(f"{URL}/students", params={"test_session_id": 7, "region_id": 1})
-    assert [i["student_id"] for i in r.json()["items"]] == [104, 105]
+    # 104 — Samarqandda, 101 — Toshkentda: boshqa viloyat nomzodi ko'rinmaydi.
+    assert _get(c, "ms", 5004).status_code == 200
+    assert _get(c, "ms", 5001).status_code == 404
 
     state["user"] = _user(perms=(P.ATTENDANCE_READ.code,), region_id=None)
-    r = c.get(f"{URL}/students", params={"test_session_id": 7})
-    assert r.status_code == 403
-
-
-def test_summary(client):
-    c, _ = client
-    r = c.get(f"{URL}/summary", params={"test_session_id": 7})
-    assert r.status_code == 200
-    assert r.json() == {
-        "test_session_id": 7,
-        "total": 5,
-        "entered": 2,
-        "cheating": 1,
-        "not_entered": 2,
-        "applied": 1,
-    }
-    r = c.get(f"{URL}/summary", params={"test_session_id": 7, "zone_id": 10})
-    assert r.json()["total"] == 3
-
-
-def test_unknown_session_is_404(client):
-    c, _ = client
-    assert c.get(f"{URL}/students", params={"test_session_id": 999}).status_code == 404
-    assert c.get(f"{URL}/summary", params={"test_session_id": 999}).status_code == 404
+    assert _get(c, "ms", 5004).status_code == 403
