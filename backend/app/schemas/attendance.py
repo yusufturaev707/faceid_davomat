@@ -25,7 +25,8 @@ class AttendanceStatus(str, Enum):
 
 class AttendanceStudentItem(BaseModel):
     student_id: int
-    s_code: int
+    # Tashqi platformadagi nomzod ID si (bazada `students.s_code`).
+    task_id: int
     jshshir: str | None = None
     last_name: str
     first_name: str
@@ -57,7 +58,7 @@ class AttendanceStudentItem(BaseModel):
 
 class AttendanceLookupResponse(BaseModel):
     test_key: str
-    s_code: int
+    task_id: int
     # Odatda bitta qator. Bir nechta bo'lishi mumkin — nomzod bir nechta
     # sessiyaga yuklangan bo'lsa; eng yangi imtihon sanasi birinchi.
     count: int

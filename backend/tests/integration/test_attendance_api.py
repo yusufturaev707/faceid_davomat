@@ -100,14 +100,14 @@ def _seed(s):
         ]
     )
     rows = [
-        # id, s_code, smena, zone, entered, cheating, applied
+        # id, task_id (s_code), smena, zone, entered, cheating, applied
         (101, 5001, 70, 10, True, False, False),
         (102, 5002, 70, 10, False, False, False),  # davomati bekor qilingan
         (103, 5003, 70, 10, True, True, False),
         (104, 5004, 70, 20, False, False, True),
         (105, 5005, 70, 10, False, False, False),
         (106, 5005, 80, 10, False, False, False),  # o'sha nomzod keyingi sessiyada
-        (107, 5001, 90, 10, False, False, False),  # boshqa test turida xuddi shu s_code
+        (107, 5001, 90, 10, False, False, False),  # boshqa test turida xuddi shu task_id
     ]
     for sid, code, tss, zone, entered, cheating, applied in rows:
         s.add(
@@ -140,8 +140,8 @@ def client(db):
     app.dependency_overrides.clear()
 
 
-def _get(c, test_key, s_code):
-    return c.get(URL, params={"test_key": test_key, "s_code": s_code})
+def _get(c, test_key, task_id):
+    return c.get(URL, params={"test_key": test_key, "task_id": task_id})
 
 
 def test_requires_attendance_permission(client):
@@ -153,7 +153,7 @@ def test_requires_attendance_permission(client):
 def test_both_params_required(client):
     c, _ = client
     assert c.get(URL, params={"test_key": "ms"}).status_code == 422
-    assert c.get(URL, params={"s_code": 5001}).status_code == 422
+    assert c.get(URL, params={"task_id": 5001}).status_code == 422
     assert _get(c, "ms", 0).status_code == 422
     assert _get(c, "ms", "abc").status_code == 422
 
@@ -164,11 +164,14 @@ def test_entered_student(client):
     assert r.status_code == 200
     body = r.json()
     assert body["test_key"] == "ms"
-    assert body["s_code"] == 5001
-    # cefr'dagi 107 (xuddi shu s_code) qo'shilmaydi.
+    assert body["task_id"] == 5001
+    assert "s_code" not in body
+    # cefr'dagi 107 (xuddi shu task_id) qo'shilmaydi.
     assert body["count"] == 1
     item = body["items"][0]
     assert item["student_id"] == 101
+    assert item["task_id"] == 5001
+    assert "s_code" not in item
     assert item["status"] == "entered"
     assert item["entered_at"] is not None
     assert item["jshshir"] == "00000000000101"

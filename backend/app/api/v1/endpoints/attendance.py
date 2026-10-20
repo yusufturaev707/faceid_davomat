@@ -1,8 +1,11 @@
 """Davomat holati — tashqi tizimlar uchun (`X-API-Key`).
 
 Bitta endpoint: nomzodni test turi (`tests.key`) va tashqi platformadagi
-unikal ID si (`students.s_code`) bo'yicha topib, keldi/kelmadi holatini
+unikal ID si (`task_id`) bo'yicha topib, keldi/kelmadi holatini
 qaytaradi. Faqat o'qish; hech narsa yozilmaydi.
+
+`task_id` — faqat shu API'dagi nom; bazada u `students.s_code` ustuni
+(loaderlar manba ID sini shu yerga yozadi), model o'zgarmagan.
 
 Kirish — `attendance:read`, qamrov — `student:all_regions` (yo'q bo'lsa
 API kalit egasining o'z viloyati). Shartnoma `API_DOCS.md` da — maydon
@@ -37,7 +40,7 @@ from app.schemas.attendance import (
 
 router = APIRouter()
 
-# Bitta `s_code` uchun qaytariladigan qatorlar chegarasi — tasodifiy
+# Bitta `task_id` uchun qaytariladigan qatorlar chegarasi — tasodifiy
 # ommaviy takrorlanish (masalan, qayta yuklangan sessiyalar) javobni
 # shishirmasin.
 _MAX_ROWS = 50
@@ -56,7 +59,7 @@ def _status_of(is_entered: bool, is_cheating: bool) -> AttendanceStatus:
 @router.get(
     "/student",
     response_model=AttendanceLookupResponse,
-    summary="Nomzodni test turi va s_code bo'yicha topish",
+    summary="Nomzodni test turi va task_id bo'yicha topish",
 )
 @limiter.limit("600/minute")
 def find_attendance_student(
@@ -64,7 +67,7 @@ def find_attendance_student(
     test_key: str = Query(
         ..., min_length=1, max_length=20, description="Test turi kaliti (`tests.key`)"
     ),
-    s_code: int = Query(
+    task_id: int = Query(
         ..., ge=1, description="Nomzodning tashqi platformadagi unikal ID si"
     ),
     db: Session = Depends(get_db),
@@ -82,7 +85,7 @@ def find_attendance_student(
     stmt = (
         select(
             Student.id,
-            Student.s_code,
+            Student.s_code.label("task_id"),
             Student.imei,
             Student.last_name,
             Student.first_name,
@@ -114,7 +117,7 @@ def find_attendance_student(
         .outerjoin(Region, Region.id == Zone.region_id)
         .outerjoin(Smena, Smena.id == TestSessionSmena.test_smena_id)
         .outerjoin(StudentLog, StudentLog.student_id == Student.id)
-        .where(Student.s_code == s_code, Test.key == test_key)
+        .where(Student.s_code == task_id, Test.key == test_key)
         .order_by(Student.e_date.desc(), Student.id.desc())
         .limit(_MAX_ROWS)
     )
@@ -130,7 +133,7 @@ def find_attendance_student(
         items.append(
             AttendanceStudentItem(
                 student_id=r.id,
-                s_code=r.s_code,
+                task_id=r.task_id,
                 jshshir=r.imei,
                 last_name=r.last_name,
                 first_name=r.first_name,
@@ -158,5 +161,5 @@ def find_attendance_student(
             )
         )
     return AttendanceLookupResponse(
-        test_key=test_key, s_code=s_code, count=len(items), items=items
+        test_key=test_key, task_id=task_id, count=len(items), items=items
     )

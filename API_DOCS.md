@@ -300,7 +300,7 @@ keyin ham so'rash mumkin.
 ### 3.1 Nomzodni topish
 
 ```
-GET /api/v1/attendance/student?test_key={test_key}&s_code={s_code}
+GET /api/v1/attendance/student?test_key={test_key}&task_id={task_id}
 ```
 
 **Query parametrlar** (ikkalasi ham majburiy):
@@ -308,13 +308,16 @@ GET /api/v1/attendance/student?test_key={test_key}&s_code={s_code}
 | Parametr | Tur | Tavsif |
 |---|---|---|
 | `test_key` | string (1–20 belgi) | Test turi kaliti, masalan `ms`, `cefr`. Katta-kichik harf farqlanadi |
-| `s_code` | integer (≥ 1) | Nomzodning sizning platformangizdagi unikal ID si — nomzodlar ro'yxati FaceID tizimiga yuklanganda shu qiymat saqlangan |
+| `task_id` | integer (≥ 1) | Nomzodning sizning platformangizdagi unikal ID si — nomzodlar ro'yxati FaceID tizimiga yuklanganda shu qiymat saqlangan |
 
-Parametrlardan biri berilmasa, `s_code` son bo'lmasa yoki `0` bo'lsa — `422`.
+Parametrlardan biri berilmasa, `task_id` son bo'lmasa yoki `0` bo'lsa — `422`.
+
+> Bu `task_id` — nomzodning **sizning platformangizdagi** ID si (son). 1–2-bo'limlardagi
+> `task_id` (rasm tekshirish vazifasining UUID si) bilan aloqasi yo'q.
 
 **Misol:**
 ```
-GET /api/v1/attendance/student?test_key=ms&s_code=845120
+GET /api/v1/attendance/student?test_key=ms&task_id=845120
 X-API-Key: sk-xxxx...
 ```
 
@@ -322,12 +325,12 @@ X-API-Key: sk-xxxx...
 ```json
 {
   "test_key": "ms",
-  "s_code": 845120,
+  "task_id": 845120,
   "count": 1,
   "items": [
     {
       "student_id": 1520431,
-      "s_code": 845120,
+      "task_id": 845120,
       "jshshir": "31234567890123",
       "last_name": "ALIYEV",
       "first_name": "VALI",
@@ -362,16 +365,16 @@ X-API-Key: sk-xxxx...
 { "detail": "Nomzod topilmadi" }
 ```
 
-`404` quyidagi hollarda qaytadi: bunday `test_key` + `s_code` juftligi yo'q,
+`404` quyidagi hollarda qaytadi: bunday `test_key` + `task_id` juftligi yo'q,
 nomzod hali tizimga yuklanmagan yoki u API kalit qamrovidan tashqaridagi
 viloyatda.
 
 | Field | Tur | Tavsif |
 |---|---|---|
-| `test_key`, `s_code` | string, integer | So'rovdagi qiymatlar |
+| `test_key`, `task_id` | string, integer | So'rovdagi qiymatlar |
 | `count` | integer | `items` dagi qatorlar soni |
 | `items[].student_id` | integer | Nomzod yozuvining FaceID tizimidagi ID si |
-| `items[].s_code` | integer | Tashqi platformadagi ID |
+| `items[].task_id` | integer | Tashqi platformadagi ID |
 | `items[].jshshir` | string \| null | JShShIR (14 xona) |
 | `items[].last_name`, `first_name`, `middle_name` | string | F.I.Sh. |
 | `items[].test_key`, `test_name` | string | Test turi |
@@ -441,7 +444,7 @@ qaytadi — bir necha soniya kutib qayta urining.
 | 401 | API kalit yaroqsiz yoki berilmagan |
 | 403 | Ruxsat yo'q (yoki API kalit egasiga viloyat biriktirilmagan) |
 | 404 | Nomzod topilmadi (3-bo'lim) |
-| 422 | Validatsiya xatosi (majburiy fieldlar to'ldirilmagan, `s_code` son emas yoki 0) |
+| 422 | Validatsiya xatosi (majburiy fieldlar to'ldirilmagan, `task_id` son emas yoki 0) |
 | 429 | So'rovlar chegarasi oshdi yoki navbat to'la — biroz kutib qayta urining |
 
 ---
@@ -531,15 +534,15 @@ API_URL = "https://your-domain.com/api/v1"
 HEADERS = {"X-API-Key": "sk-xxxx..."}
 
 
-def get_attendance(test_key: str, s_code: int) -> dict | None:
+def get_attendance(test_key: str, task_id: int) -> dict | None:
     """Nomzodning eng yangi imtihondagi davomati. Topilmasa — None."""
-    params = {"test_key": test_key, "s_code": s_code}
+    params = {"test_key": test_key, "task_id": task_id}
     while True:
         resp = requests.get(f"{API_URL}/attendance/student", params=params, headers=HEADERS, timeout=15)
-        if resp.status_code == 429:
+        if resp.statutask_id == 429:
             time.sleep(5)
             continue
-        if resp.status_code == 404:
+        if resp.statutask_id == 404:
             return None
         resp.raise_for_status()
         return resp.json()["items"][0]
