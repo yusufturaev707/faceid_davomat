@@ -24,6 +24,7 @@ celery_app = Celery(
         "app.tasks.student_loader_task",
         "app.tasks.excel_loader_task",
         "app.tasks.proctoring_task",
+        "app.tasks.monitor_task",
     ],
 )
 
@@ -70,6 +71,13 @@ celery_app.conf.beat_schedule = {
     "cleanup-failed-logins-daily": {
         "task": "tasks.cleanup_failed_logins",
         "schedule": 86400.0,  # har kunda (90 kundan eskilarni o'chiradi)
+    },
+    # Server monitoringi: yuklama tarixi (CPU/RAM/navbatlar) — har daqiqada.
+    # `expires` — worker band/o'chiq bo'lsa eskirgan nuqtalar to'planib qolmasin.
+    "monitor-sample-every-minute": {
+        "task": "tasks.monitor_sample",
+        "schedule": 60.0,
+        "options": {"expires": 55},
     },
 }
 

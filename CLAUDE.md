@@ -135,6 +135,15 @@ causes are soft focus and a QR too small in frame, so `_QR_ATTEMPTS` re-reads a 
 `@limiter.limit` must not use `from __future__ import annotations` (FastAPI then can't resolve the body model
 through the slowapi wrapper and treats it as a query param).
 
+**Server monitoring** (`endpoints/server_monitor.py` + `services/server_monitor.py`, frontend
+`/server-monitor`): CPU/RAM/disk/network via `psutil`, `systemctl show` for `MONITOR_SYSTEMD_UNITS`,
+`pg_stat_*`, Redis `INFO` + Celery queue lengths, Celery `inspect`, log tails from `MONITOR_LOG_DIRS`
+(read from the end, secrets redacted, only enumerated files — no paths from the client) and `journalctl`.
+Gated by `require_super_admin` (`User.is_super_admin` = id 1 *and* admin role; API keys rejected), **not** by
+a permission codename — so it never appears in `class P` / `permissions.ts`, and the admin role does not get it.
+Read-only by design (no restart buttons). Load history comes from the beat task `tasks.monitor_sample`
+(every 60 s, `storage` queue) into a capped Redis list (24 h); no beat → empty charts and an info alert.
+
 **Telegram bots** — both are aiogram 3, long polling, and hold **no DB connection**:
 everything goes through the backend over HTTP with one shared `X-API-Key` and a single reused
 `aiohttp.ClientSession` (`davomat_bot/services/api_client.py`, `statistic_bot/services/backend_client.py`).

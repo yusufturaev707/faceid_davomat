@@ -34,7 +34,7 @@ from app.crud.verify_faces import (
 )
 from app.dependencies import PermissionChecker, get_current_active_user, get_db
 from app.models.role import Role
-from app.models.user import User
+from app.models.user import ADMIN_ROLE_KEY, SUPER_ADMIN_USER_ID, User
 from app.models.verification_log import VerificationLog
 from app.models.verify_faces import VerifyFaces
 from app.schemas.admin import (
@@ -54,10 +54,8 @@ from app.schemas.auth import CreateUserRequest, UpdateUserRequest, UserResponse
 
 router = APIRouter()
 
-# Admin role identifier (matches DB seed). Mutations involving this role are gated
-# to the super-admin (id=1).
-ADMIN_ROLE_KEY = 1
-SUPER_ADMIN_USER_ID = 1
+# Admin roli bilan bog'liq o'zgarishlar faqat superadminga ochiq
+# (`ADMIN_ROLE_KEY`, `SUPER_ADMIN_USER_ID` — `app/models/user.py` da).
 
 
 def _is_admin_role(db: Session, role_id: int | None) -> bool:

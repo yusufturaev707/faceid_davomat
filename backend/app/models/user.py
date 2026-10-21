@@ -6,6 +6,11 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 
+# Superadmin — admin rolidagi id=1 foydalanuvchi (seed yaratgan birinchi
+# admin). Admin rolini boshqarish va server monitoringi faqat unga ochiq.
+ADMIN_ROLE_KEY = 1
+SUPER_ADMIN_USER_ID = 1
+
 
 class User(Base):
     __tablename__ = "users"
@@ -55,6 +60,11 @@ class User(Base):
         if self.role_ref:
             return self.role_ref.key
         return 0
+
+    @property
+    def is_super_admin(self) -> bool:
+        """Superadmin: id=1 VA hozir ham admin rolida (roldan tushirilsa — yo'q)."""
+        return self.id == SUPER_ADMIN_USER_ID and self.role_key == ADMIN_ROLE_KEY
 
     @hybrid_property
     def zone_name(self) -> str:

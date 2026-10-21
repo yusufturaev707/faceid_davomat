@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import admin, attendance, auth,davomat_bot, davomat_bot_admin, davomat_miniapp, embedding, health, lookup, online_users, pasport_info, permission, photo, result_analysis, seat_assignment, statistic_bot, statistic_bot_admin, student, test_session
+from app.api.v1.endpoints import admin, attendance, auth,davomat_bot, davomat_bot_admin, davomat_miniapp, embedding, health, lookup, online_users, pasport_info, permission, photo, result_analysis, seat_assignment, server_monitor, statistic_bot, statistic_bot_admin, student, test_session
 
 api_router = APIRouter()
 # Health-check — desktop tarmoq nazorati shu prefiks (/api/v1) ostida so'rov
@@ -12,6 +12,12 @@ api_router.include_router(embedding.router, prefix="/embedding", tags=["embeddin
 api_router.include_router(admin.router, prefix="/admin", tags=["admin"])
 api_router.include_router(
     online_users.router, prefix="/admin", tags=["admin", "online-users"]
+)
+# Server monitoringi — faqat superadmin (permission orqali berilmaydi).
+api_router.include_router(
+    server_monitor.router,
+    prefix="/admin/server-monitor",
+    tags=["admin", "server-monitor"],
 )
 # Kompyuter biriktirish — `/test-sessions` routeridan OLDIN: aks holda
 # `/test-sessions/{session_id}` wildcard'i so'rovni birinchi ushlaydi.

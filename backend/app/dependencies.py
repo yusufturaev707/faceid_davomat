@@ -126,6 +126,22 @@ def require_admin(current_user: User = Depends(get_current_active_user)) -> User
     return current_user
 
 
+def require_super_admin(
+    request: Request, current_user: User = Depends(get_current_active_user)
+) -> User:
+    """Faqat superadmin (`User.is_super_admin`) — permission orqali berilmaydi.
+
+    API kalit bilan kirish rad etiladi: kalit egasi superadmin bo'lsa ham,
+    bu bo'limlar faqat interaktiv login (JWT) uchun.
+    """
+    if request.headers.get(API_KEY_HEADER) or not current_user.is_super_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Bu bo'lim faqat superadmin uchun",
+        )
+    return current_user
+
+
 class PermissionChecker:
     """Granular permission tekshiruvchi dependency.
 

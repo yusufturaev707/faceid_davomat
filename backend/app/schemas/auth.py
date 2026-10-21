@@ -15,6 +15,10 @@ class UserResponse(BaseModel):
     region_name: str = ""
     telegram_id: str | None = None
     is_active: bool
+    # Server monitoringi kabi permission bilan berilmaydigan bo'limlar uchun
+    # (`User.is_super_admin`). Frontend faqat ko'rsatish uchun ishlatadi —
+    # haqiqiy tekshiruv backendda.
+    is_super_admin: bool = False
     permissions: list[str] = []
 
     model_config = {"from_attributes": True}

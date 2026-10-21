@@ -52,6 +52,9 @@ export interface UserResponse {
   zone_name: string;
   telegram_id: string | null;
   is_active: boolean;
+  // Superadmin (id=1, admin roli) — server monitoringi faqat unga ochiq.
+  // Faqat ko'rsatish uchun; haqiqiy tekshiruv backendda.
+  is_super_admin?: boolean;
   permissions: string[];
 }
 
@@ -1082,3 +1085,265 @@ export interface CheatingLogListResponse {
   per_page: number;
   pages: number;
 }
+
+// ============================================================
+// Server monitoringi (`/admin/server-monitor`, faqat superadmin)
+// ============================================================
+
+/** Har bo'lim alohida yig'iladi: `ok=false` bo'lsa faqat `error` keladi. */
+export type MonitorSection<T> = ({ ok: true } & T) | { ok: false; error: string };
+
+export interface MonitorProcess {
+  pid: number;
+  name: string;
+  user: string | null;
+  /** 100% = bitta yadro to'liq band. */
+  cpu_percent: number;
+  rss: number;
+  mem_percent: number;
+  threads: number;
+  started_at: string | null;
+  group: string | null;
+}
+
+export interface MonitorProcessGroup {
+  key: string;
+  label: string;
+  processes: number;
+  cpu_percent: number;
+  rss: number;
+  started_at: string | null;
+}
+
+export interface MonitorDisk {
+  device: string;
+  mountpoint: string;
+  fstype: string;
+  total: number;
+  used: number;
+  free: number;
+  percent: number;
+  contains_app: boolean;
+}
+
+export interface MonitorSystem {
+  host: {
+    hostname: string;
+    os: string;
+    kernel: string;
+    arch: string;
+    python: string;
+    boot_time: string | null;
+    uptime_seconds: number;
+    server_time: string;
+  };
+  cpu: {
+    percent: number;
+    per_cpu: number[];
+    cores_logical: number;
+    cores_physical: number;
+    load_1: number;
+    load_5: number;
+    load_15: number;
+    freq_mhz: number | null;
+    temperature_c: number | null;
+  };
+  memory: {
+    total: number;
+    available: number;
+    used: number;
+    percent: number;
+    cached: number;
+    buffers: number;
+    swap_total: number;
+    swap_used: number;
+    swap_percent: number;
+  };
+  disks: MonitorDisk[];
+  network: {
+    bytes_sent: number;
+    bytes_recv: number;
+    sent_per_sec: number | null;
+    recv_per_sec: number | null;
+    errin: number;
+    errout: number;
+    dropin: number;
+    dropout: number;
+    connections: Record<string, number> | null;
+  };
+  disk_io: { read_per_sec: number | null; write_per_sec: number | null };
+  process_count: number;
+  groups: MonitorProcessGroup[];
+  top_cpu: MonitorProcess[];
+  top_memory: MonitorProcess[];
+}
+
+export interface MonitorUnit {
+  unit: string;
+  description: string;
+  load_state: string;
+  active_state: string;
+  sub_state: string;
+  enabled: string;
+  main_pid: number;
+  since: string | null;
+  restarts: number | null;
+  memory: number | null;
+}
+
+export interface MonitorDatabase {
+  dialect: string;
+  latency_ms: number;
+  pool: { size: number; checked_out: number; overflow: number; max_overflow: number } | null;
+  version?: string;
+  size_bytes?: number;
+  max_connections?: number;
+  connections_total?: number;
+  connections_by_state?: Record<string, number>;
+  waiting_locks?: number;
+  stats?: {
+    commits: number;
+    rollbacks: number;
+    deadlocks: number;
+    temp_bytes: number;
+    conflicts: number;
+    cache_hit_percent: number | null;
+  };
+  long_queries?: {
+    pid: number;
+    duration_seconds: number;
+    state: string;
+    wait: string | null;
+    application: string | null;
+    query: string;
+  }[];
+  tables?: {
+    name: string;
+    rows: number;
+    dead_rows: number;
+    size_bytes: number;
+    last_autovacuum: string | null;
+  }[];
+}
+
+export interface MonitorRedis {
+  latency_ms: number;
+  version: string;
+  uptime_seconds: number;
+  used_memory: number;
+  used_memory_peak: number;
+  maxmemory: number | null;
+  connected_clients: number;
+  blocked_clients: number;
+  ops_per_sec: number;
+  hit_percent: number | null;
+  evicted_keys: number;
+  rejected_connections: number;
+  keys: number;
+  queues: Record<string, number>;
+  unacked: number;
+  queue_limit: number;
+}
+
+export interface MonitorCeleryWorker {
+  hostname: string;
+  pid: number | null;
+  uptime_seconds: number | null;
+  pool: string | null;
+  concurrency: number | null;
+  queues: string[];
+  processed: number;
+  processed_by_task: Record<string, number>;
+  active: { name: string; running_seconds: number | null }[];
+}
+
+export interface MonitorActivity {
+  face_id_15m: number | null;
+  face_id_1h: number | null;
+  verify_15m: number | null;
+  verify_1h: number | null;
+  verify_24h: number | null;
+  failed_logins_1h: number | null;
+  online_users: number | null;
+  active_sessions: number | null;
+  computed_at: string;
+}
+
+export interface MonitorAppInfo {
+  name: string;
+  pid: number;
+  worker_started_at: string | null;
+  face_model_ready: boolean;
+  queue_max_size: number;
+  embedding_workers: number;
+}
+
+export interface MonitorAlert {
+  level: "critical" | "warning" | "info";
+  source: string;
+  message: string;
+}
+
+export interface ServerOverview {
+  system: MonitorSection<MonitorSystem>;
+  services: MonitorSection<{ available: boolean; units: MonitorUnit[] }>;
+  database: MonitorSection<MonitorDatabase>;
+  redis: MonitorSection<MonitorRedis>;
+  celery: MonitorSection<{ workers: MonitorCeleryWorker[] }>;
+  app: MonitorSection<MonitorAppInfo>;
+  activity: MonitorSection<MonitorActivity>;
+  history_last_sample: string | null;
+  alerts: MonitorAlert[];
+  generated_at: string;
+  collect_ms: number;
+}
+
+export interface MonitorHistoryPoint {
+  t: string;
+  cpu: number | null;
+  mem: number | null;
+  swap: number | null;
+  load1: number | null;
+  disk: number | null;
+  q_verify: number | null;
+  q_storage: number | null;
+  db_conn: number | null;
+  /** Bayt/soniya. */
+  net_tx: number | null;
+  net_rx: number | null;
+  disk_r: number | null;
+  disk_w: number | null;
+}
+
+export interface MonitorHistoryResponse {
+  minutes: number;
+  interval_seconds: number;
+  points: MonitorHistoryPoint[];
+}
+
+export interface MonitorLogFile {
+  key: string;
+  group: string;
+  name: string;
+  size: number;
+  modified_at: string | null;
+  readable: boolean;
+}
+
+export interface MonitorLogSources {
+  files: MonitorLogFile[];
+  units: string[];
+}
+
+export interface MonitorLogTail {
+  lines: string[];
+  /** Faqat fayl uchun. */
+  size?: number;
+  modified_at?: string | null;
+  scan_limited?: boolean;
+  /** Faqat journal uchun. */
+  available?: boolean;
+  error?: string | null;
+}
+
+export type MonitorLogLevel = "" | "warning" | "error";

@@ -13,6 +13,8 @@ interface AuthContextType {
   user: UserResponse | null;
   isAuthenticated: boolean;
   isAdmin: boolean;
+  /** Superadmin (backend `is_super_admin`) — server monitoringi uchun. */
+  isSuperAdmin: boolean;
   loading: boolean;
   login: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -28,6 +30,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const isAuthenticated = user !== null;
   const isAdmin = user?.role_key === 1;
+  const isSuperAdmin = user?.is_super_admin === true;
 
   // Ilovani ochganda sessiyani tiklash:
   //   1) sessionStorage'da access token bor bo'lsa — to'g'ridan-to'g'ri /me chaqiramiz.
@@ -124,7 +127,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, isAuthenticated, isAdmin, loading, login, logout, refreshUser }}
+      value={{ user, isAuthenticated, isAdmin, isSuperAdmin, loading, login, logout, refreshUser }}
     >
       {children}
     </AuthContext.Provider>

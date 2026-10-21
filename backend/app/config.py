@@ -212,6 +212,18 @@ class Settings(BaseSettings):
     # Telegram Bot API manzili (lokal Bot API server/proxy uchun almashtiriladi).
     TELEGRAM_API_BASE: str = "https://api.telegram.org"
 
+    # Server monitoringi (`/admin/server-monitor`, faqat superadmin).
+    # Holati ko'rsatiladigan systemd unitlari — vergul bilan, `.service`
+    # qo'shimchasisiz ham bo'ladi. Serverda yo'q unit "o'rnatilmagan" bo'lib
+    # ko'rinadi; journal loglari ham faqat shu ro'yxatdagilar uchun ochiladi.
+    MONITOR_SYSTEMD_UNITS: str = (
+        "faceid-api,faceid-celery-verify,faceid-celery-storage,"
+        "faceid-celery-beat,faceid-davomat-bot,nginx,postgresql,redis-server"
+    )
+    # Log fayllari olinadigan papkalar — vergul bilan. Nisbiy yo'l `backend/`
+    # papkasidan hisoblanadi. Faqat shu papkalardagi `*.log*` fayllar ochiladi.
+    MONITOR_LOG_DIRS: str = "logs,../davomat_bot/logs,../statistic_bot/logs,/var/log/nginx"
+
     @field_validator("SECRET_KEY", "API_KEY_PEPPER")
     @classmethod
     def _reject_insecure_secrets(cls, v: str, info) -> str:

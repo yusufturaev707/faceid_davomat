@@ -1439,3 +1439,81 @@ export async function getDashboardDailyEnteredApi(
   });
   return res.data;
 }
+
+// === Server monitoringi (faqat superadmin) ===
+
+export async function getServerOverviewApi(): Promise<import("./interfaces").ServerOverview> {
+  const res = await apiClient.get("/admin/server-monitor/overview");
+  return res.data;
+}
+
+export async function getServerHistoryApi(
+  minutes: number,
+): Promise<import("./interfaces").MonitorHistoryResponse> {
+  const res = await apiClient.get("/admin/server-monitor/history", { params: { minutes } });
+  return res.data;
+}
+
+export async function getLogSourcesApi(): Promise<import("./interfaces").MonitorLogSources> {
+  const res = await apiClient.get("/admin/server-monitor/logs");
+  return res.data;
+}
+
+export interface LogTailParams {
+  lines: number;
+  q?: string;
+  level?: import("./interfaces").MonitorLogLevel;
+}
+
+function logTailQuery(p: LogTailParams) {
+  return { lines: p.lines, q: p.q || undefined, level: p.level || undefined };
+}
+
+export async function tailLogFileApi(
+  file: string,
+  params: LogTailParams,
+): Promise<import("./interfaces").MonitorLogTail> {
+  const res = await apiClient.get("/admin/server-monitor/logs/tail", {
+    params: { file, ...logTailQuery(params) },
+  });
+  return res.data;
+}
+
+export async function getJournalApi(
+  unit: string,
+  params: LogTailParams,
+): Promise<import("./interfaces").MonitorLogTail> {
+  const res = await apiClient.get("/admin/server-monitor/journal", {
+    params: { unit, ...logTailQuery(params) },
+  });
+  return res.data;
+}
+
+/** Log faylini to'liq yuklab olish (server maxfiy qiymatlarni yashirib beradi). */
+export async function downloadLogFileApi(file: string): Promise<void> {
+  try {
+    const res = await apiClient.get("/admin/server-monitor/logs/download", {
+      params: { file },
+      responseType: "blob",
+    });
+    const url = URL.createObjectURL(res.data);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = file.replace(/\//g, "_");
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    const data = (err as { response?: { data?: unknown } })?.response?.data;
+    if (data instanceof Blob) {
+      try {
+        const parsed = JSON.parse(await data.text());
+        throw new Error(parsed.detail || "Yuklab bo'lmadi");
+      } catch (e) {
+        if (e instanceof Error && e.message) throw e;
+      }
+    }
+    throw err;
+  }
+}

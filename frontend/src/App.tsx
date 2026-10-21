@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import Layout from "./components/Layout";
 import PermissionRoute from "./components/PermissionRoute";
+import SuperAdminRoute from "./components/SuperAdminRoute";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { usePermission } from "./hooks/usePermission";
 import { PERM } from "./permissions";
@@ -42,6 +43,7 @@ import FailedLoginsPage from "./pages/FailedLoginsPage";
 import OnlineUsersPage from "./pages/OnlineUsersPage";
 import StatisticsPage from "./pages/StatisticsPage";
 import ResultAnalysisPage from "./pages/ResultAnalysisPage";
+import ServerMonitorPage from "./pages/ServerMonitorPage";
 
 /**
  * Asosiy sahifani foydalanuvchining huquqlariga qarab tanlash.
@@ -229,6 +231,11 @@ export default function App() {
             element={<PermissionRoute permission={PERM.ONLINE_USERS_READ} />}
           >
             <Route path="/online-users" element={<OnlineUsersPage />} />
+          </Route>
+
+          {/* Server monitoringi — permission bilan berilmaydi, faqat superadmin */}
+          <Route element={<SuperAdminRoute />}>
+            <Route path="/server-monitor" element={<ServerMonitorPage />} />
           </Route>
 
           <Route element={<PermissionRoute permission={PERM.DAVOMAT_BOT_READ} />}>
