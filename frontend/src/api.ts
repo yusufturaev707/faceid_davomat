@@ -1045,6 +1045,48 @@ export async function reassignZoneBulkApi(
 }
 
 /**
+ * Viloyat × (sana, smena) kesimida erkak/ayol soni. `test_id`, `e_date_from`,
+ * `e_date_to` majburiy; qolgan parametrlar getStudentsApi bilan bir xil.
+ */
+export async function getGenderReportApi(
+  params: Record<string, unknown>,
+): Promise<import("./interfaces").GenderReport> {
+  const res = await apiClient.get("/students/gender-report", { params });
+  return res.data;
+}
+
+/** Jins bo'yicha hisobotni Excel (.xlsx) qilib yuklab olish. */
+export async function exportGenderReportApi(params: Record<string, unknown>): Promise<void> {
+  try {
+    const res = await apiClient.get("/students/gender-report/export", {
+      params,
+      responseType: "blob",
+    });
+    const cd = (res.headers["content-disposition"] as string | undefined) ?? "";
+    const match = /filename="?([^";]+)"?/.exec(cd);
+    const url = URL.createObjectURL(res.data);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = match ? match[1] : "jins_hisoboti.xlsx";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    const data = (err as { response?: { data?: unknown } })?.response?.data;
+    if (data instanceof Blob) {
+      try {
+        const parsed = JSON.parse(await data.text());
+        throw new Error(parsed.detail || "Eksport amalga oshmadi");
+      } catch (e) {
+        if (e instanceof Error && e.message) throw e;
+      }
+    }
+    throw err;
+  }
+}
+
+/**
  * Filtrlangan talabalar ro'yxatini Excel (.xlsx) yoki PDF qilib yuklab olish.
  * Parametrlar getStudentsApi bilan bir xil (sahifalashsiz). Brauzer faylni saqlaydi.
  */

@@ -1,8 +1,10 @@
 """Student, StudentLog, CheatingLog endpoints (CRUD)."""
 
 import base64
+import dataclasses
 import logging
 import math
+from datetime import date
 from io import BytesIO
 
 import httpx
@@ -159,6 +161,33 @@ def _assert_region_access(user: User, item_region_id: int | None) -> None:
         )
     if item_region_id is None or int(item_region_id) != int(user.region_id):
         raise HTTPException(status_code=404, detail="Ma'lumot topilmadi")
+
+
+def _assert_student_in_scope(db: Session, user: User, student_id: int) -> None:
+    """Bitta talabgorga yozish (tahrirlash, o'chirish, rasm) uchun qamrov.
+
+    Chet viloyat talabgori ham, mavjud bo'lmagani ham bir xil 404 beradi.
+    """
+    if _has_global_scope(user):
+        return
+    _assert_region_access(user, _student_region_id(db, student_id))
+
+
+def _assert_zone_in_scope(db: Session, user: User, zone_id: int) -> None:
+    """Talabgor biriktiriladigan bino foydalanuvchi viloyatida bo'lishi shart —
+    aks holda viloyat foydalanuvchisi talabgorni chet viloyatga ko'chira oladi."""
+    if _has_global_scope(user):
+        return
+    from app.models.zone import Zone
+
+    zone = db.get(Zone, zone_id)
+    if zone is None:
+        raise HTTPException(status_code=404, detail="Bino topilmadi")
+    if not user.region_id or int(zone.region_id) != int(user.region_id):
+        raise HTTPException(
+            status_code=403,
+            detail="Bu bino sizning viloyatingizga tegishli emas",
+        )
 
 
 # ===================== StudentLog =====================
@@ -1311,12 +1340,184 @@ def export_students(
     )
 
 
+# ===================== Jins bo'yicha hisobot (Gender info) =====================
+#
+# `/{student_id}` dan OLDIN e'lon qilinishi shart — aks holda "gender-report"
+# yo'li student_id sifatida o'qilib 422 qaytadi.
+
+# Sana oralig'i chegarasi — ustunlar soni (kun × smena × 2) jadvalni
+# o'qib bo'lmaydigan darajada kengaytirmasligi uchun.
+_GENDER_REPORT_MAX_DAYS = 62
+
+
+def _require_test_id(test_id: int | None) -> int:
+    """Bulk amallar va hisobot uchun test tanlash majburiy."""
+    if test_id is None:
+        raise HTTPException(status_code=400, detail="Avval testni tanlang")
+    return test_id
+
+
+def _gender_report_filters(
+    session_smena_id: int | None = None,
+    zone_id: int | None = None,
+    region_id: int | None = None,
+    smena_id: int | None = None,
+    gender_id: int | None = None,
+    gr_n: int | None = None,
+    gr_n_from: int | None = Query(None, ge=0),
+    gr_n_to: int | None = Query(None, ge=0),
+    is_entered: bool | None = None,
+    is_cheating: bool | None = None,
+    is_blacklist: bool | None = None,
+    is_face: bool | None = None,
+    is_image: bool | None = None,
+    is_ready: bool | None = None,
+    is_applied: bool | None = None,
+    search: str | None = None,
+) -> dict:
+    """`GET /students` dagi qo'shimcha filtrlar (test va sanadan tashqari)."""
+    _validate_gr_n_range(gr_n_from, gr_n_to)
+    return {
+        "session_smena_id": session_smena_id,
+        "zone_id": zone_id,
+        "region_id": region_id,
+        "smena_id": smena_id,
+        "gender_id": gender_id,
+        "gr_n": gr_n,
+        "gr_n_from": gr_n_from,
+        "gr_n_to": gr_n_to,
+        "is_entered": is_entered,
+        "is_cheating": is_cheating,
+        "is_blacklist": is_blacklist,
+        "is_face": is_face,
+        "is_image": is_image,
+        "is_ready": is_ready,
+        "is_applied": is_applied,
+        "search": search or None,
+    }
+
+
+class GenderReportColumnOut(BaseModel):
+    day: date
+    smena_number: int
+    smena_name: str
+    label: str
+
+
+class GenderReportRowOut(BaseModel):
+    region_id: int
+    region_name: str
+    cells: list[list[int]]  # columns tartibida [erkak, ayol]
+    male: int
+    female: int
+    unknown: int
+
+
+class GenderReportResponse(BaseModel):
+    test_id: int
+    test_name: str | None
+    date_from: date
+    date_to: date
+    columns: list[GenderReportColumnOut]
+    rows: list[GenderReportRowOut]
+    totals: list[list[int]]
+    male: int
+    female: int
+    unknown: int  # jinsi aniqlanmaganlar — ustunlarga kirmaydi
+
+
+def _build_gender_report(
+    db: Session,
+    user: User,
+    test_id: int | None,
+    e_date_from: date | None,
+    e_date_to: date | None,
+    filters: dict,
+):
+    from app.services.student_gender_report import collect_gender_report
+
+    test_id = _require_test_id(test_id)
+    if e_date_from is None or e_date_to is None:
+        raise HTTPException(
+            status_code=400, detail="Test sanasi oralig'ini (dan — gacha) tanlang"
+        )
+    if e_date_from > e_date_to:
+        raise HTTPException(
+            status_code=400,
+            detail="Sana oralig'i noto'g'ri: boshlanish sanasi tugashidan keyin",
+        )
+    if (e_date_to - e_date_from).days + 1 > _GENDER_REPORT_MAX_DAYS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Sana oralig'i {_GENDER_REPORT_MAX_DAYS} kundan oshmasligi kerak",
+        )
+    filters = {**filters, "region_id": _scoped_region_id(user, filters["region_id"])}
+    return collect_gender_report(
+        db, test_id=test_id, date_from=e_date_from, date_to=e_date_to, **filters
+    )
+
+
+@router.get("/gender-report", response_model=GenderReportResponse)
+def gender_report(
+    test_id: int | None = None,
+    e_date_from: date | None = None,
+    e_date_to: date | None = None,
+    filters: dict = Depends(_gender_report_filters),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(PermissionChecker(P.STUDENT_READ.code)),
+):
+    """Viloyatlar × (sana, smena) kesimida erkak/ayol talabgorlar soni.
+
+    Test va sana oralig'i majburiy; qolgan filtrlar `GET /students` bilan bir xil.
+    """
+    report = _build_gender_report(
+        db, current_user, test_id, e_date_from, e_date_to, filters
+    )
+    return GenderReportResponse.model_validate(dataclasses.asdict(report))
+
+
+@router.get("/gender-report/export")
+def export_gender_report(
+    test_id: int | None = None,
+    e_date_from: date | None = None,
+    e_date_to: date | None = None,
+    filters: dict = Depends(_gender_report_filters),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(PermissionChecker(P.STUDENT_READ.code)),
+):
+    """Jins bo'yicha hisobotni Excel (.xlsx) qilib yuklab olish."""
+    from datetime import datetime
+
+    from app.services.student_gender_report import build_gender_report_xlsx
+
+    _require_perm(current_user, P.STUDENT_EXPORT_EXCEL)
+    report = _build_gender_report(
+        db, current_user, test_id, e_date_from, e_date_to, filters
+    )
+    if not report.rows:
+        raise HTTPException(
+            status_code=404, detail="Tanlangan filtr bo'yicha talaba topilmadi"
+        )
+    generated_at = datetime.now()
+    content = build_gender_report_xlsx(report, generated_at)
+    filename = f"jins_hisoboti_{generated_at.strftime('%Y%m%d_%H%M')}.xlsx"
+    return StreamingResponse(
+        BytesIO(content),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Cache-Control": "no-store",
+        },
+    )
+
+
 @router.post("", response_model=StudentResponse)
 def create_student_endpoint(
     data: StudentCreate,
     db: Session = Depends(get_db),
-    _: User = Depends(PermissionChecker(P.STUDENT_CREATE.code)),
+    current_user: User = Depends(PermissionChecker(P.STUDENT_CREATE.code)),
 ):
+    _assert_zone_in_scope(db, current_user, data.zone_id)
     student = create_student(db, data)
     return get_student(db, student.id)
 
@@ -1339,8 +1540,11 @@ def update_student_endpoint(
     student_id: int,
     data: StudentUpdate,
     db: Session = Depends(get_db),
-    _: User = Depends(PermissionChecker(P.STUDENT_UPDATE.code)),
+    current_user: User = Depends(PermissionChecker(P.STUDENT_UPDATE.code)),
 ):
+    _assert_student_in_scope(db, current_user, student_id)
+    if data.zone_id is not None:
+        _assert_zone_in_scope(db, current_user, data.zone_id)
     student = update_student(db, student_id, data)
     if not student:
         raise HTTPException(status_code=404, detail="Talaba topilmadi")
@@ -1351,8 +1555,9 @@ def update_student_endpoint(
 def delete_student_endpoint(
     student_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(PermissionChecker(P.STUDENT_DELETE.code)),
+    current_user: User = Depends(PermissionChecker(P.STUDENT_DELETE.code)),
 ):
+    _assert_student_in_scope(db, current_user, student_id)
     if not delete_student(db, student_id):
         raise HTTPException(status_code=404, detail="Talaba topilmadi")
 
@@ -1396,9 +1601,10 @@ def upload_student_image(
     student_id: int,
     body: UploadImageRequest,
     db: Session = Depends(get_db),
-    _: User = Depends(PermissionChecker(P.STUDENT_UPDATE.code)),
+    current_user: User = Depends(PermissionChecker(P.STUDENT_UPDATE.code)),
 ):
     """Studentga qo'lda rasm yuklash. is_image=True bo'ladi."""
+    _assert_student_in_scope(db, current_user, student_id)
     from sqlalchemy import select
 
     from app.models.student_ps_data import StudentPsData
@@ -1435,7 +1641,7 @@ def upload_student_image(
 def fetch_gtsp_image(
     student_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(PermissionChecker(P.STUDENT_FETCH_GTSP.code)),
+    current_user: User = Depends(PermissionChecker(P.STUDENT_FETCH_GTSP.code)),
 ):
     """GTSP API dan studentning rasmini yuklab olish.
 
@@ -1443,6 +1649,8 @@ def fetch_gtsp_image(
     Response dan: last_name=sname, first_name=fname, middle_name=mname,
     ps_img=photo, gender=sex (1=erkak, 2=ayol, boshqa=unknown).
     """
+    _assert_student_in_scope(db, current_user, student_id)
+
     from sqlalchemy import select
 
     from app.models.gender import Gender
@@ -1538,7 +1746,7 @@ def fetch_gtsp_bulk(
     is_applied: bool | None = None,
     search: str | None = None,
     db: Session = Depends(get_db),
-    _: User = Depends(PermissionChecker(P.STUDENT_FETCH_GTSP.code)),
+    current_user: User = Depends(PermissionChecker(P.STUDENT_FETCH_GTSP.code)),
 ):
     """Filtr/qidiruvga mos BARCHA studentlarning rasmini GTSP'dan yuklash.
 
@@ -1561,7 +1769,10 @@ def fetch_gtsp_bulk(
         _enrich_one,
     )
 
+    _require_test_id(test_id)
     _validate_gr_n_range(gr_n_from, gr_n_to)
+    # Viloyat foydalanuvchisi faqat o'z viloyati talabgorlariga ta'sir qiladi
+    region_id = _scoped_region_id(current_user, region_id)
 
     student_ids = get_filtered_student_ids(
         db,
@@ -1680,7 +1891,7 @@ def reassign_zone_bulk(
     is_applied: bool | None = None,
     search: str | None = None,
     db: Session = Depends(get_db),
-    _: User = Depends(PermissionChecker(P.STUDENT_UPDATE.code)),
+    current_user: User = Depends(PermissionChecker(P.STUDENT_UPDATE.code)),
 ):
     """Filtr/qidiruvga mos BARCHA studentlarni tanlangan binoga (zone) biriktirish.
 
@@ -1693,11 +1904,16 @@ def reassign_zone_bulk(
     from app.crud.student import get_filtered_student_ids
     from app.models.zone import Zone
 
+    _require_test_id(test_id)
     _validate_gr_n_range(gr_n_from, gr_n_to)
 
     target_zone = db.get(Zone, target_zone_id)
     if not target_zone:
         raise HTTPException(status_code=404, detail="Bino topilmadi")
+    # Viloyat foydalanuvchisi: faqat o'z viloyati talabgorlarini, faqat o'z
+    # viloyatidagi binoga ko'chiradi.
+    _assert_zone_in_scope(db, current_user, target_zone_id)
+    region_id = _scoped_region_id(current_user, region_id)
 
     # Kamida bitta filtr/qidiruv bo'lishi shart — bo'sh filtr barcha
     # talabalarni ko'chirib yuborishi mumkin, buni bloklaymiz.

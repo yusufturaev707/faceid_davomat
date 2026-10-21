@@ -33,6 +33,7 @@ import PageLoader from "../components/PageLoader";
 import Pagination from "../components/Pagination";
 import PermissionGate from "../components/PermissionGate";
 import Md3Select from "../components/Md3Select";
+import GenderReportModal from "../components/GenderReportModal";
 import { PERM } from "../permissions";
 import { useAuth } from "../contexts/AuthContext";
 import { extractErrorMessage } from "../utils/errorMessage";
@@ -114,6 +115,13 @@ export default function StudentsPage() {
   const [reassignZoneId, setReassignZoneId] = useState<string>("");
   const [reassigning, setReassigning] = useState(false);
   const [reassignError, setReassignError] = useState("");
+
+  // «Gender info» — ochilgan paytdagi filtrlar nusxasi (modal shu bilan ishlaydi)
+  const [genderReport, setGenderReport] = useState<{
+    params: Record<string, string | number | boolean>;
+    extraFilterCount: number;
+  } | null>(null);
+  const closeGenderReport = useCallback(() => setGenderReport(null), []);
 
   // Modal
   const [showModal, setShowModal] = useState(false);
@@ -272,7 +280,7 @@ export default function StudentsPage() {
 
   // Joriy filtr/qidiruvga mos BARCHA studentlar rasmini GTSP'dan yuklash.
   const handleBulkGtsp = async () => {
-    if (!hasFilters) return;
+    if (!testSelected) return;
     const count = data?.total ?? 0;
     if (count === 0) return;
     const ok = window.confirm(
@@ -308,8 +316,12 @@ export default function StudentsPage() {
 
   // Bino o'zgartirish modalini ochish (holatni tozalab)
   const openReassign = () => {
-    if (!hasFilters) return;
-    setReassignRegionId("");
+    if (!testSelected) return;
+    // Viloyat foydalanuvchisi faqat o'z viloyatidagi binoga ko'chira oladi
+    // (backend ham tekshiradi) — viloyat oldindan tanlanadi.
+    setReassignRegionId(
+      isRegionScoped && user?.region_id ? String(user.region_id) : "",
+    );
     setReassignZones([]);
     setReassignZoneId("");
     setReassignError("");
@@ -426,6 +438,23 @@ export default function StudentsPage() {
     filterReady,
     filterApplied,
   ].filter(Boolean).length;
+
+  // Bulk amallar va «Gender info» faqat test tanlanganda (majburiy filtr).
+  const testSelected = !!filterTestId;
+  const hasResults = !!data && data.total > 0;
+  const dateRangeInvalid =
+    !!filterDateFrom && !!filterDateTo && filterDateFrom > filterDateTo;
+  const dateRangeReady =
+    testSelected && !!filterDateFrom && !!filterDateTo && !dateRangeInvalid;
+
+  const openGenderReport = () => {
+    if (!dateRangeReady) return;
+    setGenderReport({
+      params: buildFilterParams(),
+      // Test va sana (dan/gacha) — hisobotning o'z parametrlari
+      extraFilterCount: activeFilterCount - 3 + (search ? 1 : 0),
+    });
+  };
 
   const handleRowClick = async (s: StudentResponse) => {
     if (selected?.id === s.id) {
@@ -754,86 +783,56 @@ export default function StudentsPage() {
                 Tozalash
               </button>
             )}
-            <PermissionGate permission={PERM.STUDENT_FETCH_GTSP}>
-              <button
-                onClick={handleBulkGtsp}
-                disabled={
-                  bulkGtspLoading || !hasFilters || !data || data.total === 0
-                }
-                title={
-                  hasFilters
-                    ? "Filtrlangan barcha talabgorlarning rasmini GTSP'dan yuklash"
-                    : "Avval qidiruv yoki filtr qo'llang"
-                }
-                className="inline-flex items-center gap-2 px-4 !py-2 text-sm font-medium text-white bg-teal-600 hover:bg-teal-700 active:bg-teal-800 rounded-full shadow-md hover:shadow-lg active:shadow active:scale-[0.98] transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-teal-300 dark:focus:ring-teal-700 focus:ring-offset-1 disabled:opacity-50 disabled:shadow-none disabled:pointer-events-none"
-              >
-                {bulkGtspLoading ? (
-                  <svg
-                    className="w-4 h-4 animate-spin"
-                    fill="none"
-                    viewBox="0 0 24 24"
+            {/* Bulk amallar va hisobot — faqat test tanlanganda ko'rinadi */}
+            {testSelected && (
+              <div className="flex flex-wrap items-center gap-2">
+                <PermissionGate permission={PERM.STUDENT_FETCH_GTSP}>
+                  <TonalButton
+                    tone="teal"
+                    onClick={handleBulkGtsp}
+                    disabled={bulkGtspLoading || loading || !hasResults}
+                    title={
+                      hasResults
+                        ? `Filtrlangan ${data?.total ?? 0} ta talabgorning rasmini GTSP'dan qayta yuklash`
+                        : "Filtr bo'yicha talabgor topilmadi"
+                    }
+                    icon={bulkGtspLoading ? <Spinner /> : <UpdateIcon />}
                   >
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth={4}
-                    />
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                    />
-                  </svg>
-                ) : (
-                  <svg
-                    className="w-4 h-4"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
+                    {bulkGtspLoading ? "Yuklanmoqda..." : "Rasm"}
+                  </TonalButton>
+                </PermissionGate>
+                <PermissionGate permission={PERM.STUDENT_UPDATE}>
+                  <TonalButton
+                    tone="indigo"
+                    onClick={openReassign}
+                    disabled={loading || !hasResults}
+                    title={
+                      hasResults
+                        ? `Filtrlangan ${data?.total ?? 0} ta talabgorni boshqa binoga biriktirish`
+                        : "Filtr bo'yicha talabgor topilmadi"
+                    }
+                    icon={<UpdateIcon />}
                   >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
-                    />
-                  </svg>
-                )}
-                {bulkGtspLoading
-                  ? "Yuklanmoqda..."
-                  : `Rasm tortish${data ? ` (${data.total})` : ""}`}
-              </button>
-            </PermissionGate>
-            <PermissionGate permission={PERM.STUDENT_UPDATE}>
-              <button
-                onClick={openReassign}
-                disabled={!hasFilters || !data || data.total === 0}
-                title={
-                  hasFilters
-                    ? "Filtrlangan barcha talabgorlarni boshqa binoga biriktirish"
-                    : "Avval qidiruv yoki filtr qo'llang"
-                }
-                className="inline-flex items-center gap-2 px-4 !py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 rounded-full shadow-md hover:shadow-lg active:shadow active:scale-[0.98] transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-indigo-300 dark:focus:ring-indigo-700 focus:ring-offset-1 disabled:opacity-50 disabled:shadow-none disabled:pointer-events-none"
-              >
-                <svg
-                  className="w-4 h-4"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
+                    Bino
+                  </TonalButton>
+                </PermissionGate>
+                <TonalButton
+                  tone="primary"
+                  onClick={openGenderReport}
+                  disabled={!dateRangeReady}
+                  title={
+                    dateRangeReady
+                      ? "Viloyatlar bo'yicha erkak/ayol soni (sana va smena kesimida)"
+                      : dateRangeInvalid
+                        ? "Sana oralig'i noto'g'ri: «Sana (dan)» «Sana (gacha)» dan katta"
+                        : "Filterlarda «Sana (dan)» va «Sana (gacha)» ni tanlang"
+                  }
+                  icon={<GenderIcon />}
                 >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0H5m14 0h2m-2 0h-4m-6 0H3m2 0h4M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
-                  />
-                </svg>
-                {`Binoni o'zgartirish${data ? ` (${data.total})` : ""}`}
-              </button>
-            </PermissionGate>
+                  Gender info
+                </TonalButton>
+              </div>
+            )}
             <div className="flex items-center gap-2">
               <PermissionGate permission={PERM.STUDENT_EXPORT_EXCEL}>
                 <button
@@ -1738,13 +1737,18 @@ export default function StudentsPage() {
                       setReassignZoneId("");
                     }}
                     options={regions
-                      .filter((r) => r.is_active)
+                      .filter(
+                        (r) =>
+                          r.is_active &&
+                          (!isRegionScoped || r.id === user?.region_id),
+                      )
                       .map((r) => ({
                         value: String(r.id),
                         label: r.name,
                       }))}
                     placeholder="Tanlang..."
                     ariaLabel="Viloyat (Region)"
+                    disabled={isRegionScoped}
                   />
                 </ModalField>
                 <ModalField label="Yangi bino (Zone) *">
@@ -1793,6 +1797,15 @@ export default function StudentsPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ===== Gender info (jins bo'yicha hisobot) ===== */}
+      {genderReport && (
+        <GenderReportModal
+          params={genderReport.params}
+          extraFilterCount={genderReport.extraFilterCount}
+          onClose={closeGenderReport}
+        />
       )}
 
       {/* ===== Create/Edit Modal ===== */}
@@ -2200,6 +2213,64 @@ function Spinner() {
       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth={4} />
       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
     </svg>
+  );
+}
+
+function UpdateIcon() {
+  return (
+    <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+      />
+    </svg>
+  );
+}
+
+function GenderIcon() {
+  return (
+    <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"
+      />
+    </svg>
+  );
+}
+
+// Material 3 "filled tonal" tugma: konteyner rangi + mos matn, 40px balandlik.
+const TONAL_TONES = {
+  primary:
+    "bg-primary-100 text-primary-800 hover:bg-primary-200/80 dark:bg-primary-900/40 dark:text-primary-200 dark:hover:bg-primary-900/60 focus-visible:ring-primary-400",
+  teal:
+    "bg-teal-100 text-teal-800 hover:bg-teal-200/80 dark:bg-teal-900/40 dark:text-teal-200 dark:hover:bg-teal-900/60 focus-visible:ring-teal-400",
+  indigo:
+    "bg-indigo-100 text-indigo-800 hover:bg-indigo-200/80 dark:bg-indigo-900/40 dark:text-indigo-200 dark:hover:bg-indigo-900/60 focus-visible:ring-indigo-400",
+} as const;
+
+function TonalButton({
+  tone,
+  icon,
+  children,
+  ...rest
+}: {
+  tone: keyof typeof TONAL_TONES;
+  icon: React.ReactNode;
+  children: React.ReactNode;
+} & React.ButtonHTMLAttributes<HTMLButtonElement>) {
+  return (
+    <button
+      type="button"
+      {...rest}
+      className={`inline-flex items-center gap-2 h-10 pl-4 pr-5 rounded-full text-sm font-medium tracking-[0.01em] transition-colors duration-200 hover:shadow-sm active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 dark:focus-visible:ring-offset-slate-900 disabled:opacity-[0.38] disabled:shadow-none disabled:cursor-not-allowed disabled:active:scale-100 ${TONAL_TONES[tone]}`}
+    >
+      {icon}
+      {children}
+    </button>
   );
 }
 

@@ -971,6 +971,36 @@ export interface ReassignZoneResult {
   zone_name: string;
 }
 
+// === Jins bo'yicha hisobot (GET /students/gender-report) ===
+export interface GenderReportColumn {
+  day: string; // YYYY-MM-DD
+  smena_number: number;
+  smena_name: string;
+  label: string; // "12-oktabr 1-smena"
+}
+
+export interface GenderReportRow {
+  region_id: number;
+  region_name: string;
+  cells: [number, number][]; // columns tartibida [erkak, ayol]
+  male: number;
+  female: number;
+  unknown: number;
+}
+
+export interface GenderReport {
+  test_id: number;
+  test_name: string | null;
+  date_from: string;
+  date_to: string;
+  columns: GenderReportColumn[];
+  rows: GenderReportRow[];
+  totals: [number, number][];
+  male: number;
+  female: number;
+  unknown: number; // jinsi aniqlanmaganlar — ustunlarga kirmaydi
+}
+
 // === StudentLog ===
 export interface StudentLogCreate {
   student_id: number;
