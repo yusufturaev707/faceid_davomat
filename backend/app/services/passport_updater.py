@@ -14,11 +14,8 @@ shuning uchun sinxron bajariladi — Celery talab qilinmaydi.
 
 from __future__ import annotations
 
-import base64
-import binascii
 import logging
 import re
-from io import BytesIO
 
 from sqlalchemy import select as sa_select
 from sqlalchemy.orm import Session
@@ -27,6 +24,8 @@ from app.models.student import Student
 from app.models.student_ps_data import StudentPsData
 from app.models.test_session_smena import TestSessionSmena
 from app.services.egov_psn_client import birth_date_from_pinfl, fetch_documents
+from app.services.image_decoder import decode_image_b64_raw
+from app.services.xlsx_safety import XlsxRejected, limit_rows, open_xlsx
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +34,8 @@ logger = logging.getLogger(__name__)
 _MAX_JSHSHIR = 14
 _MAX_PS_SER = 5
 _MAX_PS_NUM = 10
+# Excel yo'li sinxron (natija darhol qaytadi) — paste'dagidan kattaroq, lekin chegaralangan.
+_MAX_EXCEL_ROWS = 100_000
 
 # Excel sarlavhalari uchun alias'lar — turli shablonlarni ham qabul qilamiz.
 _HEADER_ALIASES: dict[str, str] = {
@@ -128,20 +129,21 @@ def parse_passport_excel(content: bytes) -> tuple[list[dict], list[str]]:
     Qaytaradi: (rows, errors). `errors` — fayl darajasidagi (sarlavha topilmadi va h.k.)
     muammolar; qator darajasidagi validatsiya `update_session_passports` da bo'ladi.
     """
-    from openpyxl import load_workbook
-
-    errors: list[str] = []
     try:
-        wb = load_workbook(BytesIO(content), read_only=True, data_only=True)
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("Passport Excel o'qishda xato: %s", exc)
-        return [], ["Excel faylni o'qib bo'lmadi — fayl buzilgan yoki noto'g'ri formatda"]
+        return _parse_passport_excel_rows(content)
+    except XlsxRejected as exc:
+        return [], [str(exc)]
+
+
+def _parse_passport_excel_rows(content: bytes) -> tuple[list[dict], list[str]]:
+    errors: list[str] = []
+    wb = open_xlsx(content)
 
     ws = wb.active
     if ws is None:
         return [], ["Excel'da varaq topilmadi"]
 
-    rows_iter = ws.iter_rows(values_only=True)
+    rows_iter = limit_rows(ws.iter_rows(values_only=True), _MAX_EXCEL_ROWS)
     try:
         header = next(rows_iter)
     except StopIteration:
@@ -428,67 +430,16 @@ def update_session_passports_from_psn(
 
 # ─── Passport RASMI (ps_img) ommaviy yangilash ────────────────────────────
 
-# Bitta rasm uchun dekodlangandan keyingi hajm chegaralari.
-_MIN_IMAGE_BYTES = 512           # 512 B dan kichigi rasm bo'lishi mumkin emas
-_MAX_IMAGE_BYTES = 3 * 1024 * 1024  # 3 MB
-
-# Ko'p ishlatiladigan rasm formatlarining "sehrli baytlari" (magic bytes).
-# Base64 noto'g'ri (masalan matn yoki PDF) bo'lsa — DB ga yozmaymiz, chunki
-# keyinchalik embedding bosqichida dekodlash xatosi bo'ladi.
-_IMAGE_SIGNATURES: tuple[tuple[bytes, str], ...] = (
-    (b"\xff\xd8\xff", "JPEG"),
-    (b"\x89PNG\r\n\x1a\n", "PNG"),
-    (b"BM", "BMP"),
-    (b"GIF87a", "GIF"),
-    (b"GIF89a", "GIF"),
-)
-
-# `data:image/jpeg;base64,....` shaklidagi data-URL prefiksi.
-_DATA_URL_RE = re.compile(r"^data:[^;,]*;base64,", re.IGNORECASE)
-
-
-def _detect_image_format(raw: bytes) -> str | None:
-    """Bayt oqimidan rasm formatini aniqlaydi. Rasm bo'lmasa — None."""
-    for sig, name in _IMAGE_SIGNATURES:
-        if raw.startswith(sig):
-            return name
-    # WEBP: "RIFF" + 4 bayt hajm + "WEBP"
-    if raw[:4] == b"RIFF" and raw[8:12] == b"WEBP":
-        return "WEBP"
-    return None
-
-
 def decode_passport_image(value: str) -> tuple[bytes | None, str | None]:
     """base64 satrni (data-URL yoki sof base64) rasm baytlariga aylantiradi.
 
+    Base64 noto'g'ri (masalan matn yoki PDF) bo'lsa — DB ga yozmaymiz, chunki
+    keyinchalik embedding bosqichida dekodlash xatosi bo'ladi. Tekshiruvlar
+    `image_decoder.decode_image_b64_raw` da — boshqa yuklash yo'llari bilan umumiy.
+
     Qaytaradi: `(raw_bytes, None)` yoki xato bo'lsa `(None, "sabab")`.
     """
-    text = (value or "").strip()
-    if not text:
-        return None, "Rasm bo'sh"
-
-    text = _DATA_URL_RE.sub("", text)
-    # Excel/matn muharrirlaridan nusxalanganda base64 ichiga qator uzilishi va
-    # bo'shliqlar tushib qolishi mumkin — ularni olib tashlaymiz.
-    text = re.sub(r"\s+", "", text)
-    # URL-safe base64 (`-` va `_`) ni ham qabul qilamiz.
-    text = text.replace("-", "+").replace("_", "/")
-    # To'ldiruvchi `=` yetishmasa — qo'shib qo'yamiz.
-    if len(text) % 4:
-        text += "=" * (4 - len(text) % 4)
-
-    try:
-        raw = base64.b64decode(text, validate=True)
-    except (binascii.Error, ValueError):
-        return None, "Base64 formati noto'g'ri"
-
-    if len(raw) < _MIN_IMAGE_BYTES:
-        return None, "Rasm juda kichik (buzilgan bo'lishi mumkin)"
-    if len(raw) > _MAX_IMAGE_BYTES:
-        return None, f"Rasm hajmi {_MAX_IMAGE_BYTES // (1024 * 1024)}MB dan oshmasin"
-    if _detect_image_format(raw) is None:
-        return None, "Bu rasm emas (JPEG/PNG/WEBP/BMP/GIF kutilgan)"
-    return raw, None
+    return decode_image_b64_raw(value)
 
 
 def update_session_passport_images(

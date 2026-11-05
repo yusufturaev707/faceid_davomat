@@ -33,6 +33,7 @@ from app.models.test import Test
 from app.models.test_session import TestSession
 from app.models.test_session_smena import TestSessionSmena
 from app.models.zone import Zone
+from app.services.xlsx_safety import text_cell
 
 MALE = 1
 FEMALE = 2
@@ -290,7 +291,7 @@ def build_gender_report_xlsx(report: GenderReport, generated_at: datetime) -> by
 
     def _write_row(excel_row: int, values: list, *, fill: str | None, bold: bool) -> None:
         for col_idx, val in enumerate(values, start=1):
-            c = ws.cell(row=excel_row, column=col_idx, value=val)
+            c = text_cell(ws.cell(row=excel_row, column=col_idx, value=val))
             c.border = border
             c.alignment = left if col_idx == 2 else center
             if bold:

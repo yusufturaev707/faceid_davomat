@@ -37,6 +37,7 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
 from app.schemas.dashboard_stats import DashboardStatsResponse
+from app.services.xlsx_safety import text_cell
 
 # O'zbekiston vaqti (UZT) — UTC+5, DST yo'q (app.crud.student bilan bir xil)
 UZ_TZ = timezone(timedelta(hours=5))
@@ -465,7 +466,7 @@ def build_session_stats_excel(
             region.region_name if latin else _region_cyrillic(region.region_name)
         )
         ws.cell(row=row, column=1, value=idx)                 # A: T/r
-        ws.cell(row=row, column=2, value=region_name)         # B: hudud
+        text_cell(ws.cell(row=row, column=2, value=region_name))  # B: hudud
         ws.cell(row=row, column=3, value=total)               # C: total
         ws.cell(row=row, column=4, value=attended)            # D: kelganlar soni
         ws.cell(row=row, column=5,

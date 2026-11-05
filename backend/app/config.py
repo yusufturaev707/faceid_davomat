@@ -75,6 +75,12 @@ class Settings(BaseSettings):
     # Postgres rolida sozlash: ALTER ROLE <user> SET statement_timeout='60s';
     DB_STATEMENT_TIMEOUT_MS: int = 60000
 
+    # So'rov tanasi chegarasi (core/body_limit.py). Umumiy: 16 MB Excel + multipart
+    # zaxirasi. Katta: 300k qatorli result-analysis JSON va desktop'ning oflayn
+    # to'plangan selfie batch'i (/students/logs/bulk, 50 item).
+    MAX_REQUEST_BODY_BYTES: int = 32 * 1024 * 1024
+    MAX_REQUEST_BODY_BYTES_LARGE: int = 128 * 1024 * 1024
+
     # Rasm tekshiruv parametrlari
     MAX_BASE64_SIZE: int
     MIN_WIDTH: int

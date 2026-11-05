@@ -41,6 +41,7 @@ from app.services.session_dashboard_stats import (
     ENTRY_REASON_TYPE_KEY,
     TEST_REASON_TYPE_KEY,
 )
+from app.services.xlsx_safety import text_cell
 
 # Excel uslublari — davomat bot hisoboti bilan bir xil yashil palitra.
 _TITLE_FILL = PatternFill("solid", fgColor="1B5E20")
@@ -359,7 +360,7 @@ def build_session_status_excel(
             _safe(r["reason"]),
         ]
         for col_idx, val in enumerate(values, start=1):
-            cell = ws.cell(row=row_idx, column=col_idx, value=val)
+            cell = text_cell(ws.cell(row=row_idx, column=col_idx, value=val))
             cell.font = Font(name="Calibri", size=11)
             cell.border = _BORDER_CELL
             if col_idx == col_imei:

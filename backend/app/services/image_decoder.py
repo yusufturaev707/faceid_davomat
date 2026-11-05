@@ -5,7 +5,9 @@ Faqat cv2 ishlatiladi, PIL/Pillow yo'q.
 """
 
 import base64
+import binascii
 import logging
+import re
 
 import cv2
 import numpy as np
@@ -21,9 +23,30 @@ _MAGIC_SIGNATURES: list[tuple[str, bytes, int]] = [
     ("PNG", b"\x89PNG", 0),
     ("BMP", b"BM", 0),
 ]
+# Dekompressiya bomba himoyasi — kichik base64 katta pixel arrayga aylanishi mumkin
+# (PNG flat-color). 64MP smartphone fotolariga yetadi. `app/__init__.py` dagi
+# OPENCV_IO_MAX_IMAGE_PIXELS bilan bir xil bo'lishi kerak.
+MAX_IMAGE_PIXELS = 64 * 1024 * 1024
+
 # WebP — RIFF header, bytes[8:12] == b"WEBP"
 _WEBP_RIFF_OFFSET = 8
 _WEBP_MAGIC = b"WEBP"
+
+
+def detect_image_format(img_bytes: bytes) -> str | None:
+    """Rasm formatini magic bytes orqali aniqlash (JPEG, PNG, WebP, BMP). Rasm bo'lmasa — None."""
+    for fmt, magic, offset in _MAGIC_SIGNATURES:
+        if img_bytes[offset : offset + len(magic)] == magic:
+            return fmt
+
+    # WebP: RIFF....WEBP
+    if (
+        len(img_bytes) >= 12
+        and img_bytes[:4] == b"RIFF"
+        and img_bytes[_WEBP_RIFF_OFFSET:_WEBP_RIFF_OFFSET + 4] == _WEBP_MAGIC
+    ):
+        return "WebP"
+    return None
 
 
 def _validate_magic_bytes(img_bytes: bytes) -> str:
@@ -38,13 +61,9 @@ def _validate_magic_bytes(img_bytes: bytes) -> str:
     Raises:
         HTTPException: Format aniqlanmasa.
     """
-    for fmt, magic, offset in _MAGIC_SIGNATURES:
-        if img_bytes[offset : offset + len(magic)] == magic:
-            return fmt
-
-    # WebP: RIFF....WEBP
-    if len(img_bytes) >= 12 and img_bytes[_WEBP_RIFF_OFFSET:_WEBP_RIFF_OFFSET + 4] == _WEBP_MAGIC:
-        return "WebP"
+    fmt = detect_image_format(img_bytes)
+    if fmt is not None:
+        return fmt
 
     raise HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
@@ -81,9 +100,18 @@ def decode_image_bytes(img_bytes: bytes) -> tuple[np.ndarray, int]:
     detected_format = _validate_magic_bytes(img_bytes)
     logger.debug("Rasm formati aniqlandi: %s, hajmi: %d bytes", detected_format, file_size)
 
-    # cv2.imdecode — BGR formatda
+    # cv2.imdecode — BGR formatda. Piksel chegarasidan oshgan rasmni OpenCV
+    # xotira ajratmasdan rad etadi (`OPENCV_IO_MAX_IMAGE_PIXELS`, app/__init__.py)
+    # va cv2.error tashlaydi.
     np_arr = np.frombuffer(img_bytes, np.uint8)
-    img_bgr = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+    try:
+        img_bgr = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+    except cv2.error as exc:
+        logger.warning("cv2.imdecode rad etdi (piksel chegarasi yoki buzilgan): %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Rasm o'lchami juda katta yoki rasm buzilgan",
+        )
 
     if img_bgr is None:
         logger.warning("cv2.imdecode None qaytardi — buzilgan rasm")
@@ -92,11 +120,9 @@ def decode_image_bytes(img_bytes: bytes) -> tuple[np.ndarray, int]:
             detail="Rasmni ochishda xatolik: buzilgan yoki yaroqsiz rasm",
         )
 
-    # Dekompressiya bomba himoyasi — kichik base64 katta pixel arrayga aylanishi mumkin (PNG flat-color).
-    # 64MP chegarasi: smartphone fotolariga yetadi, lekin 20k×20k bomba'ni rad etadi.
+    # Ikkinchi qatlam — env o'zgaruvchisi tashqaridan kattaroq qilib qo'yilgan bo'lsa.
     h, w = img_bgr.shape[:2]
-    MAX_PIXELS = 64 * 1024 * 1024
-    if h * w > MAX_PIXELS:
+    if h * w > MAX_IMAGE_PIXELS:
         logger.warning("Pixel chegarasidan oshgan rasm: %dx%d = %d pixel", w, h, h * w)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -150,3 +176,55 @@ def decode_base64_image(img_b64: str) -> tuple[np.ndarray, int]:
         )
 
     return decode_image_bytes(img_bytes)
+
+
+# ─── DB ga (BYTEA) xom holda yoziladigan rasmlar ─────────────────────────
+#
+# Passport rasmi (`StudentPsData.ps_img`) va desktop selfie'lari
+# (`StudentLog.first/last_captured`) qayta kodlanmasdan saqlanadi. Ular
+# keyin embedding bosqichida ochiladi va admin panelda ko'rsatiladi — shuning
+# uchun DB ga faqat rasmga o'xshagan, chegaralangan hajmdagi baytlar yoziladi.
+
+MIN_STORED_IMAGE_BYTES = 512  # 512 B dan kichigi rasm bo'lishi mumkin emas
+MAX_STORED_IMAGE_BYTES = 3 * 1024 * 1024  # 3 MB
+# Base64 satr chegarasi (schema `max_length` uchun): 3 MB → ~4 MB base64 + data-URL prefiksi.
+MAX_STORED_IMAGE_B64_LEN = 4_200_000
+
+# `data:image/jpeg;base64,....` shaklidagi data-URL prefiksi.
+_DATA_URL_RE = re.compile(r"^data:[^;,]*;base64,", re.IGNORECASE)
+
+
+def decode_image_b64_raw(value: str) -> tuple[bytes | None, str | None]:
+    """base64 satrni (data-URL yoki sof base64) DB ga yoziladigan rasm baytlariga aylantiradi.
+
+    Piksellar ochilmaydi (arzon): faqat base64 to'g'riligi, hajm va magic bytes.
+    Qaytaradi: `(raw_bytes, None)` yoki xato bo'lsa `(None, "sabab")`.
+    """
+    text = (value or "").strip()
+    if not text:
+        return None, "Rasm bo'sh"
+    if len(text) > MAX_STORED_IMAGE_B64_LEN:
+        return None, f"Rasm hajmi {MAX_STORED_IMAGE_BYTES // (1024 * 1024)}MB dan oshmasin"
+
+    text = _DATA_URL_RE.sub("", text)
+    # Excel/matn muharrirlaridan nusxalanganda base64 ichiga qator uzilishi va
+    # bo'shliqlar tushib qolishi mumkin — ularni olib tashlaymiz.
+    text = re.sub(r"\s+", "", text)
+    # URL-safe base64 (`-` va `_`) ni ham qabul qilamiz.
+    text = text.replace("-", "+").replace("_", "/")
+    # To'ldiruvchi `=` yetishmasa — qo'shib qo'yamiz.
+    if len(text) % 4:
+        text += "=" * (4 - len(text) % 4)
+
+    try:
+        raw = base64.b64decode(text, validate=True)
+    except (binascii.Error, ValueError):
+        return None, "Base64 formati noto'g'ri"
+
+    if len(raw) < MIN_STORED_IMAGE_BYTES:
+        return None, "Rasm juda kichik (buzilgan bo'lishi mumkin)"
+    if len(raw) > MAX_STORED_IMAGE_BYTES:
+        return None, f"Rasm hajmi {MAX_STORED_IMAGE_BYTES // (1024 * 1024)}MB dan oshmasin"
+    if detect_image_format(raw) is None:
+        return None, "Bu rasm emas (JPEG/PNG/WebP/BMP kutilgan)"
+    return raw, None

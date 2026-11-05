@@ -1,5 +1,12 @@
 from pydantic import BaseModel, Field
 
+from app.config import settings
+
+# So'rovdagi base64 rasm satri chegarasi — `decode_base64_image` dagi MAX_BASE64_SIZE
+# bilan bir xil (+ data-URL prefiksi uchun zaxira). Schema darajasida bo'lgani uchun
+# katta satr Pydantic validatsiyasida darhol 422 oladi.
+B64_IMAGE_MAX_LEN = settings.MAX_BASE64_SIZE + 256
+
 
 class PhotoVerifyRequest(BaseModel):
     """Rasm tekshiruv so'rovi."""
@@ -9,6 +16,7 @@ class PhotoVerifyRequest(BaseModel):
     )
     img_b64: str = Field(
         ...,
+        max_length=B64_IMAGE_MAX_LEN,
         description="Rasm base64 formatda (data:image/jpeg;base64,... yoki sof base64)",
         examples=["<base64_string_here>"],
     )
@@ -71,11 +79,12 @@ class TwoFaceVerifyRequest(BaseModel):
 
     ps_img: str = Field(
         ...,
+        max_length=B64_IMAGE_MAX_LEN,
         description="Pasport rasmi base64 formatda",
         examples=["<base64_string_here>"],
     )
     lv_img: str = Field(
-        ..., description="Jonli rasm base64 formatda", examples=["<base64_string_here>"]
+        ..., max_length=B64_IMAGE_MAX_LEN, description="Jonli rasm base64 formatda", examples=["<base64_string_here>"]
     )
 
 
@@ -116,6 +125,7 @@ class EmbeddingRequest(BaseModel):
 
     img_b64: str = Field(
         ...,
+        max_length=B64_IMAGE_MAX_LEN,
         description="Rasm base64 formatda (data:image/jpeg;base64,... yoki sof base64)",
         examples=["<base64_string_here>"],
     )

@@ -414,6 +414,42 @@ def _safe_int(val) -> int | None:
     return None
 
 
+def _clean_imei(val) -> str | None:
+    """JShShIR (PINFL) ni tozalash: bo'sh/None → None.
+
+    `str(None)` → "None" bo'lib bazaga yozilmasligi va bo'shliqli qiymat
+    dublikat kalitini buzmasligi uchun.
+    """
+    if val is None or isinstance(val, bool):
+        return None
+    s = str(val).strip()[:14]
+    return s or None
+
+
+def _clean_s_code(val) -> int:
+    """Tashqi platformadagi nomzod ID si → `s_code`; yo'q/yaroqsiz bo'lsa 0.
+
+    Manbada `null`, bo'sh satr yoki son bo'lmagan qiymat kelsa `int()`
+    butun sahifani (va kunni) yiqitardi.
+    """
+    n = _safe_int(val)
+    return n if n and n > 0 else 0
+
+
+def _dedup_key(student_data: dict, day: str) -> tuple[int, str, str] | None:
+    """Dublikat kaliti — (`s_code`, JShShIR) juftligi + imtihon kuni.
+
+    `s_code` — manbadagi task_id (IIV: request_id, OTM: id), manbada takrorsiz.
+    Juftlik boshqa kunda kelsa — dublikat emas, ikkalasi ham yoziladi.
+    `s_code` 0 yoki JShShIR yo'q bo'lsa dublikatga tekshirilmaydi (None).
+    """
+    s_code = student_data.get("s_code")
+    imei = student_data.get("imei")
+    if s_code and imei:
+        return (s_code, imei, day)
+    return None
+
+
 def _raw_pinfl(raw: dict) -> str:
     """Xom API item'idan JSHSHIR/PINFLni topish (turli API'lar uchun universal).
 
@@ -519,10 +555,10 @@ def _parse_cefr(
         "last_name": str(item.get("lname", "")).strip().upper(),
         "first_name": str(item.get("fname", "")).strip().upper(),
         "middle_name": str(item.get("mname", "")).strip().upper() or None,
-        "imei": str(item.get("imie", ""))[:14] or None,
+        "imei": _clean_imei(item.get("imie")),
         "gr_n": int(item.get("group", 0)),
         "sp_n": 0,
-        "s_code": int(item.get("task_id", 0)),
+        "s_code": _clean_s_code(item.get("task_id")),
         "e_date": e_date,
         "subject_id": 1,
         "subject_name": "CEFR",
@@ -559,10 +595,10 @@ def _parse_ms(
         "last_name": str(item.get("lname", "")).strip().upper(),
         "first_name": str(item.get("fname", "")).strip().upper(),
         "middle_name": str(item.get("mname", "")).strip().upper() or None,
-        "imei": str(item.get("imie", ""))[:14] or None,
+        "imei": _clean_imei(item.get("imie")),
         "gr_n": int(item.get("group_number", 0)),
         "sp_n": int(item.get("seat", 0)),
-        "s_code": int(item.get("task_id", 0)),
+        "s_code": _clean_s_code(item.get("task_id")),
         "e_date": e_date,
         "subject_id": int(item.get("exam_id", 0)),
         "subject_name": item.get("exam_name"),
@@ -599,10 +635,10 @@ def _parse_iiv(
         "last_name": str(item.get("last_name", "")).strip().upper(),
         "first_name": str(item.get("first_name", "")).strip().upper(),
         "middle_name": str(item.get("parent_name", "")).strip().upper() or None,
-        "imei": str(item.get("pinfl", ""))[:14] or None,
+        "imei": _clean_imei(item.get("pinfl")),
         "gr_n": int(item.get("group_number", 0)),
         "sp_n": int(item.get("seat_number", 0)),
-        "s_code": int(item.get("request_id", 0)),
+        "s_code": _clean_s_code(item.get("request_id")),
         "e_date": e_date,
         "subject_id": int(item.get("department_id", 0)),
         "subject_name": str(item.get("department_name", "")) or None,
@@ -676,10 +712,10 @@ def _parse_otm_dtm(
         "last_name": str(item.get("last_name", "")).strip().upper(),
         "first_name": str(item.get("first_name", "")).strip().upper(),
         "middle_name": str(item.get("middle_name", "")).strip().upper() or None,
-        "imei": str(item.get("imie", "") or "")[:14] or None,
+        "imei": _clean_imei(item.get("imie")),
         "gr_n": int(item.get("gr_n", 0) or 0),
         "sp_n": int(item.get("sp_n", 0) or 0),
-        "s_code": int(item.get("id", 0) or 0),
+        "s_code": _clean_s_code(item.get("id")),
         "e_date": e_date,
         "subject_id": 0,
         "subject_name": "OTM-DTM",
@@ -910,7 +946,7 @@ def load_students_for_day(
     skip_reasons: dict[str, int] = defaultdict(int)
     skipped_details: list[dict] = []
     failed_inserts: list[dict] = []
-    seen_students: set[tuple] = set()
+    seen_students: set[tuple[int, str, str]] = set()
 
     def _note_skip(pinfl: str, category: str, detail: str | None = None) -> None:
         skip_reasons[category] += 1
@@ -921,15 +957,6 @@ def load_students_for_day(
         for it in items:
             if len(failed_inserts) < _FAILED_ITEMS_MAX:
                 failed_inserts.append(it)
-
-    def _dedup_key(student_data, ps_data, item_day, smena_number):
-        if ps_data.get("ps_num"):
-            return ("ps", ps_data.get("ps_ser"), ps_data["ps_num"], item_day, smena_number)
-        if student_data.get("imei"):
-            return ("imei", student_data["imei"], item_day, smena_number)
-        if student_data.get("s_code"):
-            return ("code", student_data["s_code"], item_day, smena_number)
-        return None
 
     def _process_page_items(raw_items, student_buffer, ps_buffer):
         nonlocal total_loaded, total_skipped, total_failed
@@ -965,15 +992,19 @@ def load_students_for_day(
                 )
                 continue
 
-            dkey = _dedup_key(student_data, ps_data, item_day, smena_number)
+            # Dublikat: shu sessiyaning shu kunida (task_id, JShShIR) juftligi
+            # takrorlansa — birinchisi qoladi.
+            dkey = _dedup_key(student_data, item_day)
             if dkey is not None:
                 if dkey in seen_students:
                     total_skipped += 1
-                    pinfl = student_data.get("imei") or _raw_pinfl(raw)
-                    _note_skip(pinfl, "dublikat (takror yozuv)")
+                    _note_skip(
+                        dkey[1], "dublikat (takror yozuv)",
+                        f"dublikat: task_id={dkey[0]} va JShShIR takrorlangan",
+                    )
                     logger.info(
-                        "SKIP student pinfl=%s sabab='dublikat' (kun=%s, smena=%s)",
-                        pinfl, item_day, smena_number,
+                        "SKIP student pinfl=%s task_id=%s sabab='dublikat' (kun=%s, smena=%s)",
+                        dkey[1], dkey[0], item_day, smena_number,
                     )
                     continue
                 seen_students.add(dkey)

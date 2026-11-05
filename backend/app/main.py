@@ -9,6 +9,7 @@ from sqlalchemy import text
 
 from app.api.v1.router import api_router
 from app.config import settings
+from app.core.body_limit import BodySizeLimitMiddleware
 from app.core.exceptions import register_exception_handlers
 from app.core.logging import logger, setup_logging
 from app.core.middleware import RequestIdMiddleware, get_metrics_text
@@ -47,6 +48,17 @@ app = FastAPI(
     version="1.0.0",
     description="Yuz aniqlash va rasm tekshiruv API",
     lifespan=lifespan,
+)
+
+# So'rov tanasi chegarasi. Birinchi qo'shiladi = eng ichki: erta 413 javobi ham
+# CORS / security header'lar orqali o'tadi (aks holda brauzer CORS xatosi ko'rsatardi).
+app.add_middleware(
+    BodySizeLimitMiddleware,
+    default_limit=settings.MAX_REQUEST_BODY_BYTES,
+    path_limits={
+        f"{settings.API_V1_PREFIX}/result-analysis/": settings.MAX_REQUEST_BODY_BYTES_LARGE,
+        f"{settings.API_V1_PREFIX}/students/logs/bulk": settings.MAX_REQUEST_BODY_BYTES_LARGE,
+    },
 )
 
 # Security headers (eng tashqi — har javobga ulaniadi)

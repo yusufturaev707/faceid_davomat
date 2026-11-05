@@ -9,6 +9,12 @@ from pydantic import BaseModel, Field, StringConstraints
 # --- StudentPsData ---
 
 
+# Bitta rasm uchun base64 satr uzunligi chegarasi (~3 MB dekodlangan rasm) —
+# `image_decoder.MAX_STORED_IMAGE_B64_LEN` bilan bir xil. Ommaviy yuklashda
+# frontend so'rovlarni bo'lak-bo'lak yuboradi, shuning uchun `rows` cheklovi kichik.
+_MAX_IMAGE_B64_LEN = 4_200_000
+
+
 class StudentPsDataResponse(BaseModel):
     """Talaba passport ma'lumotlari."""
 
@@ -51,8 +57,9 @@ class StudentPsDataUpdate(BaseModel):
     ps_ser: str | None = Field(default=None, max_length=5)
     ps_num: str | None = Field(default=None, max_length=10)
     phone: str | None = Field(default=None, max_length=13)
-    ps_img: str | None = None
-    embedding: str | None = None
+    ps_img: str | None = Field(default=None, max_length=_MAX_IMAGE_B64_LEN)
+    # 512 ta float32 = 2048 bayt → ~2.7k base64
+    embedding: str | None = Field(default=None, max_length=4096)
     gender_id: int | None = None
 
 
@@ -68,11 +75,6 @@ class PassportUpdateRequest(BaseModel):
     """Paste qilingan qatorlardan passportlarni yangilash so'rovi."""
 
     rows: list[PassportUpdateRow] = Field(..., min_length=1, max_length=20000)
-
-
-# Bitta rasm uchun base64 satr uzunligi chegarasi (~3 MB dekodlangan rasm).
-# Frontend so'rovlarni bo'lak-bo'lak yuboradi, shuning uchun `rows` cheklovi kichik.
-_MAX_IMAGE_B64_LEN = 4_200_000
 
 
 class PassportImageRow(BaseModel):
@@ -314,8 +316,8 @@ class RejectedStudentsResponse(BaseModel):
 
 class StudentLogCreate(BaseModel):
     student_id: int
-    first_captured: str | None = None
-    last_captured: str | None = None
+    first_captured: str | None = Field(default=None, max_length=_MAX_IMAGE_B64_LEN)
+    last_captured: str | None = Field(default=None, max_length=_MAX_IMAGE_B64_LEN)
     first_enter_time: datetime | None = None
     last_enter_time: datetime | None = None
     score: int = 0
@@ -327,8 +329,8 @@ class StudentLogCreate(BaseModel):
 
 class StudentLogUpdate(BaseModel):
     student_id: int | None = None
-    first_captured: str | None = None
-    last_captured: str | None = None
+    first_captured: str | None = Field(default=None, max_length=_MAX_IMAGE_B64_LEN)
+    last_captured: str | None = Field(default=None, max_length=_MAX_IMAGE_B64_LEN)
     first_enter_time: datetime | None = None
     last_enter_time: datetime | None = None
     score: int | None = None
@@ -400,8 +402,8 @@ class StudentLogBulkItem(BaseModel):
     # Mijoz lokal entry_log.id — javobda qaytariladi, mijoz mark_sent qilish uchun
     client_entry_id: int | None = None
     student_id: int
-    first_captured: str | None = None  # base64-encoded JPEG
-    last_captured: str | None = None
+    first_captured: str | None = Field(default=None, max_length=_MAX_IMAGE_B64_LEN)  # base64 JPEG
+    last_captured: str | None = Field(default=None, max_length=_MAX_IMAGE_B64_LEN)
     first_enter_time: datetime | None = None
     last_enter_time: datetime | None = None
     score: int = 0

@@ -13,6 +13,7 @@ from typing import Literal
 from pydantic import BaseModel, Field, model_validator
 
 from app.schemas.davomat_bot import BotStudentSlot, BotUserResponse
+from app.schemas.photo import B64_IMAGE_MAX_LEN
 
 
 class MiniAppMeResponse(BaseModel):
@@ -61,7 +62,7 @@ class MiniAppPassportQrRequest(BaseModel):
     """Telegram native skaner matni (`text`) yoki QR rasmi (`image_b64`)."""
 
     text: str | None = Field(default=None, max_length=2048)
-    image_b64: str | None = None
+    image_b64: str | None = Field(default=None, max_length=B64_IMAGE_MAX_LEN)
 
     @model_validator(mode="after")
     def _exactly_one(self) -> MiniAppPassportQrRequest:
@@ -83,7 +84,7 @@ class MiniAppFaceVerifyRequest(BaseModel):
     ps_ser: str = Field(..., min_length=1, max_length=5)
     ps_num: str = Field(..., min_length=1, max_length=10)
     jshshir: str = Field(..., pattern=r"^\d{14}$")
-    selfie_b64: str = Field(..., min_length=1)
+    selfie_b64: str = Field(..., min_length=1, max_length=B64_IMAGE_MAX_LEN)
 
 
 class MiniAppFaceVerifyResponse(BaseModel):
@@ -120,7 +121,7 @@ class MiniAppFaceCheckRequest(BaseModel):
     ps_ser: str = Field(..., min_length=1, max_length=5)
     ps_num: str = Field(..., min_length=1, max_length=10)
     jshshir: str = Field(..., pattern=r"^\d{14}$")
-    selfie_b64: str = Field(..., min_length=1)
+    selfie_b64: str = Field(..., min_length=1, max_length=B64_IMAGE_MAX_LEN)
 
 
 class MiniAppFaceCheckResponse(BaseModel):
@@ -145,7 +146,7 @@ class MiniAppMarkAttendanceRequest(BaseModel):
     """
 
     verify_ticket: str = Field(..., min_length=10, max_length=2048)
-    selfie_b64: str = Field(..., min_length=1)
+    selfie_b64: str = Field(..., min_length=1, max_length=B64_IMAGE_MAX_LEN)
 
 
 class MiniAppFindByJshshirRequest(BaseModel):

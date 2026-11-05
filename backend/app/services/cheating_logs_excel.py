@@ -21,6 +21,8 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
+from app.services.xlsx_safety import text_cell
+
 # O'zbekiston vaqti (UZT) — UTC+5, DST yo'q.
 UZ_TZ = timezone(timedelta(hours=5))
 
@@ -168,7 +170,7 @@ def build_cheating_logs_excel(
     row = header_row + 1
     for n, item in enumerate(items, start=1):
         for i, (_label, key, _w, align) in enumerate(_COLUMNS, start=1):
-            c = ws.cell(row=row, column=i, value=_cell_text(item, key, n))
+            c = text_cell(ws.cell(row=row, column=i, value=_cell_text(item, key, n)))
             if key == "rejection_reason":
                 c.font = reason_font
             elif key in ("rejected_at", "smena_date", "username"):

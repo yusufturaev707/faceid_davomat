@@ -21,7 +21,7 @@ def register_exception_handlers(app: FastAPI) -> None:
             field = " -> ".join(str(loc) for loc in error["loc"])
             errors.append(f"{field}: {error['msg']}")
         return JSONResponse(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             content={"detail": "Validatsiya xatoligi", "errors": errors},
         )
 

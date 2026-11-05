@@ -25,6 +25,7 @@ from app.models.student import Student
 from app.models.test_session import TestSession
 from app.models.test_session_smena import TestSessionSmena
 from app.models.zone import Zone
+from app.services.xlsx_safety import text_cell
 
 
 class AbsenteesError(Exception):
@@ -413,7 +414,7 @@ def build_absentees_excel(
                 "Chetlatilgan" if cheating else "",
             ]
         for col_idx, val in enumerate(values, start=1):
-            cell = ws.cell(row=row_idx, column=col_idx, value=val)
+            cell = text_cell(ws.cell(row=row_idx, column=col_idx, value=val))
             cell.font = Font(name="Calibri", size=11)
             cell.border = _BORDER_CELL
             if col_idx == col_imei:

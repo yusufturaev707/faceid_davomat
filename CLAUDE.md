@@ -174,7 +174,9 @@ and the UI hides the feature while the API still allows it (`isAdmin` is for UI 
 `LookupCrudPage` is the generic table/form behind every reference-table page.
 
 **External systems**: student rosters stream in from CEFR/MS/IIV/OTM-DTM APIs (`services/student_loader.py`,
-paginated, `bulk_insert_mappings`), zones sync from the OTM buildings API (`services/zone_sync.py` —
+paginated, `bulk_insert_mappings`; the source's own id — CEFR/MS `task_id`, IIV `request_id`, OTM `id` — goes to
+`students.s_code`; a row is a duplicate only if the (`s_code`, `imei`) pair repeats on the *same exam day* of the
+session — the same pair on another day is written again, and rows with `s_code == 0` or no `imei` are not checked), zones sync from the OTM buildings API (`services/zone_sync.py` —
 `Zone.building_id` is the *external* building id, not `Zone.id`), passport photos come from GTSP
 (`services/gtsp_client.py`). All are driven by `API_*` settings and return 503 when unset.
 
@@ -226,3 +228,11 @@ bo'sh bo'lsa endpointlar 503, bron jimgina o'chiq).
 - `/api/v1/health`, `/api/v1/healthcheck` and the root `/health` are unauthenticated and hit by desktop
   clients every few seconds; gunicorn filters all three out of the access log. Keep them I/O-free.
 - Root `Dockerfile` and root `docker-compose.yml` are empty — the real ones live in `backend/`.
+- Upload hardening: `app/__init__.py` sets `OPENCV_IO_MAX_IMAGE_PIXELS` (decompression-bomb guard) and OpenCV
+  reads it only at `import cv2` — nothing may import cv2 before the `app` package. Base64 images stored raw in
+  BYTEA go through `image_decoder.decode_image_b64_raw`; uploaded `.xlsx` through `services/xlsx_safety.open_xlsx`
+  (zip-bomb + row caps; refuses to parse without `defusedxml`); exporter data cells through `xlsx_safety.text_cell`
+  (openpyxl turns any string starting with `=` into a formula).
+- Request bodies are capped by `core/body_limit.py` (pure ASGI, added *first* so the early 413 still gets CORS/security
+  headers): `MAX_REQUEST_BODY_BYTES` (32 MB) everywhere, `MAX_REQUEST_BODY_BYTES_LARGE` for `/result-analysis/` and
+  `/students/logs/bulk`. `starlette` is pinned explicitly in `requirements.txt` — fastapi itself only says `>=0.46`.

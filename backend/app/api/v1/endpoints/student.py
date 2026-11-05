@@ -2,6 +2,7 @@
 
 import base64
 import dataclasses
+import hashlib
 import logging
 import math
 from datetime import date
@@ -45,6 +46,7 @@ from app.dependencies import (
     get_db,
 )
 from app.models.user import User
+from app.schemas.photo import B64_IMAGE_MAX_LEN
 from app.schemas.student import (
     AppliedStudentItem,
     AppliedStudentsResponse,
@@ -71,6 +73,7 @@ from app.schemas.student import (
     StudentResponse,
     StudentUpdate,
 )
+from app.services.image_decoder import MAX_STORED_IMAGE_B64_LEN, decode_image_b64_raw
 from app.services.proctoring_booking import enqueue_seat_booking
 from app.services.student_export import build_students_pdf, build_students_xlsx
 
@@ -318,7 +321,10 @@ def update_student_log_endpoint(
     db: Session = Depends(get_db),
     _: User = Depends(PermissionChecker(P.STUDENT_LOG_UPDATE.code)),
 ):
-    log = update_student_log(db, log_id, data)
+    try:
+        log = update_student_log(db, log_id, data)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     if not log:
         raise HTTPException(status_code=404, detail="Log topilmadi")
     return log
@@ -1545,7 +1551,10 @@ def update_student_endpoint(
     _assert_student_in_scope(db, current_user, student_id)
     if data.zone_id is not None:
         _assert_zone_in_scope(db, current_user, data.zone_id)
-    student = update_student(db, student_id, data)
+    try:
+        student = update_student(db, student_id, data)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     if not student:
         raise HTTPException(status_code=404, detail="Talaba topilmadi")
     return get_student(db, student_id)
@@ -1593,7 +1602,7 @@ def remove_student_attendance_endpoint(
 
 
 class UploadImageRequest(BaseModel):
-    ps_img: str  # base64 rasm
+    ps_img: str = Field(..., max_length=MAX_STORED_IMAGE_B64_LEN)  # base64 rasm
 
 
 @router.post("/{student_id}/upload-image", response_model=StudentResponse)
@@ -1603,8 +1612,16 @@ def upload_student_image(
     db: Session = Depends(get_db),
     current_user: User = Depends(PermissionChecker(P.STUDENT_UPDATE.code)),
 ):
-    """Studentga qo'lda rasm yuklash. is_image=True bo'ladi."""
+    """Studentga qo'lda rasm yuklash. is_image=True bo'ladi.
+
+    Rasm almashgani uchun eski embedding tozalanadi va `is_ready=False` —
+    embedding bosqichini qayta ishga tushirish kerak (passport_updater bilan bir xil).
+    Kim almashtirgani audit uchun logga yoziladi.
+    """
     _assert_student_in_scope(db, current_user, student_id)
+    raw, err = decode_image_b64_raw(body.ps_img)
+    if err:
+        raise HTTPException(status_code=400, detail=err)
     from sqlalchemy import select
 
     from app.models.student_ps_data import StudentPsData
@@ -1619,21 +1636,28 @@ def upload_student_image(
     ).scalar()
 
     if ps_data:
-        ps_data.ps_img = _b64_to_bytes(body.ps_img)
+        ps_data.ps_img = raw
+        ps_data.embedding = None  # eski embedding endi boshqa rasmga tegishli
     else:
         raise HTTPException(
             status_code=404,
             detail="Talaba passport ma'lumotlari topilmadi",
         )
 
-    # Student is_image ni yangilash
+    # Student holatini yangilash
     from app.models.student import Student as StudentModel
 
     student_obj = db.get(StudentModel, student_id)
     if student_obj:
         student_obj.is_image = True
+        student_obj.is_face = False
+        student_obj.is_ready = False
 
     db.commit()
+    logger.info(
+        "Passport rasmi qo'lda yuklandi: student_id=%d, user_id=%d, %d bayt, sha256=%s",
+        student_id, current_user.id, len(raw), hashlib.sha256(raw).hexdigest()[:16],
+    )
     return get_student(db, student_id)
 
 
@@ -1993,7 +2017,7 @@ class CheckFaceidGtspRequest(BaseModel):
     ps_ser: str = Field(..., min_length=1, max_length=5)
     ps_num: str = Field(..., min_length=1, max_length=10)
     imei: str | None = Field(default=None, max_length=14)
-    lv_img: str  # base64 — kameradan kelgan frame
+    lv_img: str = Field(..., max_length=B64_IMAGE_MAX_LEN)  # base64 — kameradan kelgan frame
     # Desktop'da tanlangan smena (test_session_smena.id) va bino (zone.id).
     # DB validatsiyasi shu ikki maydonga tayanadi: pinfl shu smena+zone'da
     # bo'lmasa — GTSP API chaqirilmaydi.
@@ -2302,7 +2326,7 @@ class CheckFaceidGtspSelfRequest(BaseModel):
     ps_ser: str = Field(..., min_length=1, max_length=5)
     ps_num: str = Field(..., min_length=1, max_length=10)
     imei: str | None = Field(default=None, max_length=14)
-    lv_img: str  # base64 — kameradan kelgan frame
+    lv_img: str = Field(..., max_length=B64_IMAGE_MAX_LEN)  # base64 — kameradan kelgan frame
 
 
 @router.post("/check-faceid-gtsp-self", response_model=CheckFaceidGtspResponse)

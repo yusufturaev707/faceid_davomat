@@ -8,6 +8,7 @@ from typing import Literal
 from pydantic import BaseModel, Field, field_validator
 
 from app.schemas.dashboard_stats import FullGroupItem
+from app.schemas.photo import B64_IMAGE_MAX_LEN
 
 
 # === Access check / profile ===
@@ -157,7 +158,9 @@ class BotFaceVerifyRequest(BaseModel):
     ps_ser: str = Field(..., min_length=1, max_length=5)
     ps_num: str = Field(..., min_length=1, max_length=10)
     jshshir: str = Field(..., min_length=14, max_length=14)
-    selfie_b64: str = Field(..., description="Selfie rasm base64 (data URI yoki sof)")
+    selfie_b64: str = Field(
+        ..., max_length=B64_IMAGE_MAX_LEN, description="Selfie rasm base64 (data URI yoki sof)"
+    )
 
 
 class BotStudentSlot(BaseModel):
@@ -241,6 +244,7 @@ class BotMarkAttendanceRequest(BaseModel):
     )
     selfie_b64: str | None = Field(
         default=None,
+        max_length=B64_IMAGE_MAX_LEN,
         description="Tasdiqlangan selfie — StudentLog.first_captured/last_captured ga yoziladi",
     )
     verify_score: int = Field(

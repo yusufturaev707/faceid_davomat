@@ -9,6 +9,7 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
 from app.schemas.result_analysis import AnalysisMode, ResultAnalysisResponse
+from app.services.xlsx_safety import text_cell
 
 MODE_LABELS = {
     AnalysisMode.IN_FACE_NOT_EXCLUDED_NO_RESULT: (
@@ -124,7 +125,7 @@ def build_result_analysis_excel(
             img_url,
         ]
         for i, v in enumerate(values, start=1):
-            cell = ws.cell(row, i, v)
+            cell = text_cell(ws.cell(row, i, v))
             cell.border = _BORDER
             cell.alignment = _CENTER if i in (1, 8, 9, 11, 12) else _LEFT
             if idx % 2 == 0:

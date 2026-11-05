@@ -15,6 +15,8 @@ import os
 from datetime import date, datetime
 from io import BytesIO
 
+from app.services.xlsx_safety import text_cell
+
 # Hisobot ustunlari: (sarlavha, dict'dan qiymat oluvchi kalit)
 # Qiymatlar `app.crud.student._student_to_dict` chiqaradigan dict'dan olinadi.
 _COLUMNS: tuple[tuple[str, str], ...] = (
@@ -129,7 +131,7 @@ def build_students_xlsx(rows: list[dict], generated_at: datetime) -> bytes:
         values = [i + 1, *_row_values(r)]
         zebra = i % 2 == 1
         for col_idx, val in enumerate(values, start=1):
-            c = ws.cell(row=excel_row, column=col_idx, value=val)
+            c = text_cell(ws.cell(row=excel_row, column=col_idx, value=val))
             c.border = border
             c.alignment = center if col_idx == 1 else left
             if zebra:

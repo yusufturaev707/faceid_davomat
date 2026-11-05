@@ -90,6 +90,7 @@ from app.services.student_loader import (
     mark_progress_queued,
     request_student_load_cancel,
 )
+from app.services.xlsx_safety import XlsxRejected, check_xlsx_archive
 from app.tasks.excel_loader_task import excel_load_and_enrich_task
 from app.tasks.student_loader_task import load_students_task
 from app.tasks.verify_task import process_embeddings, process_retry_embeddings
@@ -845,7 +846,7 @@ def embedding_progress(
     status_code=status.HTTP_202_ACCEPTED,
     summary="Excel'dan studentlarni yuklash (Celery background)",
 )
-async def upload_students_excel(
+def upload_students_excel(
     session_id: int,
     file: UploadFile = File(..., description=".xlsx fayl"),
     db: Session = Depends(get_db),
@@ -903,14 +904,13 @@ async def upload_students_excel(
             file.content_type,
         )
 
-    content = await file.read()
-    if not content:
-        raise HTTPException(status_code=400, detail="Fayl bo'sh")
-    if len(content) > _MAX_EXCEL_BYTES:
-        raise HTTPException(
-            status_code=413,
-            detail=f"Fayl hajmi {_MAX_EXCEL_BYTES // (1024 * 1024)}MB dan oshmasin",
-        )
+    content = _read_excel_upload(file)
+
+    # Zip-bomba / buzilgan fayl — Celery'ga yubormasdan, darhol rad etamiz.
+    try:
+        check_xlsx_archive(content)
+    except XlsxRejected as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     encoded = base64.b64encode(content).decode("ascii")
     previous_state_id = int(session.test_state_id)
@@ -929,6 +929,23 @@ async def upload_students_excel(
         "status": "queued",
         "message": "Excel qayta ishlanmoqda — progress orqali kuzating",
     }
+
+
+def _read_excel_upload(file: UploadFile) -> bytes:
+    """Yuklangan Excel'ni `_MAX_EXCEL_BYTES` dan ortiq o'qimasdan olish.
+
+    Endpointlar sinxron (`def`) — openpyxl va DB ishi threadpool'da bajariladi,
+    event loop bloklanmaydi.
+    """
+    content = file.file.read(_MAX_EXCEL_BYTES + 1)
+    if not content:
+        raise HTTPException(status_code=400, detail="Fayl bo'sh")
+    if len(content) > _MAX_EXCEL_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Fayl hajmi {_MAX_EXCEL_BYTES // (1024 * 1024)}MB dan oshmasin",
+        )
+    return content
 
 
 def _require_session(db: Session, session_id: int) -> TestSession:
@@ -964,7 +981,7 @@ def update_passports_json(
     response_model=PassportUpdateResult,
     summary="Passport ma'lumotlarini Excel'dan ommaviy yangilash",
 )
-async def update_passports_excel(
+def update_passports_excel(
     session_id: int,
     file: UploadFile = File(..., description=".xlsx fayl: jshshir, ps_ser, ps_num"),
     db: Session = Depends(get_db),
@@ -983,14 +1000,7 @@ async def update_passports_excel(
             status_code=400, detail="Fayl `.xlsx` formatida bo'lishi kerak"
         )
 
-    content = await file.read()
-    if not content:
-        raise HTTPException(status_code=400, detail="Fayl bo'sh")
-    if len(content) > _MAX_EXCEL_BYTES:
-        raise HTTPException(
-            status_code=413,
-            detail=f"Fayl hajmi {_MAX_EXCEL_BYTES // (1024 * 1024)}MB dan oshmasin",
-        )
+    content = _read_excel_upload(file)
 
     rows, errors = parse_passport_excel(content)
     if errors:

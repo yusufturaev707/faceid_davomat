@@ -32,8 +32,12 @@ from app.schemas.student import (
     StudentLogUpdate,
     StudentUpdate,
 )
+from app.services.image_decoder import decode_image_b64_raw
 
 logger = logging.getLogger(__name__)
+
+# buffalo_l embedding: 512 ta float32 → 2048 bayt (face_service.embedding_to_bytes).
+_EMBEDDING_BYTES = 512 * 4
 
 # O'zbekiston vaqti (UZT) — UTC+5, yil davomida o'zgarmaydi (DST yo'q).
 UZ_TZ = timezone(timedelta(hours=5))
@@ -85,6 +89,24 @@ def _b64_to_bytes(val: str | None) -> bytes | None:
         return base64.b64decode(val)
     except Exception:
         return None
+
+
+def _selfie_to_bytes(val: str | None, *, student_id: int, field: str) -> bytes | None:
+    """Desktop selfie (base64) → DB ga yoziladigan bytes.
+
+    Yaroqsiz bo'lsa (rasm emas, juda katta) — None: log yozuvi rasmsiz saqlanadi
+    (avvalgi xatti-harakat), desktop sync esa shu item'da tiqilib qolmaydi.
+    """
+    if not val:
+        return None
+    raw, err = decode_image_b64_raw(val)
+    if err:
+        logger.warning(
+            "StudentLog selfie rad etildi: student_id=%s, field=%s, sabab=%s",
+            student_id, field, err,
+        )
+        return None
+    return raw
 
 
 # ===================== Student =====================
@@ -590,30 +612,75 @@ def create_student(db: Session, data: StudentCreate) -> Student:
     return student
 
 
+def _decode_ps_binary_fields(
+    ps_data: StudentPsData | None, ps_data_update: dict
+) -> tuple[bool, bool]:
+    """`ps_img` / `embedding` (base64) ni tekshirib bytes ga aylantiradi (joyida).
+
+    Tahrirlash formasi mavjud rasm va embedding'ni har saqlashda qayta yuboradi —
+    DB dagi bilan bir xil qiymat qayta tekshirilmaydi (eski yozuvlar formani
+    saqlashga to'sqinlik qilmasin).
+
+    Returns:
+        (img_changed, emb_changed)
+
+    Raises:
+        ValueError: yangi rasm yoki embedding yaroqsiz.
+    """
+    img_changed = emb_changed = False
+
+    val = ps_data_update.get("ps_img")
+    if isinstance(val, str):
+        raw = _b64_to_bytes(val)
+        old = ps_data.ps_img if ps_data else None
+        if raw is not None and raw != (bytes(old) if old is not None else None):
+            raw, err = decode_image_b64_raw(val)
+            if err:
+                raise ValueError(f"Passport rasmi: {err}")
+            img_changed = True
+        ps_data_update["ps_img"] = raw
+
+    val = ps_data_update.get("embedding")
+    if isinstance(val, str):
+        raw = _b64_to_bytes(val)
+        old = ps_data.embedding if ps_data else None
+        if raw is not None and raw != (bytes(old) if old is not None else None):
+            if len(raw) != _EMBEDDING_BYTES:
+                raise ValueError(
+                    f"Embedding {_EMBEDDING_BYTES} bayt (512 ta float32) bo'lishi kerak"
+                )
+            emb_changed = True
+        ps_data_update["embedding"] = raw
+
+    return img_changed, emb_changed
+
+
 def update_student(db: Session, student_id: int, data: StudentUpdate) -> Student | None:
+    """Talabani yangilash.
+
+    Raises:
+        ValueError: `ps_data` dagi yangi rasm yoki embedding yaroqsiz.
+    """
     student = db.get(Student, student_id)
     if not student:
         return None
     update_fields = data.model_dump(exclude_unset=True)
     ps_data_update = update_fields.pop("ps_data", None)
-    for key, val in update_fields.items():
-        setattr(student, key, val)
-    # Update or create ps_data if provided
+    ps_data = None
+    img_changed = emb_changed = False
     if ps_data_update:
-        # ps_img va embedding BYTEA ustunlar — base64 stringni bytes ga dekod qilamiz
-        for binary_field in ("ps_img", "embedding"):
-            if binary_field in ps_data_update and isinstance(
-                ps_data_update[binary_field], str
-            ):
-                ps_data_update[binary_field] = _b64_to_bytes(
-                    ps_data_update[binary_field]
-                )
-
         ps_data = (
             db.query(StudentPsData)
             .filter(StudentPsData.student_id == student_id)
             .first()
         )
+        # ps_img va embedding BYTEA ustunlar — base64 stringni bytes ga dekod
+        # qilamiz. Xato bo'lsa hech narsa yozilmasdan chiqamiz.
+        img_changed, emb_changed = _decode_ps_binary_fields(ps_data, ps_data_update)
+    for key, val in update_fields.items():
+        setattr(student, key, val)
+    # Update or create ps_data if provided
+    if ps_data_update:
         if ps_data:
             for key, val in ps_data_update.items():
                 if val is not None:
@@ -624,6 +691,17 @@ def update_student(db: Session, student_id: int, data: StudentUpdate) -> Student
                 **{k: v for k, v in ps_data_update.items() if v is not None},
             )
             db.add(ps_data)
+        if img_changed:
+            student.is_image = True
+            if not emb_changed:
+                # Eski embedding endi boshqa rasmga tegishli (passport_updater bilan bir xil).
+                ps_data.embedding = None
+                student.is_face = False
+                student.is_ready = False
+            logger.info(
+                "Passport rasmi tahrirlash orqali almashtirildi: student_id=%d, %d bayt",
+                student_id, len(ps_data.ps_img or b""),
+            )
     db.commit()
     db.refresh(student)
     return student
@@ -982,13 +1060,10 @@ def create_student_log(db: Session, data: StudentLogCreate) -> StudentLog:
     payload = data.model_dump()
     for field in ("first_captured", "last_captured"):
         val = payload.get(field)
-        if isinstance(val, str) and val:
-            try:
-                if "," in val and val.index(",") < 80:
-                    val = val.split(",", 1)[1]
-                payload[field] = base64.b64decode(val)
-            except Exception:
-                payload[field] = None
+        if isinstance(val, str):
+            payload[field] = _selfie_to_bytes(
+                val, student_id=payload["student_id"], field=field
+            )
     # Lokal (Toshkent) kirish vaqtlarini UTC'ga keltiramiz.
     for field in ("first_enter_time", "last_enter_time"):
         payload[field] = _enter_time_to_utc(payload.get(field))
@@ -1066,8 +1141,12 @@ def bulk_create_student_logs(
             # UPSERT: student_id unique — mavjud bo'lsa update, yo'q bo'lsa create.
             # first_* maydonlar birinchi martagina to'ldiriladi, keyingi sync'da
             # faqat last_* / score / max_score / network maydonlar yangilanadi.
-            first_captured_bytes = _b64_to_bytes(item.first_captured)
-            last_captured_bytes = _b64_to_bytes(item.last_captured)
+            first_captured_bytes = _selfie_to_bytes(
+                item.first_captured, student_id=item.student_id, field="first_captured"
+            )
+            last_captured_bytes = _selfie_to_bytes(
+                item.last_captured, student_id=item.student_id, field="last_captured"
+            )
             # Desktop lokal (Toshkent) vaqtini UTC'ga keltiramiz — `timestamptz`
             # ustunida absolyut vaqt saqlanishi va frontend to'g'ri ko'rsatishi uchun.
             first_enter_utc = _enter_time_to_utc(item.first_enter_time)
@@ -1199,6 +1278,12 @@ def update_student_log(
     if not log:
         return None
     for key, val in data.model_dump(exclude_unset=True).items():
+        if key in ("first_captured", "last_captured") and isinstance(val, str):
+            # BYTEA ustun — base64 satrni tekshirilgan bytes ga aylantiramiz.
+            raw, err = decode_image_b64_raw(val)
+            if err:
+                raise ValueError(f"{key}: {err}")
+            val = raw
         setattr(log, key, val)
     db.commit()
     db.refresh(log)

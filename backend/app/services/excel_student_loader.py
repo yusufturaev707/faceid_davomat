@@ -22,11 +22,9 @@ import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import date, datetime
-from io import BytesIO
 from typing import Any
 
 import redis
-from openpyxl import load_workbook
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -39,6 +37,7 @@ from app.models.student_ps_data import StudentPsData
 from app.models.test_session import TestSession
 from app.models.test_session_smena import TestSessionSmena
 from app.models.zone import Zone
+from app.services.xlsx_safety import XlsxRejected, limit_rows, open_xlsx
 from app.services.gtsp_client import (
     GtspError,
     GtspNotConfigured,
@@ -174,17 +173,24 @@ def parse_excel(content: bytes) -> tuple[list[ExcelRow], list[str]]:
         (rows, errors) — `errors` qatorlarni o'tkazib yuborish sabablarini
         ro'yxati. Validatsion xatoliklar bo'lsa ham qisman rows qaytaramiz
         — chaqiruvchi tomon qaror qiladi.
+
+    Raises:
+        ExcelLoadError: fayl o'qilmadi yoki xavfsizlik tekshiruvidan o'tmadi.
     """
     try:
-        wb = load_workbook(BytesIO(content), read_only=True, data_only=True)
-    except Exception as e:
-        raise ExcelLoadError(f"Excel faylini o'qib bo'lmadi: {e}")
+        return _parse_excel_rows(content)
+    except XlsxRejected as e:
+        raise ExcelLoadError(str(e)) from e
+
+
+def _parse_excel_rows(content: bytes) -> tuple[list[ExcelRow], list[str]]:
+    wb = open_xlsx(content)
 
     ws = wb.active
     if ws is None:
         raise ExcelLoadError("Excel'da varaq topilmadi")
 
-    rows_iter = ws.iter_rows(values_only=True)
+    rows_iter = limit_rows(ws.iter_rows(values_only=True))
     try:
         header = next(rows_iter)
     except StopIteration:
